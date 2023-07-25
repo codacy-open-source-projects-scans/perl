@@ -93,12 +93,12 @@ no normal arguments, and used by L</C<comma_pDEPTH>> itself.
 #  define HAS_C99 1
 #endif
 
+/* =========================================================================
+ * The defines from here to the following ===== line are unfortunately
+ * duplicated in makedef.pl, and changes here MUST also be made there */
+
 /* See L<perlguts/"The Perl API"> for detailed notes on
  * MULTIPLICITY and PERL_IMPLICIT_SYS */
-
-/* XXX NOTE that from here --> to <-- the same logic is
- * repeated in makedef.pl, so be certain to update
- * both places when editing. */
 
 #ifdef USE_ITHREADS
 #  if !defined(MULTIPLICITY)
@@ -133,7 +133,8 @@ no normal arguments, and used by L</C<comma_pDEPTH>> itself.
 #   define USE_REENTRANT_API
 #endif
 
-/* <--- here ends the logic shared by perl.h and makedef.pl */
+/* end of makedef.pl logic duplication.  But there are other groups below.
+ * ========================================================================= */
 
 /*
 =for apidoc_section $directives
@@ -1027,9 +1028,6 @@ violations are fatal.
 #  define HAS_SETPGRP  /* Well, effectively it does . . . */
 #endif
 
-/* getpgid isn't POSIX, but at least Solaris and Linux have it, and it makes
-    our life easier :-) so we'll try it.
-*/
 #ifdef HAS_GETPGID
 #  define BSD_GETPGRP(pid)		getpgid((pid))
 #elif defined(HAS_GETPGRP) && defined(USE_BSD_GETPGRP)
@@ -1127,6 +1125,9 @@ violations are fatal.
 #  endif
 #endif
 
+/* end of makedef.pl logic duplication.  But there are other groups below.
+ * ========================================================================= */
+
 #ifdef USE_LOCALE
 #   define HAS_SKIP_LOCALE_INIT /* Solely for XS code to test for this
                                    #define */
@@ -1185,7 +1186,8 @@ violations are fatal.
  * In locale.c, there are a bunch of parallel arrays corresponding to this
  * enum.  The first element of each corresponds with the first enum value here,
  * and so on.  That means this enum must be in identical order with those
- * arrays.  (There are asserts in locale.c that should fail if this gets
+ * arrays.  This is guaranteed by using locale_table.h in all instances.
+ * (There are also asserts in locale.c that should fail if this gets
  * out-of-sync.)  So, if the platform doesn't have LC_CTYPE, but does have
  * LC_NUMERIC, the code below will cause LC_NUMERIC_INDEX_ to be defined to be
  * 0.  That way the foo_INDEX_ values are contiguous non-negative integers,
@@ -1197,48 +1199,10 @@ typedef enum {
 
 /* Now create LC_foo_INDEX_ values for just those categories used on this
  * system */
-#  ifdef USE_LOCALE_CTYPE
-    LC_CTYPE_INDEX_,
-#  endif
-#  ifdef USE_LOCALE_NUMERIC
-    LC_NUMERIC_INDEX_,
-#  endif
-#  ifdef USE_LOCALE_COLLATE
-    LC_COLLATE_INDEX_,
-#  endif
-#  ifdef USE_LOCALE_TIME
-    LC_TIME_INDEX_,
-#  endif
-#  ifdef USE_LOCALE_MESSAGES
-    LC_MESSAGES_INDEX_,
-#  endif
-#  ifdef USE_LOCALE_MONETARY
-    LC_MONETARY_INDEX_,
-#  endif
-#  ifdef USE_LOCALE_ADDRESS
-    LC_ADDRESS_INDEX_,
-#  endif
-#  ifdef USE_LOCALE_IDENTIFICATION
-    LC_IDENTIFICATION_INDEX_,
-#  endif
-#  ifdef USE_LOCALE_MEASUREMENT
-    LC_MEASUREMENT_INDEX_,
-#  endif
-#  ifdef USE_LOCALE_PAPER
-    LC_PAPER_INDEX_,
-#  endif
-#  ifdef USE_LOCALE_TELEPHONE
-    LC_TELEPHONE_INDEX_,
-#  endif
-#  ifdef USE_LOCALE_NAME
-    LC_NAME_INDEX_,
-#  endif
-#  ifdef USE_LOCALE_SYNTAX
-    LC_SYNTAX_INDEX_,
-#  endif
-#  ifdef USE_LOCALE_TOD
-    LC_TOD_INDEX_,
-#  endif
+#    undef PERL_LOCALE_TABLE_ENTRY
+#    define PERL_LOCALE_TABLE_ENTRY(name, call_back)  name ## _INDEX_,
+#    include "locale_table.h"
+
 #endif  /* USE_LOCALE */
 
     LC_ALL_INDEX_   /* Always defined, even if no LC_ALL on system */
@@ -1251,6 +1215,10 @@ typedef enum {
  * declarations */
 #  define LOCALE_CATEGORIES_COUNT_        LC_ALL_INDEX_
 
+/* =========================================================================
+ * The defines from here to the following ===== line are unfortunately
+ * duplicated in makedef.pl, and changes here MUST also be made there */
+
 #  if defined(USE_ITHREADS) && ! defined(NO_LOCALE_THREADS)
 #    define USE_LOCALE_THREADS
 #  endif
@@ -1258,15 +1226,17 @@ typedef enum {
    /* Use POSIX 2008 locales if available, and no alternative exists
     * ('setlocale()' is the alternative); or is threaded and not forbidden to
     * use them */
-#  if defined(HAS_POSIX_2008_LOCALE) && (  ! defined(HAS_SETLOCALE)            \
-                                         || (     defined(USE_LOCALE_THREADS)  \
-                                             && ! defined(NO_POSIX_2008_LOCALE)))
+#  if (       defined(HAS_POSIX_2008_LOCALE)                                \
+       && (    ! defined(HAS_SETLOCALE)                                     \
+           || (     defined(USE_LOCALE_THREADS)                             \
+               && ! defined(NO_POSIX_2008_LOCALE)))                         \
+               && ! defined(NO_THREAD_SAFE_LOCALE))
 #    define USE_POSIX_2008_LOCALE
 #  endif
 
    /* On threaded builds, use thread-safe locales if they are available and not
     * forbidden.  Availability is when we are using POSIX 2008 locales, or
-    * Windows for quite a few releases now. */
+    * Windows for any vintage recent enough to have _MSC_VER defined */
 #  if defined(USE_LOCALE_THREADS) && ! defined(NO_THREAD_SAFE_LOCALE)
 #    if defined(USE_POSIX_2008_LOCALE) || (defined(WIN32) && defined(_MSC_VER))
 #      define USE_THREAD_SAFE_LOCALE
@@ -1332,7 +1302,7 @@ typedef enum {
                                     && defined(USE_THREAD_SAFE_LOCALE)))
 #    define USE_PERL_SWITCH_LOCALE_CONTEXT
 #  endif
-#endif
+#endif  /* End of USE_LOCALE */
 
 /* end of makedef.pl logic duplication
  * ========================================================================= */
@@ -4954,15 +4924,15 @@ Gid_t getegid (void);
  * #define DEBUG_POST_STMTS  RESTORE_ERRNO;
  *
  * Other potential things include displaying timestamps, location information,
- * which thread, etc.  Heres an example with both errno and location info:
+ * which thread, etc.  Here's an example with both errno and location info:
  *
  * #define DEBUG_PRE_STMTS   dSAVE_ERRNO;  \
  *              PerlIO_printf(Perl_debug_log, "%s:%d: ", __FILE__, __LINE__);
  * #define DEBUG_POST  RESTORE_ERRNO;
  *
- * All DEBUG statements in the compiled scope will be have these extra
- * statements compiled in; they will be executed only for the DEBUG statements
- * whose flags are turned on.
+ * All DEBUG statements in the compiled scope will have these extra statements
+ * compiled in; they will be executed only for the DEBUG statements whose flags
+ * are turned on.
  */
 #ifndef DEBUG_PRE_STMTS
 #  define DEBUG_PRE_STMTS
@@ -7011,7 +6981,7 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
 #      define CHECK_AND_WARN_PROBLEMATIC_LOCALE_                              \
                 STMT_START {                                                  \
                     if (UNLIKELY(PL_warn_locale)) {                           \
-                        Perl__warn_problematic_locale();                      \
+                        Perl_warn_problematic_locale();                       \
                     }                                                         \
                 }  STMT_END
 #    else
@@ -7093,7 +7063,7 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
      */
 #  define LOCALE_LOCK_(cond_to_panic_if_already_locked)                     \
         STMT_START {                                                        \
-            CLANG_DIAG_IGNORE(-Wthread-safety)	     	                    \
+            CLANG_DIAG_IGNORE(-Wthread-safety)                              \
             if (LIKELY(PL_locale_mutex_depth <= 0)) {                       \
                 DEBUG_Lv(PerlIO_printf(Perl_debug_log,                      \
                          "%s: %d: locking locale; depth=1\n",               \
@@ -7141,8 +7111,8 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
 
      /* By definition, a thread-unsafe locale means we need a critical
       * section. */
-#    define SETLOCALE_LOCK   LOCALE_LOCK_(0)
-#    define SETLOCALE_UNLOCK LOCALE_UNLOCK_
+#    define LOCALE_LOCK    LOCALE_LOCK_(0)
+#    define LOCALE_UNLOCK  LOCALE_UNLOCK_
 #    ifdef USE_LOCALE_NUMERIC
 #      define LC_NUMERIC_LOCK(cond_to_panic_if_already_locked)              \
                  LOCALE_LOCK_(cond_to_panic_if_already_locked)
@@ -7228,23 +7198,23 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
  * could change out from under us, we use an exclusive LOCALE lock to prevent
  * that, and a read ENV lock to prevent other threads that have nothing to do
  * with locales here from changing the environment. */
-#ifdef SETLOCALE_LOCK
+#ifdef LOCALE_LOCK
 #  define gwENVr_LOCALEr_LOCK                                               \
-                    STMT_START { SETLOCALE_LOCK; ENV_READ_LOCK; } STMT_END
+                    STMT_START { LOCALE_LOCK; ENV_READ_LOCK; } STMT_END
 #  define gwENVr_LOCALEr_UNLOCK                                             \
-                STMT_START { ENV_READ_UNLOCK; SETLOCALE_UNLOCK; } STMT_END
+                STMT_START { ENV_READ_UNLOCK; LOCALE_UNLOCK; } STMT_END
 #else
 #  define gwENVr_LOCALEr_LOCK           ENV_LOCK
 #  define gwENVr_LOCALEr_UNLOCK         ENV_UNLOCK
 #endif
 
 /* Now that we have defined gwENVr_LOCALEr_LOCK, we can finish defining
- * SETLOCALE_LOCK, which we kept undefined until here on a thread-safe system
+ * LOCALE_LOCK, which we kept undefined until here on a thread-safe system
  * so that we could use that fact to calculate what gwENVr_LOCALEr_LOCK should
  * be */
-#ifndef SETLOCALE_LOCK
-#  define SETLOCALE_LOCK                NOOP
-#  define SETLOCALE_UNLOCK              NOOP
+#ifndef LOCALE_LOCK
+#  define LOCALE_LOCK                NOOP
+#  define LOCALE_UNLOCK              NOOP
 #endif
 
 
@@ -7254,8 +7224,8 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
        * exclusive lock.  By defining it here with this name, we can, for the
        * most part, hide this detail from the rest of the code */
 /* Currently, the read lock is an exclusive lock */
-#define LOCALE_READ_LOCK                SETLOCALE_LOCK
-#define LOCALE_READ_UNLOCK              SETLOCALE_UNLOCK
+#define LOCALE_READ_LOCK                LOCALE_LOCK
+#define LOCALE_READ_UNLOCK              LOCALE_UNLOCK
 
 
 #ifndef LC_NUMERIC_LOCK
@@ -7283,8 +7253,8 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
 #  define WCRTOMB_LOCK_                 NOOP
 #  define WCRTOMB_UNLOCK_               NOOP
 
-#  define LC_COLLATE_LOCK               SETLOCALE_LOCK
-#  define LC_COLLATE_UNLOCK             SETLOCALE_UNLOCK
+#  define LC_COLLATE_LOCK               LOCALE_LOCK
+#  define LC_COLLATE_UNLOCK             LOCALE_UNLOCK
 
 #  define STRFTIME_LOCK                 ENV_LOCK
 #  define STRFTIME_UNLOCK               ENV_UNLOCK

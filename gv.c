@@ -21,7 +21,7 @@
 
 /*
 =head1 GV Handling and Stashes
-A GV is a structure which corresponds to to a Perl typeglob, ie *foo.
+A GV is a structure which corresponds to a Perl typeglob, ie *foo.
 It is a structure that holds a pointer to a scalar, an array, a hash etc,
 corresponding to $foo, @foo, %foo.
 
@@ -1212,13 +1212,7 @@ Perl_gv_fetchmethod_pvn_flags(pTHX_ HV *stash, const char *name, const STRLEN le
 
     gv = gv_fetchmeth_pvn(stash, name, name_end - name, 0, flags);
     if (!gv) {
-        /* This is the special case that exempts Foo->import and
-           Foo->unimport from being an error even if there's no
-          import/unimport subroutine */
-        if (strEQ(name,"import") || strEQ(name,"unimport")) {
-            gv = (GV*)sv_2mortal((SV*)newCONSTSUB_flags(NULL,
-                                                NULL, 0, 0, NULL));
-        } else if (autoload)
+        if (autoload)
             gv = gv_autoload_pvn(
                 ostash, name, name_end - name, GV_AUTOLOAD_ISMETHOD|flags
             );

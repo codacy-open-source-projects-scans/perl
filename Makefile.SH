@@ -622,7 +622,7 @@ esac
 
 $spitshell >>$Makefile <<'!NO!SUBS!'
 
-perltoc_pod_prereqs = extra.pods pod/perl5390delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
+perltoc_pod_prereqs = extra.pods pod/perl5392delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
 generated_pods = pod/perltoc.pod $(perltoc_pod_prereqs)
 generated_headers = uudmap.h bitcount.h mg_data.h
 
@@ -787,7 +787,7 @@ bitcount.h: generate_uudmap\$(HOST_EXE_EXT)
 
 $spitshell >>$Makefile <<'!NO!SUBS!'
 generate_uudmap$(HOST_EXE_EXT): generate_uudmap$(OBJ_EXT)
-	$(LD) -o generate_uudmap$(EXE_EXT) $(LDFLAGS) generate_uudmap$(OBJ_EXT) $(libs)
+	$(CC) -o generate_uudmap$(EXE_EXT) $(LDFLAGS) generate_uudmap$(OBJ_EXT) $(libs)
 
 !NO!SUBS!
 ;;
@@ -1139,9 +1139,9 @@ pod/perlintern.pod: $(MINIPERL_EXE) autodoc.pl embed.fnc
 pod/perlmodlib.pod: $(MINIPERL_EXE) pod/perlmodlib.PL MANIFEST
 	$(MINIPERL) pod/perlmodlib.PL -q
 
-pod/perl5390delta.pod: pod/perldelta.pod
-	$(RMS) pod/perl5390delta.pod
-	$(LNS) perldelta.pod pod/perl5390delta.pod
+pod/perl5392delta.pod: pod/perldelta.pod
+	$(RMS) pod/perl5392delta.pod
+	$(LNS) perldelta.pod pod/perl5392delta.pod
 
 extra.pods: $(MINIPERL_EXE)
 	-@test ! -f extra.pods || rm -f `cat extra.pods`
@@ -1455,11 +1455,11 @@ _cleaner2:
 	-rmdir lib/Encode/MIME lib/Encode/KR lib/Encode/JP lib/Encode/CN
 	-rmdir lib/Encode lib/Digest lib/Devel lib/Data lib/Config/Perl
 	-rmdir lib/Compress/Raw lib/Compress lib/Carp lib/CPAN/Plugin
-	-rmdir lib/CPAN/Meta/History lib/CPAN/Meta lib/CPAN/LWP
-	-rmdir lib/CPAN/Kwalify lib/CPAN/HTTP lib/CPAN/FTP lib/CPAN/Exception
-	-rmdir lib/CPAN/API lib/CPAN lib/Attribute lib/Archive/Tar lib/Archive
-	-rmdir lib/App/Prove/State/Result lib/App/Prove/State lib/App/Prove
-	-rmdir lib/App lib/Amiga
+	-rmdir lib/CPAN/Meta/Requirements lib/CPAN/Meta/History lib/CPAN/Meta
+	-rmdir lib/CPAN/LWP lib/CPAN/Kwalify lib/CPAN/HTTP lib/CPAN/FTP
+	-rmdir lib/CPAN/Exception lib/CPAN/API lib/CPAN lib/Attribute
+	-rmdir lib/Archive/Tar lib/Archive lib/App/Prove/State/Result
+	-rmdir lib/App/Prove/State lib/App/Prove lib/App lib/Amiga
 
 _realcleaner:
 	@$(LDLIBPTH) $(MAKE) _cleaner1 CLEAN=distclean

@@ -205,7 +205,8 @@ use File::Glob qw(:case);
     },
 
     'Compress::Raw::Bzip2' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.204.tar.gz',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.205.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Jul 19 09:49:28 2023',
         'FILES'        => q[cpan/Compress-Raw-Bzip2],
         'EXCLUDED'     => [
             qr{^t/Test/},
@@ -214,15 +215,11 @@ use File::Glob qw(:case);
             'bzip2-src/bzip2-cpp.patch',
             'bzip2-src/bzip2-unsigned.patch',
         ],
-        'CUSTOMIZED'   => [
-            # https://github.com/pmqs/Compress-Raw-Bzip2/issues/11
-            'Bzip2.xs',
-            'lib/Compress/Raw/Bzip.pm'
-        ],
     },
 
     'Compress::Raw::Zlib' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.204.tar.gz',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.205.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Jul 19 09:58:08 2023',
         'FILES'    => q[cpan/Compress-Raw-Zlib],
         'EXCLUDED' => [
             qr{^examples/},
@@ -231,11 +228,6 @@ use File::Glob qw(:case);
             qw( t/000prereq.t
                 t/99pod.t
                 ),
-        ],
-        'CUSTOMIZED' => [
-            # https://github.com/pmqs/Compress-Raw-Zlib/issues/23
-            'lib/Compress/Raw/Zlib.pm',
-            'Zlib.xs'
         ],
     },
 
@@ -316,7 +308,7 @@ use File::Glob qw(:case);
     },
 
     'CPAN::Meta::Requirements' => {
-        'DISTRIBUTION' => 'DAGOLDEN/CPAN-Meta-Requirements-2.140.tar.gz',
+        'DISTRIBUTION' => 'RJBS/CPAN-Meta-Requirements-2.143.tar.gz',
         'FILES'        => q[cpan/CPAN-Meta-Requirements],
         'EXCLUDED'     => [
             qw(t/00-report-prereqs.t),
@@ -382,7 +374,9 @@ use File::Glob qw(:case);
         'CUSTOMIZED'   => [
             # https://github.com/Dual-Life/digest-md5/pull/24
             'MD5.pm',
-            'MD5.xs'
+            'MD5.xs',
+
+            't/files.t'
         ],
     },
 
@@ -513,7 +507,7 @@ use File::Glob qw(:case);
     },
 
     'ExtUtils::Manifest' => {
-        'DISTRIBUTION' => 'ETHER/ExtUtils-Manifest-1.73.tar.gz',
+        'DISTRIBUTION' => 'ETHER/ExtUtils-Manifest-1.75.tar.gz',
         'FILES'        => q[cpan/ExtUtils-Manifest],
         'EXCLUDED'     => [
             qr(^t/00-report-prereqs),
@@ -659,13 +653,14 @@ use File::Glob qw(:case);
     },
 
     'IO-Compress' => {
-        'DISTRIBUTION' => 'PMQS/IO-Compress-2.204.tar.gz',
+        'DISTRIBUTION' => 'PMQS/IO-Compress-2.205.tar.gz',
         'MAIN_MODULE'  => 'IO::Compress::Base',
         'FILES'        => q[cpan/IO-Compress],
         'EXCLUDED'     => [
             qr{^examples/},
             qr{^t/Test/},
             qr{^t/999meta-},
+            't/000prereq.t',
             't/010examples-bzip2.t',
             't/010examples-zlib.t',
             't/cz-05examples.t',
@@ -758,13 +753,11 @@ use File::Glob qw(:case);
     },
 
     'Math::BigInt' => {
-        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-1.999837.tar.gz',
+        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-1.999839.tar.gz',
         'FILES'        => q[cpan/Math-BigInt],
         'EXCLUDED'     => [
             qr{^xt/},
             qr{^examples/},
-            qr{^t/author-},
-            qr{^t/release-},
             qw( t/00sig.t
                 t/01load.t
                 ),
@@ -772,13 +765,11 @@ use File::Glob qw(:case);
     },
 
     'Math::BigInt::FastCalc' => {
-        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-FastCalc-0.5013.tar.gz',
+        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-FastCalc-0.5014.tar.gz',
         'FILES'        => q[cpan/Math-BigInt-FastCalc],
         'EXCLUDED'     => [
             qr{^inc/},
             qr{^xt/},
-            qr{^t/author-},
-            qr{^t/release-},
             qr{^t/Math/BigInt/Lib/TestUtil.pm},
             qw( t/00sig.t
                 t/01load.t
@@ -833,13 +824,14 @@ use File::Glob qw(:case);
         'CUSTOMIZED'   => [
             # https://github.com/Dual-Life/mime-base64/pull/17
             'Base64.xs',
-            'lib/MIME/Base64.pm'
+            'lib/MIME/Base64.pm',
+
+            'lib/MIME/QuotedPrint.pm'
         ],
     },
 
     'Module::CoreList' => {
-        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20230320.tar.gz',
-        'SYNCINFO'     => 'yorton on Tue Mar 21 11:46:02 2023',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20230520.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
     },
 
@@ -859,7 +851,7 @@ use File::Glob qw(:case);
     },
 
     'Module::Metadata' => {
-        'DISTRIBUTION' => 'ETHER/Module-Metadata-1.000037.tar.gz',
+        'DISTRIBUTION' => 'ETHER/Module-Metadata-1.000038.tar.gz',
         'FILES'        => q[cpan/Module-Metadata],
         'EXCLUDED'     => [
             qw(t/00-report-prereqs.t),
@@ -922,7 +914,7 @@ use File::Glob qw(:case);
     },
 
     'perlfaq' => {
-        'DISTRIBUTION' => 'ETHER/perlfaq-5.20210520.tar.gz',
+        'DISTRIBUTION' => 'ETHER/perlfaq-5.20230701.tar.gz',
         'FILES'        => q[cpan/perlfaq],
         'EXCLUDED'     => [ qr/^inc/, qr/^xt/, qr{^t/00-} ],
     },
@@ -955,6 +947,9 @@ use File::Glob qw(:case);
             # XXX We can and should fix this, but clean up the DRY-failure in
             # utils first
             'perldoc',
+
+            # files only used for manual testing
+            qr[^corpus/],
 
             # https://rt.cpan.org/Ticket/Display.html?id=116827
             't/02_module_pod_output.t'
@@ -1022,8 +1017,9 @@ use File::Glob qw(:case);
     },
 
     'Socket' => {
-        'DISTRIBUTION' => 'PEVANS/Socket-2.036.tar.gz',
+        'DISTRIBUTION' => 'PEVANS/Socket-2.037.tar.gz',
         'FILES'        => q[cpan/Socket],
+        'EXCLUDED'     => ['.editorconfig'],
     },
 
     'Storable' => {
@@ -1106,9 +1102,7 @@ use File::Glob qw(:case);
     },
 
     'Test::Simple' => {
-        'DISTRIBUTION' => 'EXODIST/Test-Simple-1.302194.tar.gz',
-        'SYNCINFO'     => 'yorton on Tue Mar 14 13:43:38 2023',
-        'SYNCINFO'     => 'yorton on Mon Mar  6 19:16:42 2023',
+        'DISTRIBUTION' => 'EXODIST/Test-Simple-1.302195.tar.gz',
         'FILES'        => q[cpan/Test-Simple],
         'EXCLUDED'     => [
             qr{^examples/},
@@ -1138,7 +1132,7 @@ use File::Glob qw(:case);
     },
 
     'Text-Tabs+Wrap' => {
-        'DISTRIBUTION' => 'ARISTOTLE/Text-Tabs+Wrap-2021.0814.tar.gz',
+        'DISTRIBUTION' => 'ARISTOTLE/Text-Tabs+Wrap-2023.0511.tar.gz',
         'MAIN_MODULE'  => 'Text::Tabs',
         'FILES'        => q[cpan/Text-Tabs],
         'EXCLUDED'   => [
@@ -1222,15 +1216,17 @@ use File::Glob qw(:case);
     },
 
     'Time::Local' => {
-        'DISTRIBUTION' => 'DROLSKY/Time-Local-1.30.tar.gz',
+        'DISTRIBUTION' => 'DROLSKY/Time-Local-1.35.tar.gz',
         'FILES'        => q[cpan/Time-Local],
         'EXCLUDED'     => [
+            qr{^dev-bin/},
+            qr{^git/},
             qr{^xt/},
             qw( CODE_OF_CONDUCT.md
                 azure-pipelines.yml
                 perlcriticrc
                 perltidyrc
-                tidyall.ini
+                precious.toml
                 t/00-report-prereqs.t
                 t/00-report-prereqs.dd
                 ),

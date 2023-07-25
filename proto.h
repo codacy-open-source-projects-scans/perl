@@ -78,10 +78,9 @@ Perl_Slab_Free(pTHX_ void *op);
 /* PERL_CALLCONV void
 SvREFCNT_dec_set_NULL(pTHX_ SV *sv); */
 
-PERL_CALLCONV char *
+PERL_CALLCONV const char *
 Perl__byte_dump_string(pTHX_ const U8 * const start, const STRLEN len, const bool format);
-#define PERL_ARGS_ASSERT__BYTE_DUMP_STRING      \
-        assert(start)
+#define PERL_ARGS_ASSERT__BYTE_DUMP_STRING
 
 PERL_CALLCONV void
 Perl__force_out_malformed_utf8_message(pTHX_ const U8 * const p, const U8 * const e, const U32 flags, const bool die_here);
@@ -160,10 +159,6 @@ PERL_CALLCONV UV
 Perl__utf8n_to_uvchr_msgs_helper(const U8 *s, STRLEN curlen, STRLEN *retlen, const U32 flags, U32 *errors, AV **msgs);
 #define PERL_ARGS_ASSERT__UTF8N_TO_UVCHR_MSGS_HELPER \
         assert(s)
-
-PERL_CALLCONV void
-Perl__warn_problematic_locale(void);
-#define PERL_ARGS_ASSERT__WARN_PROBLEMATIC_LOCALE
 
 PERL_CALLCONV_NO_RET void
 Perl_abort_execution(pTHX_ SV *msg_sv, const char * const name)
@@ -6964,12 +6959,9 @@ S_populate_hash_from_localeconv(pTHX_ HV *hv, const char *locale, const U32 whic
 # endif /* defined(HAS_LOCALECONV) */
 # if defined(USE_LOCALE)
 STATIC unsigned int
-S_get_category_index(const int category, const char *locale);
-#   define PERL_ARGS_ASSERT_GET_CATEGORY_INDEX
-
-STATIC int
-S_get_category_index_nowarn(const int category);
-#   define PERL_ARGS_ASSERT_GET_CATEGORY_INDEX_NOWARN
+S_get_category_index_helper(pTHX_ const int category, bool *success, const line_t caller_line)
+        __attribute__warn_unused_result__;
+#   define PERL_ARGS_ASSERT_GET_CATEGORY_INDEX_HELPER
 
 STATIC void
 S_new_LC_ALL(pTHX_ const char *unused, bool force);
@@ -7084,8 +7076,8 @@ S_use_curlocale_scratch(pTHX);
 
 #     if defined(USE_QUERYLOCALE)
 STATIC const char *
-S_calculate_LC_ALL(pTHX_ const locale_t cur_obj);
-#       define PERL_ARGS_ASSERT_CALCULATE_LC_ALL
+S_calculate_LC_ALL_string(pTHX_ const locale_t cur_obj);
+#       define PERL_ARGS_ASSERT_CALCULATE_LC_ALL_STRING
 
 #     else
 STATIC const char *
@@ -7122,8 +7114,8 @@ S_less_dicey_bool_setlocale_r(pTHX_ const int cat, const char *locale);
         ( !defined(LC_ALL) || defined(USE_POSIX_2008_LOCALE) ||            \
            defined(WIN32) )
 STATIC const char *
-S_calculate_LC_ALL(pTHX_ const char **individ_locales);
-#     define PERL_ARGS_ASSERT_CALCULATE_LC_ALL  \
+S_calculate_LC_ALL_string(pTHX_ const char **individ_locales);
+#     define PERL_ARGS_ASSERT_CALCULATE_LC_ALL_STRING \
         assert(individ_locales)
 
 #   endif
@@ -10378,6 +10370,12 @@ Perl_mem_collxfrm_(pTHX_ const char *input_string, STRLEN len, STRLEN *xlen, boo
 
 # endif
 #endif /* defined(USE_LOCALE_COLLATE) */
+#if defined(USE_LOCALE_CTYPE)
+PERL_CALLCONV void
+Perl_warn_problematic_locale(void);
+# define PERL_ARGS_ASSERT_WARN_PROBLEMATIC_LOCALE
+
+#endif
 #if defined(USE_PERLIO)
 PERL_CALLCONV void
 Perl_PerlIO_clearerr(pTHX_ PerlIO *f);

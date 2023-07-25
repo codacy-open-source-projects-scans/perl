@@ -726,8 +726,8 @@ p	|OP *	|build_infix_plugin					\
 				|NN OP *lhs				\
 				|NN OP *rhs				\
 				|NN void *tokendata
-EXp	|char * |_byte_dump_string					\
-				|NN const U8 * const start		\
+EXp	|const char *|_byte_dump_string 				\
+				|NULLOK const U8 * const start		\
 				|const STRLEN len			\
 				|const bool format
 Adp	|int	|bytes_cmp_utf8 |NN const U8 *b 			\
@@ -3667,7 +3667,6 @@ Adfp	|void	|warn		|NN const char *pat			\
 Adfp	|void	|warner 	|U32 err				\
 				|NN const char *pat			\
 				|...
-TXp	|void	|_warn_problematic_locale
 Adp	|void	|warn_sv	|NN SV *baseex
 : Used in cop.h
 RXop	|I32	|was_lvalue_sub
@@ -4329,11 +4328,10 @@ S	|void	|populate_hash_from_localeconv				\
 				|NULLOK const lconv_offset_t *integers
 # endif
 # if defined(USE_LOCALE)
-ST	|unsigned int|get_category_index				\
+RS	|unsigned int|get_category_index_helper 			\
 				|const int category			\
-				|NULLOK const char *locale
-ST	|int	|get_category_index_nowarn				\
-				|const int category
+				|NULLOK bool *success			\
+				|const line_t caller_line
 Ri	|const char *|mortalized_pv_copy				\
 				|NULLOK const char * const pv
 S	|void	|new_LC_ALL	|NULLOK const char *unused		\
@@ -4424,7 +4422,7 @@ S	|const char *|setlocale_from_aggregate_LC_ALL			\
 				|const line_t line
 S	|locale_t|use_curlocale_scratch
 #     if defined(USE_QUERYLOCALE)
-S	|const char *|calculate_LC_ALL					\
+S	|const char *|calculate_LC_ALL_string				\
 				|const locale_t cur_obj
 #     else
 S	|const char *|update_PL_curlocales_i				\
@@ -4453,7 +4451,7 @@ S	|bool	|less_dicey_bool_setlocale_r				\
 #   if !(  defined(USE_POSIX_2008_LOCALE) && defined(USE_QUERYLOCALE) ) && \
         ( !defined(LC_ALL) || defined(USE_POSIX_2008_LOCALE) ||            \
            defined(WIN32) )
-S	|const char *|calculate_LC_ALL					\
+S	|const char *|calculate_LC_ALL_string				\
 				|NN const char **individ_locales
 #   endif
 #   if defined(WIN32)
@@ -6112,6 +6110,9 @@ Ep	|char * |mem_collxfrm_	|NN const char *input_string		\
 				|bool utf8
 # endif
 #endif /* defined(USE_LOCALE_COLLATE) */
+#if defined(USE_LOCALE_CTYPE)
+TXop	|void	|warn_problematic_locale
+#endif
 #if defined(USE_PERLIO)
 Adhp	|void	|PerlIO_clearerr|NULLOK PerlIO *f
 Adhp	|int	|PerlIO_close	|NULLOK PerlIO *f

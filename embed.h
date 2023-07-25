@@ -858,7 +858,6 @@
 #   define PerlLIO_open_cloexec(a,b)            Perl_PerlLIO_open_cloexec(aTHX_ a,b)
 #   define Slab_Alloc(a)                        Perl_Slab_Alloc(aTHX_ a)
 #   define Slab_Free(a)                         Perl_Slab_Free(aTHX_ a)
-#   define _warn_problematic_locale             Perl__warn_problematic_locale
 #   define abort_execution(a,b)                 Perl_abort_execution(aTHX_ a,b)
 #   define alloc_LOGOP(a,b,c)                   Perl_alloc_LOGOP(aTHX_ a,b,c)
 #   define allocmy(a,b,c)                       Perl_allocmy(aTHX_ a,b,c)
@@ -1269,8 +1268,7 @@
 #       define populate_hash_from_localeconv(a,b,c,d,e) S_populate_hash_from_localeconv(aTHX_ a,b,c,d,e)
 #     endif
 #     if defined(USE_LOCALE)
-#       define get_category_index               S_get_category_index
-#       define get_category_index_nowarn        S_get_category_index_nowarn
+#       define get_category_index_helper(a,b,c) S_get_category_index_helper(aTHX_ a,b,c)
 #       define mortalized_pv_copy(a)            S_mortalized_pv_copy(aTHX_ a)
 #       define new_LC_ALL(a,b)                  S_new_LC_ALL(aTHX_ a,b)
 #       define save_to_buffer                   S_save_to_buffer
@@ -1306,7 +1304,7 @@
 #         define setlocale_from_aggregate_LC_ALL(a,b) S_setlocale_from_aggregate_LC_ALL(aTHX_ a,b)
 #         define use_curlocale_scratch()        S_use_curlocale_scratch(aTHX)
 #         if defined(USE_QUERYLOCALE)
-#           define calculate_LC_ALL(a)          S_calculate_LC_ALL(aTHX_ a)
+#           define calculate_LC_ALL_string(a)   S_calculate_LC_ALL_string(aTHX_ a)
 #         else
 #           define update_PL_curlocales_i(a,b,c) S_update_PL_curlocales_i(aTHX_ a,b,c)
 #         endif
@@ -1323,7 +1321,7 @@
 #       if !(  defined(USE_POSIX_2008_LOCALE) && defined(USE_QUERYLOCALE) ) && \
             ( !defined(LC_ALL) || defined(USE_POSIX_2008_LOCALE) ||            \
                defined(WIN32) )
-#         define calculate_LC_ALL(a)            S_calculate_LC_ALL(aTHX_ a)
+#         define calculate_LC_ALL_string(a)     S_calculate_LC_ALL_string(aTHX_ a)
 #       endif
 #       if defined(WIN32)
 #         define Win_byte_string_to_wstring     S_Win_byte_string_to_wstring
