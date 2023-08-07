@@ -1765,10 +1765,10 @@ AFdp	|void	|load_module	|U32 flags				\
 				|NN SV *name				\
 				|NULLOK SV *ver 			\
 				|...
-CTopr	|void	|locale_panic	|NN const char *msg			\
-				|NN const char *file_name		\
-				|const line_t line			\
-				|const int errnum
+CTopr	|void	|locale_panic	|NN const char *msg				\
+				|const line_t immediate_caller_line		\
+				|NN const char * const higher_caller_file	\
+				|const line_t higher_caller_line
 : Used in perly.y
 p	|OP *	|localize	|NN OP *o				\
 				|I32 lex
@@ -2724,7 +2724,7 @@ Xp	|REGEXP *|re_op_compile |NULLOK SV ** const patternp		\
 
 ATdp	|void	|repeatcpy	|NN char *to				\
 				|NN const char *from			\
-				|I32 len				\
+				|SSize_t len				\
 				|IV count
 : Used in doio.c, pp_hot.c, pp_sys.c
 p	|void	|report_evil_fh |NULLOK const GV *gv
@@ -3003,7 +3003,7 @@ AMbdp	|void	|sv_catsv_mg	|NN SV *dsv				\
 Adp	|void	|sv_chop	|NN SV * const sv			\
 				|NULLOK const char * const ptr
 : Used only in perl.c
-dp	|I32	|sv_clean_all
+dp	|SSize_t|sv_clean_all
 : Used only in perl.c
 dp	|void	|sv_clean_objs
 Adp	|void	|sv_clear	|NN SV * const orig_sv
@@ -3752,7 +3752,7 @@ p	|I32	|do_ipcget	|I32 optype				\
 				|NN SV **mark				\
 				|NN SV **sp
 : Defined in doio.c, used only in pp_sys.c
-p	|I32	|do_msgrcv	|NN SV **mark				\
+p	|SSize_t|do_msgrcv	|NN SV **mark				\
 				|NN SV **sp
 : Defined in doio.c, used only in pp_sys.c
 p	|I32	|do_msgsnd	|NN SV **mark				\
@@ -4040,6 +4040,7 @@ S	|void	|exec_failed	|NN const char *cmd			\
 				|int do_report
 RS	|bool	|ingroup	|Gid_t testgid				\
 				|bool effective
+ST	|bool	|is_fork_open	|NN const char *name
 S	|bool	|openn_cleanup	|NN GV *gv				\
 				|NN IO *io				\
 				|NULLOK PerlIO *fp			\
@@ -4328,6 +4329,8 @@ S	|void	|populate_hash_from_localeconv				\
 				|NULLOK const lconv_offset_t *integers
 # endif
 # if defined(USE_LOCALE)
+S	|const char *|calculate_LC_ALL_string					\
+				|NULLOK const char **category_locales_list
 RS	|unsigned int|get_category_index_helper 			\
 				|const int category			\
 				|NULLOK bool *success			\
@@ -4344,12 +4347,14 @@ ST	|const char *|save_to_buffer					\
 				|NULLOK const char *string		\
 				|NULLOK const char **buf		\
 				|NULLOK Size_t *buf_size
-Sr	|void	|setlocale_failure_panic_i				\
+Sr	|void	|setlocale_failure_panic_via_i				\
 				|const unsigned int cat_index		\
 				|NULLOK const char *current		\
 				|NN const char *failed			\
-				|const line_t caller_0_line		\
-				|const line_t caller_1_line
+				|const line_t proxy_caller_line 	\
+				|const line_t immediate_caller_line	\
+				|NN const char *higher_caller_file	\
+				|const line_t higher_caller_line
 S	|const char *|stdize_locale					\
 				|const int category			\
 				|NULLOK const char *input_locale	\
@@ -4410,51 +4415,39 @@ S	|void	|new_numeric	|NN const char *newnum			\
 S	|const char *|get_LC_ALL_display
 #   endif
 #   if defined(USE_POSIX_2008_LOCALE)
-S	|const char *|emulate_setlocale_i				\
+S	|bool	|bool_setlocale_2008_i					\
 				|const unsigned int index		\
-				|NULLOK const char *new_locale		\
-				|const recalc_lc_all_t recalc_LC_ALL	\
+				|NN const char *new_locale		\
 				|const line_t line
-S	|const char *|my_querylocale_i					\
+S	|const char *|querylocale_2008_i				\
 				|const unsigned int index
 S	|const char *|setlocale_from_aggregate_LC_ALL			\
 				|NN const char *locale			\
 				|const line_t line
 S	|locale_t|use_curlocale_scratch
-#     if defined(USE_QUERYLOCALE)
-S	|const char *|calculate_LC_ALL_string				\
-				|const locale_t cur_obj
-#     else
-S	|const char *|update_PL_curlocales_i				\
+#     if defined(LC_ALL)
+S	|parse_LC_ALL_string_return|parse_LC_ALL_string 		\
+				|NN const char *string			\
+				|NN const char **output 		\
+				|const line_t caller_line
+#     endif
+#     if !defined(USE_QUERYLOCALE)
+S	|void	|update_PL_curlocales_i 				\
 				|const unsigned int index		\
-				|NN const char *new_locale		\
-				|recalc_lc_all_t recalc_LC_ALL
+				|NN const char *new_locale
 #     endif
 #   elif  defined(USE_LOCALE_THREADS) &&                  \
          !defined(USE_THREAD_SAFE_LOCALE) &&              \
          !defined(USE_THREAD_SAFE_LOCALE_EMULATION) /* &&
          !defined(USE_POSIX_2008_LOCALE) */
-S	|const char *|less_dicey_setlocale_r				\
-				|const int category			\
-				|NULLOK const char *locale
-: Not currently used
-S	|void	|less_dicey_void_setlocale_i				\
-				|const unsigned cat_index		\
-				|NN const char *locale			\
-				|const line_t line
-#     if 0
 S	|bool	|less_dicey_bool_setlocale_r				\
 				|const int cat				\
 				|NN const char *locale
-#     endif
+S	|const char *|less_dicey_setlocale_r				\
+				|const int category			\
+				|NULLOK const char *locale
 #   endif
-#   if !(  defined(USE_POSIX_2008_LOCALE) && defined(USE_QUERYLOCALE) ) && \
-        ( !defined(LC_ALL) || defined(USE_POSIX_2008_LOCALE) ||            \
-           defined(WIN32) )
-S	|const char *|calculate_LC_ALL_string				\
-				|NN const char **individ_locales
-#   endif
-#   if defined(WIN32)
+#   if defined(WIN32) || defined(WIN32_USE_FAKE_OLD_MINGW_LOCALES)
 ST	|wchar_t *|Win_byte_string_to_wstring				\
 				|const UINT code_page			\
 				|NULLOK const char *byte_string
@@ -4468,13 +4461,13 @@ S	|const char *|wrap_wsetlocale					\
 				|const int category			\
 				|NULLOK const char *locale
 #   endif
-#   if   defined(WIN32) || \
+#   if   defined(WIN32) || defined(WIN32_USE_FAKE_OLD_MINGW_LOCALES) || \
        ( defined(USE_POSIX_2008_LOCALE) && !defined(USE_QUERYLOCALE) )
 S	|const char *|find_locale_from_environment			\
 				|const unsigned int index
 #   endif
 # endif /* defined(USE_LOCALE) */
-# if defined(USE_POSIX_2008_LOCALE) || defined(DEBUGGING)
+# if defined(USE_LOCALE) || defined(DEBUGGING)
 S	|const char *|get_displayable_string				\
 				|NN const char * const s		\
 				|NN const char * const e		\
@@ -5649,7 +5642,7 @@ S	|void	|utf8_mg_pos_cache_update				\
 				|const STRLEN byte			\
 				|const STRLEN utf8			\
 				|const STRLEN blen
-S	|I32	|visit		|NN SVFUNC_t f				\
+S	|SSize_t|visit		|NN SVFUNC_t f				\
 				|const U32 flags			\
 				|const U32 mask
 # if defined(DEBUGGING)

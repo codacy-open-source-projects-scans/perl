@@ -205,7 +205,8 @@ use File::Glob qw(:case);
     },
 
     'Compress::Raw::Bzip2' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.205.tar.gz',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.206.tar.gz',
+        'SYNCINFO'     => 'yorton on Tue Jul 25 20:45:42 2023',
         'SYNCINFO'     => 'jkeenan on Wed Jul 19 09:49:28 2023',
         'FILES'        => q[cpan/Compress-Raw-Bzip2],
         'EXCLUDED'     => [
@@ -218,7 +219,8 @@ use File::Glob qw(:case);
     },
 
     'Compress::Raw::Zlib' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.205.tar.gz',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.206.tar.gz',
+        'SYNCINFO'     => 'yorton on Tue Jul 25 20:37:04 2023',
         'SYNCINFO'     => 'jkeenan on Wed Jul 19 09:58:08 2023',
         'FILES'    => q[cpan/Compress-Raw-Zlib],
         'EXCLUDED' => [
@@ -653,7 +655,8 @@ use File::Glob qw(:case);
     },
 
     'IO-Compress' => {
-        'DISTRIBUTION' => 'PMQS/IO-Compress-2.205.tar.gz',
+        'DISTRIBUTION' => 'PMQS/IO-Compress-2.206.tar.gz',
+        'SYNCINFO'     => 'yorton on Tue Jul 25 20:51:33 2023',
         'MAIN_MODULE'  => 'IO::Compress::Base',
         'FILES'        => q[cpan/IO-Compress],
         'EXCLUDED'     => [
@@ -962,7 +965,8 @@ use File::Glob qw(:case);
     },
 
     'Pod::Simple' => {
-        'DISTRIBUTION' => 'KHW/Pod-Simple-3.43.tar.gz',
+        'DISTRIBUTION' => 'KHW/Pod-Simple-3.45.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Aug  2 19:32:39 2023',
         'FILES'        => q[cpan/Pod-Simple],
         'EXCLUDED' => [
             qw{.ChangeLog.swp},
@@ -1448,6 +1452,7 @@ use File::Glob qw(:case);
                 lib/_charnames.pm
                 lib/blib.{pm,t}
                 lib/builtin.{pm,t}
+                lib/builtin-taint.t
                 lib/bytes.{pm,t}
                 lib/bytes_heavy.pl
                 lib/charnames.{pm,t}

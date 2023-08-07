@@ -69,6 +69,12 @@ my %extra_input_pods = ( 'dist/ExtUtils-ParseXS/lib/perlxs.pod' => 1 );
 use strict;
 use warnings;
 
+my $config_h = 'config.h';
+if (@ARGV >= 2 && $ARGV[0] eq "-c") {
+    shift;
+    $config_h = shift;
+}
+
 my $nroff_min_indent = 4;   # for non-heading lines
 # 80 column terminal - 2 for pager adding 2 columns;
 my $max_width = 80 - 2 - $nroff_min_indent;
@@ -534,7 +540,8 @@ sub autodoc ($$) { # parse a file and extract documentation info
             die "'u' flag must also have 'm' or 'y' flags' for $element_name"
                                             if $flags =~ /u/ && $flags !~ /[my]/;
             warn ("'$element_name' not \\w+ in '$proto_in_file' in $file")
-                        if $flags !~ /N/ && $element_name !~ / ^ [_[:alpha:]] \w* $ /x;
+                        if $flags !~ /N/ &&
+                           $element_name !~ / ^ (?:struct\s+)? [_[:alpha:]] \w* $ /x;
 
             if ($flags =~ /#/) {
                 die "Return type must be empty for '$element_name'"
@@ -706,8 +713,6 @@ sub parse_config_h {
     use re '/aa';   # Everthing is ASCII in this file
 
     # Process config.h
-    my $config_h = 'config.h';
-    $config_h = 'win32/config.h' unless -e $config_h;
     die "Can't find $config_h" unless -e $config_h;
     open my $fh, '<', $config_h or die "Can't open $config_h: $!";
     while (<$fh>) {
@@ -983,6 +988,10 @@ sub parse_config_h {
                 $docs{'api'}{$section}{$name}->{pod} = $configs{$name}{pod};
                 $configs{$name}{section} = $section;
                 last;
+            }
+            elsif (exists $docs{'intern'}{$section}{$name}) {
+                die "'$name' is in 'config.h' meaning it is part of the API,\n"
+                  . " but it is also in 'perlintern', meaning it isn't API\n";
             }
         }
 

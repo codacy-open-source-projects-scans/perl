@@ -1033,7 +1033,6 @@ S_openn_cleanup(pTHX_ GV *gv, IO *io, PerlIO *fp, char *mode, const char *oname,
             (void) PerlIO_close(fp);
             goto say_false;
         }
-#ifndef PERL_MICRO
         if (S_ISSOCK(statbuf.st_mode))
             IoTYPE(io) = IoTYPE_SOCKET;	/* in case a socket was passed in to us */
 #ifdef HAS_SOCKET
@@ -1050,7 +1049,6 @@ S_openn_cleanup(pTHX_ GV *gv, IO *io, PerlIO *fp, char *mode, const char *oname,
                                                 /* but some return 0 for streams too, sigh */
         }
 #endif /* HAS_SOCKET */
-#endif /* !PERL_MICRO */
     }
 
     /* Eeek - FIXME !!!
@@ -1358,6 +1356,36 @@ static const MGVTBL argvout_vtbl =
         NULL /* svt_local */
     };
 
+static bool
+S_is_fork_open(const char *name) {
+    /* return true if name matches /^\A\s*(\|\s+-|\-\s+|)\s*\z/ */
+    while (isSPACE(*name))
+        name++;
+    if (*name == '|') {
+        ++name;
+        while (isSPACE(*name))
+            name++;
+        if (*name != '-')
+            return false;
+        ++name;
+    }
+    else if (*name == '-') {
+        ++name;
+        while (isSPACE(*name))
+            name++;
+        if (*name != '|')
+            return false;
+        ++name;
+    }
+    else
+        return false;
+
+    while (isSPACE(*name))
+        name++;
+
+    return *name == 0;
+}
+
 PerlIO *
 Perl_nextargv(pTHX_ GV *gv, bool nomagicopen)
 {
@@ -1400,11 +1428,22 @@ Perl_nextargv(pTHX_ GV *gv, bool nomagicopen)
         SvSETMAGIC(GvSV(gv));
         PL_oldname = SvPVx(GvSV(gv), oldlen);
         if (LIKELY(!PL_inplace)) {
-            if (nomagicopen
-                    ? do_open6(gv, "<", 1, NULL, &GvSV(gv), 1)
-                    : do_open6(gv, PL_oldname, oldlen, NULL, NULL, 0)
-               ) {
-                return IoIFP(GvIOp(gv));
+            if (nomagicopen) {
+                if (do_open6(gv, "<", 1, NULL, &GvSV(gv), 1)) {
+                    return IoIFP(GvIOp(gv));
+                }
+            }
+            else {
+                if (is_fork_open(PL_oldname)) {
+                    Perl_ck_warner_d(aTHX_ packWARN(WARN_INPLACE),
+                                     "Forked open '%s' not meaningful in <>",
+                                     PL_oldname);
+                    continue;
+                }
+
+                if ( do_open6(gv, PL_oldname, oldlen, NULL, NULL, 0) ) {
+                    return IoIFP(GvIOp(gv));
+                }
             }
         }
         else {
@@ -3183,18 +3222,20 @@ I32
 Perl_do_msgsnd(pTHX_ SV **mark, SV **sp)
 {
 #ifdef HAS_MSG
+    PERL_ARGS_ASSERT_DO_MSGSND;
+    PERL_UNUSED_ARG(sp);
+
     STRLEN len;
     const I32 id = SvIVx(*++mark);
     SV * const mstr = *++mark;
     const I32 flags = SvIVx(*++mark);
     const char * const mbuf = SvPVbyte(mstr, len);
-    const I32 msize = len - sizeof(long);
 
-    PERL_ARGS_ASSERT_DO_MSGSND;
-    PERL_UNUSED_ARG(sp);
-
-    if (msize < 0)
+    if (len < sizeof(long))
         Perl_croak(aTHX_ "Arg too short for msgsnd");
+
+    const STRLEN msize = len - sizeof(long);
+
     SETERRNO(0,0);
     if (id >= 0 && flags >= 0) {
       return msgsnd(id, (struct msgbuf *)mbuf, msize, flags);
@@ -3211,13 +3252,13 @@ Perl_do_msgsnd(pTHX_ SV **mark, SV **sp)
 #endif
 }
 
-I32
+SSize_t
 Perl_do_msgrcv(pTHX_ SV **mark, SV **sp)
 {
 #ifdef HAS_MSG
     char *mbuf;
     long mtype;
-    I32 msize, flags, ret;
+    I32 flags;
     const I32 id = SvIVx(*++mark);
     SV * const mstr = *++mark;
 
@@ -3227,14 +3268,15 @@ Perl_do_msgrcv(pTHX_ SV **mark, SV **sp)
     /* suppress warning when reading into undef var --jhi */
     if (! SvOK(mstr))
         SvPVCLEAR(mstr);
-    msize = SvIVx(*++mark);
+    SSize_t msize = SvIVx(*++mark);
     mtype = (long)SvIVx(*++mark);
     flags = SvIVx(*++mark);
-    SvPV_force_nolen(mstr);
-    mbuf = SvGROW(mstr, sizeof(long)+msize+1);
+    SvPV_force_nomg_nolen(mstr);
 
     SETERRNO(0,0);
+    SSize_t ret;
     if (id >= 0 && msize >= 0 && flags >= 0) {
+        mbuf = SvGROW(mstr, sizeof(long)+msize+1);
         ret = msgrcv(id, (struct msgbuf *)mbuf, msize, mtype, flags);
     } else {
         SETERRNO(EINVAL,LIB_INVARG);
@@ -3244,9 +3286,11 @@ Perl_do_msgrcv(pTHX_ SV **mark, SV **sp)
         SvCUR_set(mstr, sizeof(long)+ret);
         SvPOK_only(mstr);
         *SvEND(mstr) = '\0';
+        SvSETMAGIC(mstr);
         /* who knows who has been playing with this message? */
         SvTAINTED_on(mstr);
     }
+
     return ret;
 #else
     PERL_UNUSED_ARG(sp);

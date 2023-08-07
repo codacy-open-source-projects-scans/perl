@@ -1155,34 +1155,12 @@
 #   if defined(PERL_IN_AV_C)
 #     define get_aux_mg(a)                      S_get_aux_mg(aTHX_ a)
 #   endif
-#   if defined(PERL_IN_DEB_C)
-#     define deb_stack_n(a,b,c,d,e)             S_deb_stack_n(aTHX_ a,b,c,d,e)
-#   endif
-#   if defined(PERL_IN_DOIO_C)
-#     define argvout_final(a,b,c)               S_argvout_final(aTHX_ a,b,c)
-#     define exec_failed(a,b,c)                 S_exec_failed(aTHX_ a,b,c)
-#     define ingroup(a,b)                       S_ingroup(aTHX_ a,b)
-#     define openn_cleanup(a,b,c,d,e,f,g,h,i,j,k,l,m) S_openn_cleanup(aTHX_ a,b,c,d,e,f,g,h,i,j,k,l,m)
-#     define openn_setup(a,b,c,d,e,f)           S_openn_setup(aTHX_ a,b,c,d,e,f)
-#   endif
-#   if defined(PERL_IN_DOOP_C)
-#     define do_trans_complex(a,b)              S_do_trans_complex(aTHX_ a,b)
-#     define do_trans_count(a,b)                S_do_trans_count(aTHX_ a,b)
-#     define do_trans_count_invmap(a,b)         S_do_trans_count_invmap(aTHX_ a,b)
-#     define do_trans_invmap(a,b)               S_do_trans_invmap(aTHX_ a,b)
-#     define do_trans_simple(a,b)               S_do_trans_simple(aTHX_ a,b)
-#   endif
-#   if defined(PERL_IN_DUMP_C)
-#     define deb_curcv(a)                       S_deb_curcv(aTHX_ a)
-#     define debprof(a)                         S_debprof(aTHX_ a)
-#     define pm_description(a)                  S_pm_description(aTHX_ a)
-#     define sequence_num(a)                    S_sequence_num(aTHX_ a)
-#   endif
-#   if defined(PERL_IN_GLOBALS_C) || defined(PERL_IN_OP_C) || \
-       defined(PERL_IN_PEEP_C)
+#   if defined(PERL_IN_CLASS_C) || defined(PERL_IN_GLOBALS_C) || \
+       defined(PERL_IN_OP_C)    || defined(PERL_IN_PEEP_C)
 #     define ck_anoncode(a)                     Perl_ck_anoncode(aTHX_ a)
 #     define ck_backtick(a)                     Perl_ck_backtick(aTHX_ a)
 #     define ck_bitop(a)                        Perl_ck_bitop(aTHX_ a)
+#     define ck_classname(a)                    Perl_ck_classname(aTHX_ a)
 #     define ck_cmp(a)                          Perl_ck_cmp(aTHX_ a)
 #     define ck_concat(a)                       Perl_ck_concat(aTHX_ a)
 #     define ck_defined(a)                      Perl_ck_defined(aTHX_ a)
@@ -1229,8 +1207,32 @@
 #     define ck_tell(a)                         Perl_ck_tell(aTHX_ a)
 #     define ck_trunc(a)                        Perl_ck_trunc(aTHX_ a)
 #     define ck_trycatch(a)                     Perl_ck_trycatch(aTHX_ a)
-#   endif /* defined(PERL_IN_GLOBALS_C) || defined(PERL_IN_OP_C) ||
-             defined(PERL_IN_PEEP_C) */
+#   endif /* defined(PERL_IN_CLASS_C) || defined(PERL_IN_GLOBALS_C) ||
+             defined(PERL_IN_OP_C)    || defined(PERL_IN_PEEP_C) */
+#   if defined(PERL_IN_DEB_C)
+#     define deb_stack_n(a,b,c,d,e)             S_deb_stack_n(aTHX_ a,b,c,d,e)
+#   endif
+#   if defined(PERL_IN_DOIO_C)
+#     define argvout_final(a,b,c)               S_argvout_final(aTHX_ a,b,c)
+#     define exec_failed(a,b,c)                 S_exec_failed(aTHX_ a,b,c)
+#     define ingroup(a,b)                       S_ingroup(aTHX_ a,b)
+#     define is_fork_open                       S_is_fork_open
+#     define openn_cleanup(a,b,c,d,e,f,g,h,i,j,k,l,m) S_openn_cleanup(aTHX_ a,b,c,d,e,f,g,h,i,j,k,l,m)
+#     define openn_setup(a,b,c,d,e,f)           S_openn_setup(aTHX_ a,b,c,d,e,f)
+#   endif
+#   if defined(PERL_IN_DOOP_C)
+#     define do_trans_complex(a,b)              S_do_trans_complex(aTHX_ a,b)
+#     define do_trans_count(a,b)                S_do_trans_count(aTHX_ a,b)
+#     define do_trans_count_invmap(a,b)         S_do_trans_count_invmap(aTHX_ a,b)
+#     define do_trans_invmap(a,b)               S_do_trans_invmap(aTHX_ a,b)
+#     define do_trans_simple(a,b)               S_do_trans_simple(aTHX_ a,b)
+#   endif
+#   if defined(PERL_IN_DUMP_C)
+#     define deb_curcv(a)                       S_deb_curcv(aTHX_ a)
+#     define debprof(a)                         S_debprof(aTHX_ a)
+#     define pm_description(a)                  S_pm_description(aTHX_ a)
+#     define sequence_num(a)                    S_sequence_num(aTHX_ a)
+#   endif
 #   if defined(PERL_IN_GV_C)
 #     define find_default_stash(a,b,c,d,e,f)    S_find_default_stash(aTHX_ a,b,c,d,e,f)
 #     define gv_fetchmeth_internal(a,b,c,d,e,f) S_gv_fetchmeth_internal(aTHX_ a,b,c,d,e,f)
@@ -1268,11 +1270,12 @@
 #       define populate_hash_from_localeconv(a,b,c,d,e) S_populate_hash_from_localeconv(aTHX_ a,b,c,d,e)
 #     endif
 #     if defined(USE_LOCALE)
+#       define calculate_LC_ALL_string(a)       S_calculate_LC_ALL_string(aTHX_ a)
 #       define get_category_index_helper(a,b,c) S_get_category_index_helper(aTHX_ a,b,c)
 #       define mortalized_pv_copy(a)            S_mortalized_pv_copy(aTHX_ a)
 #       define new_LC_ALL(a,b)                  S_new_LC_ALL(aTHX_ a,b)
 #       define save_to_buffer                   S_save_to_buffer
-#       define setlocale_failure_panic_i(a,b,c,d,e) S_setlocale_failure_panic_i(aTHX_ a,b,c,d,e)
+#       define setlocale_failure_panic_via_i(a,b,c,d,e,f,g) S_setlocale_failure_panic_via_i(aTHX_ a,b,c,d,e,f,g)
 #       define stdize_locale(a,b,c,d,e)         S_stdize_locale(aTHX_ a,b,c,d,e)
 #       if defined(DEBUGGING)
 #         define my_setlocale_debug_string_i(a,b,c,d) S_my_setlocale_debug_string_i(aTHX_ a,b,c,d)
@@ -1299,42 +1302,35 @@
 #         define get_LC_ALL_display()           S_get_LC_ALL_display(aTHX)
 #       endif
 #       if defined(USE_POSIX_2008_LOCALE)
-#         define emulate_setlocale_i(a,b,c,d)   S_emulate_setlocale_i(aTHX_ a,b,c,d)
-#         define my_querylocale_i(a)            S_my_querylocale_i(aTHX_ a)
+#         define bool_setlocale_2008_i(a,b,c)   S_bool_setlocale_2008_i(aTHX_ a,b,c)
+#         define querylocale_2008_i(a)          S_querylocale_2008_i(aTHX_ a)
 #         define setlocale_from_aggregate_LC_ALL(a,b) S_setlocale_from_aggregate_LC_ALL(aTHX_ a,b)
 #         define use_curlocale_scratch()        S_use_curlocale_scratch(aTHX)
-#         if defined(USE_QUERYLOCALE)
-#           define calculate_LC_ALL_string(a)   S_calculate_LC_ALL_string(aTHX_ a)
-#         else
-#           define update_PL_curlocales_i(a,b,c) S_update_PL_curlocales_i(aTHX_ a,b,c)
+#         if defined(LC_ALL)
+#           define parse_LC_ALL_string(a,b,c)   S_parse_LC_ALL_string(aTHX_ a,b,c)
+#         endif
+#         if !defined(USE_QUERYLOCALE)
+#           define update_PL_curlocales_i(a,b)  S_update_PL_curlocales_i(aTHX_ a,b)
 #         endif
 #       elif  defined(USE_LOCALE_THREADS) &&                  \
              !defined(USE_THREAD_SAFE_LOCALE) &&              \
              !defined(USE_THREAD_SAFE_LOCALE_EMULATION) /* &&
              !defined(USE_POSIX_2008_LOCALE) */
+#         define less_dicey_bool_setlocale_r(a,b) S_less_dicey_bool_setlocale_r(aTHX_ a,b)
 #         define less_dicey_setlocale_r(a,b)    S_less_dicey_setlocale_r(aTHX_ a,b)
-#         define less_dicey_void_setlocale_i(a,b,c) S_less_dicey_void_setlocale_i(aTHX_ a,b,c)
-#         if 0
-#           define less_dicey_bool_setlocale_r(a,b) S_less_dicey_bool_setlocale_r(aTHX_ a,b)
-#         endif
 #       endif
-#       if !(  defined(USE_POSIX_2008_LOCALE) && defined(USE_QUERYLOCALE) ) && \
-            ( !defined(LC_ALL) || defined(USE_POSIX_2008_LOCALE) ||            \
-               defined(WIN32) )
-#         define calculate_LC_ALL_string(a)     S_calculate_LC_ALL_string(aTHX_ a)
-#       endif
-#       if defined(WIN32)
+#       if defined(WIN32) || defined(WIN32_USE_FAKE_OLD_MINGW_LOCALES)
 #         define Win_byte_string_to_wstring     S_Win_byte_string_to_wstring
 #         define Win_wstring_to_byte_string     S_Win_wstring_to_byte_string
 #         define win32_setlocale(a,b)           S_win32_setlocale(aTHX_ a,b)
 #         define wrap_wsetlocale(a,b)           S_wrap_wsetlocale(aTHX_ a,b)
 #       endif
-#       if   defined(WIN32) || \
+#       if   defined(WIN32) || defined(WIN32_USE_FAKE_OLD_MINGW_LOCALES) || \
            ( defined(USE_POSIX_2008_LOCALE) && !defined(USE_QUERYLOCALE) )
 #         define find_locale_from_environment(a) S_find_locale_from_environment(aTHX_ a)
 #       endif
 #     endif /* defined(USE_LOCALE) */
-#     if defined(USE_POSIX_2008_LOCALE) || defined(DEBUGGING)
+#     if defined(USE_LOCALE) || defined(DEBUGGING)
 #       define get_displayable_string(a,b,c)    S_get_displayable_string(aTHX_ a,b,c)
 #     endif
 #   endif /* defined(PERL_IN_LOCALE_C) */

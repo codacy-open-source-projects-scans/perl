@@ -788,6 +788,13 @@ keep a reference count on its arguments and cannot be made to
 do so.  Such arrays are not even supposed to be accessible to
 Perl code, but are only used internally.
 
+=item Cannot use __CLASS__ outside of a method or field initializer expression
+
+(F) A C<__CLASS__> expression yields the class name of the object instance
+executing the current method, and therefore it can only be placed inside an
+actual method (or method-like expression, such as a field initializer
+expression).
+
 =item Cannot yet reorder sv_vcatpvfn() arguments from va_list
 
 (F) Some XS code tried to use C<sv_vcatpvfn()> or a related function with a
@@ -1256,14 +1263,15 @@ a string overload and is also not a blessed CODE reference. In short the
 C<require> function does not know what to do with the object.
 See also L<perlfunc/require>.
 
-=item Attempt to call undefined %s method with arguments via package
-"%s" (perhaps you forgot to load the package?)
+=item Attempt to call undefined %s method with arguments ("%s"%s)
+via package "%s" (Perhaps you forgot to load the package?)
 
-(F) You called the C<import()> or C<unimport()> method of a class that
-has no import method defined in its inheritance graph, and passed an
-argument to the method. This is very often the sign of a mispelled
-package name in a use or require statement that has silently succeded
-due to a case insensitive file system.
+(D deprecated::missing_import_called_with_args) You called the
+C<import()> or C<unimport()> method of a class that has no import method
+defined in its inheritance graph, and passed an argument to the method.
+This is very often the sign of a mispelled package name in a use or
+require statement that has silently succeded due to a case insensitive
+file system.
 
 Another common reason this may happen is when mistakenly attempting to
 import or unimport a symbol from a class definition or package which
@@ -2618,6 +2626,13 @@ same name?
 iterate multiple values at a time. This syntax is currently experimental
 and its behaviour may change in future releases of Perl.
 
+=item Forked open '%s' not meaningful in <>
+
+(S inplace) You had C<|-> or C<-|> in C<@ARGV> and tried to use C<< <>
+>> to read from it.
+
+Previously this would fork and produce a confusing error message.
+
 =item Format not terminated
 
 (F) A format must be terminated by a line with a solitary dot.  Perl got
@@ -2676,6 +2691,12 @@ C<getpwnam> operator returned an invalid UIC.
 (W closed) You tried to get a socket option on a closed socket.  Did you
 forget to check the return value of your socket() call?  See
 L<perlfunc/getsockopt>.
+
+=item get_layers: unknown argument '%s'
+
+(F) You called PerlIO::get_layers() with an unknown argument. Legal
+arguments are provided in key/value pairs, with the keys being one
+of C<input>, C<output> or C<detail>, followed by a boolean.
 
 =item given is deprecated
 
@@ -4688,7 +4709,7 @@ missing value will be filled in with undef instead.
 
 =item Offset outside string
 
-(F)(W layer) You tried to do a read/write/send/recv/seek operation
+(W layer) You tried to do a read/write/send/recv/seek operation
 with an offset pointing outside the buffer.  This is difficult to
 imagine.  The sole exceptions to this are that zero padding will
 take place when going past the end of the string when either
@@ -4698,13 +4719,13 @@ with real files).
 
 =item Old package separator "'" deprecated
 
-(W deprecated::apostrophe_as_package_separator, syntax) You used the old package
+(D deprecated::apostrophe_as_package_separator, syntax) You used the old package
 separator "'" in a variable, subroutine or package name. Support for the
 old package separator will be removed in Perl 5.42.
 
 =item Old package separator used in string
 
-(W deprecated::apostrophe_as_package_separator, syntax) You used the old package
+(D deprecated::apostrophe_as_package_separator, syntax) You used the old package
 separator, "'", in a variable named inside a double-quoted string; e.g.,
 C<"In $name's house">. This is equivalent to C<"In $name::s house">. If
 you meant the former, put a backslash before the apostrophe
@@ -6696,6 +6717,11 @@ certain type.  Arrays must be @NAME or C<@{EXPR}>.  Hashes must be
 
 (F) Your machine doesn't implement the umask function and you tried to
 use it to restrict permissions for yourself (EXPR & 0700).
+
+=item UNIVERSAL does not export anything
+
+(F) You asked UNIVERSAL to export something, but UNIVERSAL is the
+base class for all classes and contains not exportable symbols.
 
 =item Unbalanced context: %d more PUSHes than POPs
 

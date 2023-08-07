@@ -38,7 +38,6 @@ use warnings;
 my $fold;
 my %ARGS;
 my %define;
-
 BEGIN {
     %ARGS = (CCTYPE => 'MSVC', TARG_DIR => '');
 
@@ -52,7 +51,7 @@ BEGIN {
 	my $flag = shift;
 	if ($flag =~ /^(?:CC_FLAGS=)?(-D\w.*)/) {
 	    process_cc_flags($1);
-	} elsif ($flag =~ /^(CCTYPE|FILETYPE|PLATFORM|TARG_DIR)=(.+)$/) {
+	} elsif ($flag =~ /^(CCTYPE|FILETYPE|PLATFORM|TARG_DIR|CONFIG_H)=(.+)$/) {
 	    $ARGS{$1} = $2;
 	} elsif ($flag eq '--sort-fold') {
 	    ++$fold;
@@ -104,7 +103,7 @@ my %exportperlmalloc =
 
 my $exportperlmalloc = PLATFORM eq 'os2';
 
-my $config_h = 'config.h';
+my $config_h = $ARGS{CONFIG_H} || "config.h";
 open(CFG, '<', $config_h) || die "Cannot open $config_h: $!\n";
 while (<CFG>) {
     $define{$1} = 1 if /^\s*\#\s*define\s+(MYMALLOC|MULTIPLICITY
@@ -112,6 +111,10 @@ while (<CFG>) {
                                            |(?:PERL|USE|HAS)_\w+)\b/x;
 }
 close(CFG);
+
+if ($define{WIN32_USE_FAKE_OLD_MINGW_LOCALES}) {
+    $define{NO_POSIX_2008_LOCALE} = 1;
+}
 
 #==========================================================================
 # perl.h logic duplication begins
@@ -123,9 +126,7 @@ if ($define{USE_ITHREADS}) {
     }
 }
 
-$define{MULTIPLICITY} ||=
-    $define{USE_ITHREADS} ||
-    $define{PERL_IMPLICIT_CONTEXT} ;
+$define{MULTIPLICITY} ||= $define{PERL_IMPLICIT_CONTEXT} ;
 
 if ($define{USE_ITHREADS} && ! $define{WIN32}) {
     $define{USE_REENTRANT_API} = 1;
@@ -148,11 +149,15 @@ if (! $define{NO_LOCALE}) {
 
 # https://en.wikipedia.org/wiki/Microsoft_Visual_C%2B%2B#Internal_version_numbering
 my $cctype = $ARGS{CCTYPE} =~ s/MSVC//r;
-if ($define{USE_ITHREADS} && ! $define{NO_LOCALE_THREADS}) {
+if (   $define{USE_ITHREADS}
+    && $define{USE_LOCALE}
+    && ! $define{NO_LOCALE_THREADS})
+{
     $define{USE_LOCALE_THREADS} = 1;
 }
 
 if (   $define{HAS_POSIX_2008_LOCALE}
+    && $define{USE_LOCALE}
     && (! $define{HAS_SETLOCALE} || (     $define{USE_LOCALE_THREADS}
                                      && ! $define{NO_POSIX_2008_LOCALE})
                                      && ! $define{NO_THREAD_SAFE_LOCALE}))
@@ -179,7 +184,6 @@ if ($define{USE_POSIX_2008_LOCALE} && $define{HAS_QUERYLOCALE})
 if ($define{USE_POSIX_2008_LOCALE} && ! $define{USE_QUERYLOCALE})
 {
     $define{USE_PL_CURLOCALES} = 1;
-    $define{USE_PL_CUR_LC_ALL} = 1;
 }
 
 if ($define{WIN32})

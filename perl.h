@@ -38,10 +38,25 @@
 #define USE_STDIO
 #endif /* PERL_FOR_X2P */
 
-#ifdef PERL_MICRO
-#   include "uconfig.h"
-#else
-#   include "config.h"
+#include "config.h"
+
+/* This fakes up using Mingw for locale handling.  In order to not define WIN32
+ * in this file (and hence throughout the code that isn't expecting it), this
+ * doesn't define that, but defines the appropriate things that would otherwise
+ * be defined later in the file.  Hence those and here must be kept in sync */
+#ifdef WIN32_USE_FAKE_OLD_MINGW_LOCALES
+#  define UINT  unsigned int
+#  undef USE_THREAD_SAFE_LOCALE
+#  define NO_POSIX_2008_LOCALE
+#  undef HAS_NL_LANGINFO
+#  undef HAS_NL_LANGINFO_L
+#  undef _UCRT
+#  ifdef USE_LOCALE
+#    define TS_W32_BROKEN_LOCALECONV
+#    ifdef USE_THREADS
+#      define EMULATE_THREAD_SAFE_LOCALES
+#    endif
+#  endif
 #endif
 
 /*
@@ -361,47 +376,45 @@ Now a no-op.
  * have HASATTRIBUTE_FORMAT).
  */
 
-#ifndef PERL_MICRO
-#  if defined __GNUC__ && !defined(__INTEL_COMPILER)
-#    if PERL_GCC_VERSION_GE(3,1,0)
-#      define HASATTRIBUTE_DEPRECATED
-#    endif
-#    if PERL_GCC_VERSION_GE(3,0,0)  /* XXX Verify this version */
-#      define HASATTRIBUTE_FORMAT
-#      if defined __MINGW32__
-#        define PRINTF_FORMAT_NULL_OK
-#      endif
-#    endif
-#    if PERL_GCC_VERSION_GE(3,0,0)
-#      define HASATTRIBUTE_MALLOC
-#    endif
-#    if PERL_GCC_VERSION_GE(3,3,0)
-#      define HASATTRIBUTE_NONNULL
-#    endif
-#    if PERL_GCC_VERSION_GE(2,5,0)
-#      define HASATTRIBUTE_NORETURN
-#    endif
-#    if PERL_GCC_VERSION_GE(3,0,0)
-#      define HASATTRIBUTE_PURE
-#    endif
-#    if PERL_GCC_VERSION_GE(3,4,0)
-#      define HASATTRIBUTE_UNUSED
-#    endif
-#    if __GNUC__ == 3 && __GNUC_MINOR__ == 3 && !defined(__cplusplus)
-#      define HASATTRIBUTE_UNUSED /* gcc-3.3, but not g++-3.3. */
-#    endif
-#    if PERL_GCC_VERSION_GE(3,4,0)
-#      define HASATTRIBUTE_WARN_UNUSED_RESULT
-#    endif
-     /* always_inline is buggy in gcc <= 4.6 and causes compilation errors */
-#    if PERL_GCC_VERSION_GE(4,7,0)
-#      define HASATTRIBUTE_ALWAYS_INLINE
-#    endif
-#    if PERL_GCC_VERSION_GE(3,3,0)
-#      define HASATTRIBUTE_VISIBILITY
+#if defined __GNUC__ && !defined(__INTEL_COMPILER)
+#  if PERL_GCC_VERSION_GE(3,1,0)
+#    define HASATTRIBUTE_DEPRECATED
+#  endif
+#  if PERL_GCC_VERSION_GE(3,0,0)  /* XXX Verify this version */
+#    define HASATTRIBUTE_FORMAT
+#    if defined __MINGW32__
+#      define PRINTF_FORMAT_NULL_OK
 #    endif
 #  endif
-#endif /* #ifndef PERL_MICRO */
+#  if PERL_GCC_VERSION_GE(3,0,0)
+#    define HASATTRIBUTE_MALLOC
+#  endif
+#  if PERL_GCC_VERSION_GE(3,3,0)
+#    define HASATTRIBUTE_NONNULL
+#  endif
+#  if PERL_GCC_VERSION_GE(2,5,0)
+#    define HASATTRIBUTE_NORETURN
+#  endif
+#  if PERL_GCC_VERSION_GE(3,0,0)
+#    define HASATTRIBUTE_PURE
+#  endif
+#  if PERL_GCC_VERSION_GE(3,4,0)
+#    define HASATTRIBUTE_UNUSED
+#  endif
+#  if __GNUC__ == 3 && __GNUC_MINOR__ == 3 && !defined(__cplusplus)
+#    define HASATTRIBUTE_UNUSED /* gcc-3.3, but not g++-3.3. */
+#  endif
+#  if PERL_GCC_VERSION_GE(3,4,0)
+#    define HASATTRIBUTE_WARN_UNUSED_RESULT
+#  endif
+   /* always_inline is buggy in gcc <= 4.6 and causes compilation errors */
+#  if PERL_GCC_VERSION_GE(4,7,0)
+#    define HASATTRIBUTE_ALWAYS_INLINE
+#  endif
+#  if PERL_GCC_VERSION_GE(3,3,0)
+#    define HASATTRIBUTE_VISIBILITY
+#  endif
+#endif
 
 #ifdef HASATTRIBUTE_DEPRECATED
 #  define __attribute__deprecated__         __attribute__((deprecated))
@@ -776,7 +789,7 @@ as in
  if (x) STMT_START { ... } STMT_END else ...
 
 Note that you can't return a value out of this construct and cannot use it as
-an operand to the comma operator.  These limit its utility.  
+an operand to the comma operator.  These limit its utility.
 
 But, a value could be returned by constructing the API so that a pointer is
 passed and the macro dereferences this to set the return.  If the value can be
@@ -1083,10 +1096,6 @@ violations are fatal.
 #undef METHOD
 #endif
 
-#ifdef PERL_MICRO
-#   define NO_LOCALE
-#endif
-
 #ifdef I_LOCALE
 #   include <locale.h>
 #endif
@@ -1211,9 +1220,9 @@ typedef enum {
 
 #ifdef USE_LOCALE
 
-/* And a count of all the individual locale categories, mainly for use in array
+/* And a count of all the locale categories, mainly for use in array
  * declarations */
-#  define LOCALE_CATEGORIES_COUNT_        LC_ALL_INDEX_
+#  define LOCALE_CATEGORIES_COUNT_        (LC_ALL_INDEX_ + 1)
 
 /* =========================================================================
  * The defines from here to the following ===== line are unfortunately
@@ -1270,7 +1279,6 @@ typedef enum {
     * querylocale; so must keep track of it ourselves */
 #  if (defined(USE_POSIX_2008_LOCALE) && ! defined(USE_QUERYLOCALE))
 #    define USE_PL_CURLOCALES
-#    define USE_PL_CUR_LC_ALL
 #  endif
 
 #  if defined(WIN32)
@@ -1309,18 +1317,8 @@ typedef enum {
 
 #ifdef PERL_CORE
 
-/* Both typedefs are used in locale.c only, but defined here so that embed.fnc
- * can generate the proper prototypes. */
-
-typedef enum {
-    DONT_RECALC_LC_ALL,
-    YES_RECALC_LC_ALL,
-
-    /* Used in tight loops through all sub-categories, where LC_ALL won't be
-     * fully known until all subcategories are handled. */
-    RECALCULATE_LC_ALL_ON_FINAL_INTERATION
-} recalc_lc_all_t;
-
+/* These typedefs are used in locale.c only (and documented there), but defined
+ * here so that embed.fnc can generate the proper prototypes. */
 
 typedef enum {  /* Is the locale UTF8? */
     LOCALE_NOT_UTF8,
@@ -1333,6 +1331,12 @@ typedef struct {
     size_t offset;
 } lconv_offset_t;
 
+
+typedef enum {
+    invalid,
+    no_array,
+    full_array
+} parse_LC_ALL_string_return;
 
 #endif
 
@@ -3492,7 +3496,7 @@ typedef struct padname PADNAME;
    and then they have the gall to warn that a value computed is not used. Hence
    cast to void.  */
 #    define PERL_FPU_INIT (void)fpsetmask(0)
-#  elif defined(SIGFPE) && defined(SIG_IGN) && !defined(PERL_MICRO)
+#  elif defined(SIGFPE) && defined(SIG_IGN)
 #    define PERL_FPU_INIT       PL_sigfpe_saved = (Sighandler_t) signal(SIGFPE, SIG_IGN)
 #    define PERL_FPU_PRE_EXEC   { Sigsave_t xfpe; rsignal_save(SIGFPE, PL_sigfpe_saved, &xfpe);
 #    define PERL_FPU_POST_EXEC    rsignal_restore(SIGFPE, &xfpe); }
@@ -5446,18 +5450,10 @@ EXTCONST char PL_isa_DOES[]
 
 #ifdef DOINIT
 EXTCONST char PL_uudmap[256] =
-#  ifdef PERL_MICRO
-#    include "uuudmap.h"
-#  else
-#    include "uudmap.h"
-#  endif
+#  include "uudmap.h"
 ;
 EXTCONST char PL_bitcount[256] =
-#  ifdef PERL_MICRO
-#    include "ubitcount.h"
-#else
-#    include "bitcount.h"
-#  endif
+#  include "bitcount.h"
 ;
 EXTCONST char* const PL_sig_name[] = { SIG_NAME };
 EXTCONST int         PL_sig_num[]  = { SIG_NUM };
@@ -5720,9 +5716,6 @@ EXTCONST char PL_bincompat_options[] =
 #  endif
 #  ifdef PERL_IMPLICIT_SYS
                              " PERL_IMPLICIT_SYS"
-#  endif
-#  ifdef PERL_MICRO
-                             " PERL_MICRO"
 #  endif
 #  ifdef PERL_POISON
                              " PERL_POISON"
@@ -6248,11 +6241,7 @@ EXTCONST runops_proc_t PL_runops_dbg
 
 #ifdef DOINIT
 EXTCONST U8 PL_magic_data[256] =
-#  ifdef PERL_MICRO
-#    include "umg_data.h"
-#  else
-#    include "mg_data.h"
-#  endif
+#  include "mg_data.h"
 ;
 #else
 EXTCONST U8 PL_magic_data[256];
@@ -7035,7 +7024,8 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
 #  define _CHECK_AND_OUTPUT_WIDE_LOCALE_CP_MSG(c)
 #endif
 
-#define locale_panic_(m)  Perl_locale_panic((m), __FILE__, __LINE__, errno)
+#define locale_panic_via_(m, f, l)  Perl_locale_panic((m), __LINE__, f, l)
+#define locale_panic_(m)  locale_panic_via_((m), __FILE__, __LINE__)
 
 /* Locale/thread synchronization macros. */
 #if ! defined(USE_LOCALE_THREADS)
@@ -7070,6 +7060,9 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
                          __FILE__, __LINE__));                              \
                 MUTEX_LOCK(&PL_locale_mutex);                               \
                 PL_locale_mutex_depth = 1;                                  \
+                DEBUG_Lv(PerlIO_printf(Perl_debug_log,                      \
+                         "%s: %d: locale locked; depth=1\n",               \
+                         __FILE__, __LINE__));                              \
             }                                                               \
             else {                                                          \
                 PL_locale_mutex_depth++;                                    \
@@ -7120,8 +7113,14 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
 #    endif
 #  endif
 
-#  ifndef USE_POSIX_2008_LOCALE
-#    define LOCALE_TERM_POSIX_2008_  NOOP
+#  ifdef WIN32_USE_FAKE_OLD_MINGW_LOCALES
+    /* This function is coerced by this Configure option into cleaning up
+     * memory that is static to locale.c.  So we call it at termination.  Doing
+     * it this way is kludgy but confines having to deal with this
+     * Configuration to a bare minimum number of places. */
+#      define LOCALE_TERM_POSIX_2008_  Perl_thread_locale_term(NULL)
+#  elif ! defined(USE_POSIX_2008_LOCALE)
+#      define LOCALE_TERM_POSIX_2008_  NOOP
 #  else
      /* We have a locale object holding the 'C' locale for Posix 2008 */
 #    define LOCALE_TERM_POSIX_2008_                                         \
@@ -7910,14 +7909,8 @@ C<strtoul>.
  * massively.
  */
 
-#ifndef PERL_MICRO
-#	ifndef PERL_ASYNC_CHECK
-#		define PERL_ASYNC_CHECK() if (UNLIKELY(PL_sig_pending)) PL_signalhook(aTHX)
-#	endif
-#endif
-
 #ifndef PERL_ASYNC_CHECK
-#   define PERL_ASYNC_CHECK()  NOOP
+#define PERL_ASYNC_CHECK() if (UNLIKELY(PL_sig_pending)) PL_signalhook(aTHX)
 #endif
 
 /*
@@ -9105,6 +9098,33 @@ END_EXTERN_C
 #endif
 
 #define PERL_PARSE_ERROR_COUNT(f)     (f)
+
+
+/* Work around
+
+  https://github.com/Perl/perl5/issues/21313
+
+  Where gcc when generating code for 32-bit windows assumes the stack
+  is 16 byte aligned, where the system doesn't guarantee that.
+
+  The code generated by gcc itself does maintain 16 byte alignment,
+  but callbacks from the CRT or Windows APIs don't, so calls to
+  code that is generated to SSE instructions (like the quadmath code
+  by default), crashes when called from a callback.
+
+  Since other code other than quadmath might use SSE instructions,
+  also enable this outside of quadmath builds.
+
+  This change is a little risky: if an XS module uses callbacks
+  and those callbacks may also produce alignment errors, if that
+  becomes a problem we'll need to use the nuclear option: building
+  32-bit perl with -mstackrealign.
+*/
+#if defined(WIN32) && !defined(WIN64) && defined(__GNUC__)
+#  define PERL_STACK_REALIGN __attribute__((force_align_arg_pointer))
+#else
+#  define PERL_STACK_REALIGN
+#endif
 
 /*
 

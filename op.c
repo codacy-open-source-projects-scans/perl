@@ -2742,7 +2742,11 @@ Perl_check_hash_fields_and_hekify(pTHX_ UNOP *rop, SVOP *key_op, int real)
         {
             SSize_t keylen;
             const char * const key = SvPV_const(sv, *(STRLEN*)&keylen);
-            SV *nsv = newSVpvn_share(key, SvUTF8(sv) ? -keylen : keylen, 0);
+            if (keylen > I32_MAX) {
+                Perl_croak_nocontext("Sorry, hash keys must be smaller than 2**31 bytes");
+            }
+
+            SV *nsv = newSVpvn_share(key, SvUTF8(sv) ? -(I32)keylen : (I32)keylen, 0);
             SvREFCNT_dec_NN(sv);
             *svp = nsv;
         }
@@ -14329,20 +14333,19 @@ Perl_ck_entersub_args_core(pTHX_ OP *entersubop, GV *namegv, SV *protosv)
 
         op_free(entersubop);
         switch(cvflags >> 16) {
-        case 'F': return newSVOP(OP_CONST, 0,
-                                        newSVpv(CopFILE(PL_curcop),0));
-        case 'L': return newSVOP(
-                           OP_CONST, 0,
-                           Perl_newSVpvf(aTHX_
-                             "%" LINE_Tf, CopLINE(PL_curcop)
-                           )
-                         );
-        case 'P': return newSVOP(OP_CONST, 0,
-                                   (PL_curstash
-                                     ? newSVhek(HvNAME_HEK(PL_curstash))
-                                     : &PL_sv_undef
-                                   )
-                                );
+        case 'C': /* __CLASS__ */
+            return newOP(OP_CLASSNAME, 0);
+        case 'F': /* __FILE__ */
+            return newSVOP(OP_CONST, 0,
+                    newSVpv(CopFILE(PL_curcop),0));
+        case 'L': /* __LINE__ */
+            return newSVOP(OP_CONST, 0,
+                    Perl_newSVpvf(aTHX_ "%" LINE_Tf, CopLINE(PL_curcop)));
+        case 'P': /* __PACKAGE__ */
+            return newSVOP(OP_CONST, 0,
+                    (PL_curstash
+                        ? newSVhek(HvNAME_HEK(PL_curstash))
+                        : &PL_sv_undef));
         }
         NOT_REACHED; /* NOTREACHED */
     }
@@ -15251,6 +15254,7 @@ Perl_core_prototype(pTHX_ SV *sv, const char *name, const int code,
     case KEY_values:  retsetpvs("\\[%@]", OP_VALUES);
     case KEY_each:    retsetpvs("\\[%@]", OP_EACH);
     case KEY_pos:     retsetpvs(";\\[$*]", OP_POS);
+    case KEY___CLASS__:
     case KEY___FILE__: case KEY___LINE__: case KEY___PACKAGE__:
         retsetpvs("", 0);
     case KEY_evalbytes:

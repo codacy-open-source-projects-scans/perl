@@ -66,7 +66,6 @@ make_patchnum.pl			Script to generate git_version.h and lib/Config_git.pl files 
 makedef.pl				Create symbol export lists for linking
 makedepend.SH				Precursor to makedepend
 makedepend_file.SH			Precursor to makedepend_file
-Makefile.micro				microperl Makefile
 Makefile.SH				A script that generates Makefile
 malloc.c				A version of malloc you might not want
 malloc_ctl.h				A version of malloc you might not want
@@ -148,7 +147,6 @@ README.jp				Perl for Japanese (in EUC-JP)
 README.ko				Perl for Korean (in EUC-KR)
 README.linux				Perl notes for Linux
 README.macosx				Perl notes for Mac OS X
-README.micro				Notes about microperl
 README.openbsd				Perl notes for OpenBSD
 README.os2				Perl notes for OS/2
 README.os390				Perl notes for OS/390
@@ -197,9 +195,6 @@ time64.c				64 bit clean time.h (code)
 time64.h				64 bit clean time.h (header)
 time64_config.h				64 bit clean time.h (configuration)
 toke.c					The tokener
-uconfig.h				Configuration header for microperl
-uconfig.sh				Configuration script for microperl
-uconfig64.sh				Configuration script for microperl for LP64
 uni_keywords.h				Map unicode property names to numbers
 unicode_constants.h			compile-time macros for Unicode code points
 universal.c				The default UNIVERSAL package methods
@@ -1265,7 +1260,7 @@ cpan/HTTP-Tiny/t/180_verify_SSL.t
 cpan/HTTP-Tiny/t/BrokenCookieJar.pm
 cpan/HTTP-Tiny/t/SimpleCookieJar.pm
 cpan/HTTP-Tiny/t/Util.pm
-cpan/IO-Compress/bin/streamzip
+cpan/IO-Compress/bin/streamzip				IO-Compress
 cpan/IO-Compress/bin/zipdetails				IO::Compress
 cpan/IO-Compress/lib/Compress/Zlib.pm			IO::Compress
 cpan/IO-Compress/lib/File/GlobMapper.pm			IO::Compress
@@ -1297,7 +1292,6 @@ cpan/IO-Compress/lib/IO/Uncompress/RawInflate.pm	IO::Compress
 cpan/IO-Compress/lib/IO/Uncompress/Unzip.pm		IO::Compress
 cpan/IO-Compress/Makefile.PL				IO::Compress
 cpan/IO-Compress/private/MakeUtil.pm			IO::Compress
-cpan/IO-Compress/t/000prereq.t				IO::Compress
 cpan/IO-Compress/t/001bzip2.t				IO::Compress
 cpan/IO-Compress/t/001zlib-generic-deflate.t		IO::Compress
 cpan/IO-Compress/t/001zlib-generic-gzip.t		IO::Compress
@@ -1311,7 +1305,7 @@ cpan/IO-Compress/t/002any-zip.t				IO::Compress
 cpan/IO-Compress/t/004gziphdr.t				IO::Compress
 cpan/IO-Compress/t/005defhdr.t				IO::Compress
 cpan/IO-Compress/t/006zip.t				IO::Compress
-cpan/IO-Compress/t/011-streamzip.t
+cpan/IO-Compress/t/011-streamzip.t			Test file related to IO-Compress
 cpan/IO-Compress/t/01misc.t				IO::Compress
 cpan/IO-Compress/t/020isize.t				IO::Compress
 cpan/IO-Compress/t/050interop-gzip.t			IO::Compress
@@ -1359,7 +1353,7 @@ cpan/IO-Compress/t/107multi-deflate.t			IO::Compress
 cpan/IO-Compress/t/107multi-gzip.t			IO::Compress
 cpan/IO-Compress/t/107multi-rawdeflate.t		IO::Compress
 cpan/IO-Compress/t/107multi-zip.t			IO::Compress
-cpan/IO-Compress/t/107multi-zip-only.t
+cpan/IO-Compress/t/107multi-zip-only.t			Test file related to IO-Compress
 cpan/IO-Compress/t/108anyunc-bzip2.t			IO::Compress
 cpan/IO-Compress/t/108anyunc-deflate.t			IO::Compress
 cpan/IO-Compress/t/108anyunc-gzip.t			IO::Compress
@@ -1376,8 +1370,8 @@ cpan/IO-Compress/t/110encode-gzip.t			IO::Compress
 cpan/IO-Compress/t/110encode-rawdeflate.t		IO::Compress
 cpan/IO-Compress/t/110encode-zip.t			IO::Compress
 cpan/IO-Compress/t/111const-deflate.t			IO::Compress
-cpan/IO-Compress/t/112utf8-zip.t
-cpan/IO-Compress/t/113issues.t
+cpan/IO-Compress/t/112utf8-zip.t			Test file related to IO-Compress
+cpan/IO-Compress/t/113issues.t				Test file related to IO-Compress
 cpan/IO-Compress/t/999pod.t				IO::Compress
 cpan/IO-Compress/t/compress/any.pl			Compress::Zlib
 cpan/IO-Compress/t/compress/anyunc.pl			Compress::Zlib
@@ -1398,13 +1392,13 @@ cpan/IO-Compress/t/cz-03zlib-v1.t			IO::Compress
 cpan/IO-Compress/t/cz-06gzsetp.t			IO::Compress
 cpan/IO-Compress/t/cz-08encoding.t			IO::Compress
 cpan/IO-Compress/t/cz-14gzopen.t			IO::Compress
-cpan/IO-Compress/t/files/bad-efs.zip
-cpan/IO-Compress/t/files/encrypt-aes.zip
-cpan/IO-Compress/t/files/encrypt-standard.zip
-cpan/IO-Compress/t/files/jar.zip
-cpan/IO-Compress/t/files/meta.xml
-cpan/IO-Compress/t/files/test.ods
-cpan/IO-Compress/t/files/testfile1.odt
+cpan/IO-Compress/t/files/bad-efs.zip			IO-Compress
+cpan/IO-Compress/t/files/encrypt-aes.zip		IO-Compress
+cpan/IO-Compress/t/files/encrypt-standard.zip		IO-Compress
+cpan/IO-Compress/t/files/jar.zip			IO-Compress
+cpan/IO-Compress/t/files/meta.xml			IO-Compress
+cpan/IO-Compress/t/files/test.ods			IO-Compress
+cpan/IO-Compress/t/files/testfile1.odt			IO-Compress
 cpan/IO-Compress/t/globmapper.t				IO::Compress
 cpan/IO-Socket-IP/lib/IO/Socket/IP.pm			IO::Socket::IP
 cpan/IO-Socket-IP/t/00use.t				IO::Socket::IP tests
@@ -1833,7 +1827,7 @@ cpan/Pod-Simple/lib/Pod/Simple/DumpAsXML.pm		turn Pod into XML
 cpan/Pod-Simple/lib/Pod/Simple/HTML.pm			convert Pod to HTML
 cpan/Pod-Simple/lib/Pod/Simple/HTMLBatch.pm		convert several Pod files to several HTML files
 cpan/Pod-Simple/lib/Pod/Simple/HTMLLegacy.pm		Pod::Simple::HTMLLegacy
-cpan/Pod-Simple/lib/Pod/Simple/JustPod.pm
+cpan/Pod-Simple/lib/Pod/Simple/JustPod.pm		Module related to Pod::Simple
 cpan/Pod-Simple/lib/Pod/Simple/LinkSection.pm		represent "section" attributes of L codes
 cpan/Pod-Simple/lib/Pod/Simple/Methody.pm		turn Pod::Simple events into method calls
 cpan/Pod-Simple/lib/Pod/Simple/Progress.pm		Pod::Simple::Progress
@@ -1855,11 +1849,10 @@ cpan/Pod-Simple/lib/Pod/Simple/TranscodeSmart.pm	Pod::Simple::TranscodeSmart
 cpan/Pod-Simple/lib/Pod/Simple/XHTML.pm			turn Pod into XHTML
 cpan/Pod-Simple/lib/Pod/Simple/XMLOutStream.pm		turn Pod into XML
 cpan/Pod-Simple/t/00about.t				Pod::Simple test file
-cpan/Pod-Simple/t/20_skip.t				Pod::Simple test file
 cpan/Pod-Simple/t/ac_d.t				Pod::Simple test file
 cpan/Pod-Simple/t/accept01.t				Pod::Simple test file
 cpan/Pod-Simple/t/accept05.t				Pod::Simple test file
-cpan/Pod-Simple/t/ascii_order.pl
+cpan/Pod-Simple/t/ascii_order.pl			Script related to Pod::Simple
 cpan/Pod-Simple/t/basic.t				Pod::Simple test file
 cpan/Pod-Simple/t/begin.t				Pod::Simple test file
 cpan/Pod-Simple/t/cbacks.t				Pod::Simple test file
@@ -1887,10 +1880,10 @@ cpan/Pod-Simple/t/corpus/encwarn01.txt			Pod::Simple test file
 cpan/Pod-Simple/t/corpus/encwarn01.xml			Pod::Simple test file
 cpan/Pod-Simple/t/corpus/encwarn02.txt			Pod::Simple test file
 cpan/Pod-Simple/t/corpus/encwarn02.xml			Pod::Simple test file
-cpan/Pod-Simple/t/corpus/encwarn03.txt
-cpan/Pod-Simple/t/corpus/encwarn03.xml
-cpan/Pod-Simple/t/corpus/encwarn04.txt
-cpan/Pod-Simple/t/corpus/encwarn04.xml
+cpan/Pod-Simple/t/corpus/encwarn03.txt			Test file related to Pod::Simple
+cpan/Pod-Simple/t/corpus/encwarn03.xml			Pod::Simple
+cpan/Pod-Simple/t/corpus/encwarn04.txt			Test file related to Pod::Simple
+cpan/Pod-Simple/t/corpus/encwarn04.xml			Pod::Simple
 cpan/Pod-Simple/t/corpus/fet_cont.txt			Pod::Simple test file
 cpan/Pod-Simple/t/corpus/fet_cont.xml			Pod::Simple test file
 cpan/Pod-Simple/t/corpus/fet_dup.txt			Pod::Simple test file
@@ -1938,11 +1931,11 @@ cpan/Pod-Simple/t/corpus2/polish_utf8_bom2.txt		Pod::Simple test file
 cpan/Pod-Simple/t/corpus2/polish_utf8_bom2.xml		Pod::Simple test file
 cpan/Pod-Simple/t/corpus2/README			Pod::Simple test file
 cpan/Pod-Simple/t/emptylists.t				Pod::Simple test file
-cpan/Pod-Simple/t/enc-chars.t
+cpan/Pod-Simple/t/enc-chars.t				Test file related to Pod::Simple
 cpan/Pod-Simple/t/encod01.t				Pod::Simple test file
 cpan/Pod-Simple/t/encod02.t				Pod::Simple test file
 cpan/Pod-Simple/t/encod03.t				Pod::Simple test file
-cpan/Pod-Simple/t/encod04.t
+cpan/Pod-Simple/t/encod04.t				Test file related to Pod::Simple
 cpan/Pod-Simple/t/end_over.t				Pod::Simple test file
 cpan/Pod-Simple/t/eol.t					Pod::Simple test file
 cpan/Pod-Simple/t/eol2.t				Pod::Simple test file
@@ -1953,7 +1946,7 @@ cpan/Pod-Simple/t/fcodes_l.t				Pod::Simple test file
 cpan/Pod-Simple/t/fcodes_s.t				Pod::Simple test file
 cpan/Pod-Simple/t/for.t					Pod::Simple test file
 cpan/Pod-Simple/t/fornot.t				Pod::Simple test file
-cpan/Pod-Simple/t/github_issue_79.t
+cpan/Pod-Simple/t/github_issue_79.t			Test file related to Pod::Simple
 cpan/Pod-Simple/t/heads.t				Pod::Simple test file
 cpan/Pod-Simple/t/html01.t				Pod::Simple test file
 cpan/Pod-Simple/t/html02.t				Pod::Simple test file
@@ -1966,9 +1959,9 @@ cpan/Pod-Simple/t/junk1.pod				Pod::Simple test file
 cpan/Pod-Simple/t/junk1o.txt				Pod::Simple test file
 cpan/Pod-Simple/t/junk2.pod				Pod::Simple test file
 cpan/Pod-Simple/t/junk2o.txt				Pod::Simple test file
-cpan/Pod-Simple/t/JustPod01.t
-cpan/Pod-Simple/t/JustPod02.t
-cpan/Pod-Simple/t/JustPod_corpus.t
+cpan/Pod-Simple/t/JustPod01.t				Test file related to Pod::Simple
+cpan/Pod-Simple/t/JustPod02.t				Test file related to Pod::Simple
+cpan/Pod-Simple/t/JustPod_corpus.t			Test file related to Pod::Simple
 cpan/Pod-Simple/t/lib/helpers.pm			Pod::Simple test file
 cpan/Pod-Simple/t/linkclas.t				Pod::Simple test file
 cpan/Pod-Simple/t/output.t				Pod::Simple test file
@@ -1982,7 +1975,7 @@ cpan/Pod-Simple/t/puller.t				Pod::Simple test file
 cpan/Pod-Simple/t/pulltitl.t				Pod::Simple test file
 cpan/Pod-Simple/t/reinit.t				Pod::Simple test file
 cpan/Pod-Simple/t/render.t				Pod::Simple test file
-cpan/Pod-Simple/t/rtf_utf8.t
+cpan/Pod-Simple/t/rtf_utf8.t				Test file related to Pod::Simple
 cpan/Pod-Simple/t/search05.t				Pod::Simple test file
 cpan/Pod-Simple/t/search10.t				Pod::Simple test file
 cpan/Pod-Simple/t/search12.t				Pod::Simple test file
@@ -2025,14 +2018,15 @@ cpan/Pod-Simple/t/testlib3/squaa/Vliff.pm		Pod::Simple test file
 cpan/Pod-Simple/t/tiedfh.t				Pod::Simple test file
 cpan/Pod-Simple/t/verb_fmt.t				Pod::Simple test file
 cpan/Pod-Simple/t/verbatim.t				Pod::Simple test file
-cpan/Pod-Simple/t/whine.t
+cpan/Pod-Simple/t/whine.t				Test file related to Pod::Simple
 cpan/Pod-Simple/t/x_nixer.t				Pod::Simple test file
-cpan/Pod-Simple/t/xhtml-bkb.t
+cpan/Pod-Simple/t/xhtml-bkb.t				Test file related to Pod::Simple
 cpan/Pod-Simple/t/xhtml01.t				Pod::Simple test file
 cpan/Pod-Simple/t/xhtml05.t				Pod::Simple test file
 cpan/Pod-Simple/t/xhtml10.t				Pod::Simple test file
 cpan/Pod-Simple/t/xhtml15.t				Pod::Simple test file
 cpan/Pod-Simple/t/xhtml20.t				Pod::Simple test file
+cpan/Pod-Simple/t/xhtml25.t				Pod-Simple
 cpan/Pod-Usage/lib/Pod/Usage.pm
 cpan/Pod-Usage/scripts/pod2usage.PL
 cpan/Pod-Usage/t/inc/Pod/InputObjects.pm
@@ -4655,10 +4649,7 @@ ext/PerlIO-encoding/t/nolooping.t	Tests for PerlIO::encoding
 ext/PerlIO-encoding/t/threads.t		Tests PerlIO::encoding and threads
 ext/PerlIO-mmap/mmap.pm			PerlIO layer for memory maps
 ext/PerlIO-mmap/mmap.xs			PerlIO layer for memory maps
-ext/PerlIO-scalar/scalar.pm		PerlIO layer for scalars
-ext/PerlIO-scalar/scalar.xs		PerlIO layer for scalars
-ext/PerlIO-scalar/t/scalar.t		See if PerlIO::scalar works
-ext/PerlIO-scalar/t/scalar_ungetc.t	Tests for PerlIO layer for scalars
+ext/PerlIO-scalar/scalar.pm		PerlIO layer for in-memory handles
 ext/PerlIO-via/hints/aix.pl		Hint for PerlIO::via for named architecture
 ext/PerlIO-via/t/thread.t		See if PerlIO::via works with threads
 ext/PerlIO-via/t/via.t			See if PerlIO::via works
@@ -5045,6 +5036,7 @@ hints/sco_2_3_1.sh			Hints for named architecture
 hints/sco_2_3_2.sh			Hints for named architecture
 hints/sco_2_3_3.sh			Hints for named architecture
 hints/sco_2_3_4.sh			Hints for named architecture
+hints/serenity.sh			Hints for named architecture
 hints/solaris_2.sh			Hints for named architecture
 hints/stellar.sh			Hints for named architecture
 hints/sunos_4_0.sh			Hints for named architecture
@@ -5074,6 +5066,7 @@ lib/blib.pm				For "use blib"
 lib/blib.t				blib.pm test
 lib/builtin.pm				builtin function namespace
 lib/builtin.t				test builtin function namespace
+lib/builtin-taint.t			test builtin function namespace in taint mode
 lib/bytes.pm				Pragma to enable byte operations
 lib/bytes.t				bytes.pm test
 lib/bytes_heavy.pl			Support routines for byte pragma
@@ -5680,7 +5673,6 @@ regen/regcomp.pl			Builder of regnodes.h
 regen/regen_lib.pl			Common file routines for generator scripts
 regen/scope_types.pl			Regenerate scope_types.h
 regen/tidy_embed.pl			Program to clean up embed.fnc manually
-regen/uconfig_h.pl			generate uconfig.h (requires /bin/sh)
 regen/unicode_constants.pl		generate unicode_constants.h
 regen/warnings.pl			Program to write warnings.h and lib/warnings.pm
 t/base/cond.t				See if conditionals work
@@ -5698,7 +5690,9 @@ t/bigmem/index.t			Check that index() handles large offsets
 t/bigmem/pos.t				Check that pos() handles large offsets
 t/bigmem/read.t				Check read() handles large offsets
 t/bigmem/regexp.t			Test regular expressions with large strings
+t/bigmem/str.t				Test string primitives with large strings
 t/bigmem/subst.t			Test s/// with large strings
+t/bigmem/subst2.t			Test s//EXPR/e with large strings
 t/bigmem/vec.t				Check vec() handles large offsets
 t/charset_tools.pl			To aid in portable testing across platforms with different character sets
 t/class/class.t				See if class declarations work
@@ -5776,6 +5770,8 @@ t/io/print.t				See if print commands work
 t/io/pvbm.t				See if PVBMs break IO commands
 t/io/read.t				See if read works
 t/io/say.t				See if say works
+t/io/scalar.t				See if PerlIO::scalar works
+t/io/scalar_ungetc.t			Tests for PerlIO layer for scalars
 t/io/sem.t				See if SysV semaphores work
 t/io/semctl.t				See if SysV semaphore semctl works
 t/io/shm.t				See if SysV shared memory works
@@ -6479,6 +6475,7 @@ win32/perlhost.h			Perl "host" implementation
 win32/perllib.c				Win32 port
 win32/pod.mak				Win32 port
 win32/runperl.c				Win32 port
+win32/set_depend_modtime.pl		Win32: update target modtime to match deps
 win32/vdir.h				Perl "host" virtual directory manager for Win32
 win32/vmem.h				Perl "host" memory manager for Win32
 win32/win32.c				Win32 port
