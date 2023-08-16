@@ -467,21 +467,17 @@ sub like_yn ($$$@) {
     # definitely not like(..., '/.../') like
     # Test::Builder::maybe_regex() does.
     unless (re::is_regexp($expected)) {
-	die "PANIC: The value '$expected' isn't a regexp. The like() function needs a qr// pattern, not a string";
+        die "PANIC: The value '$expected' isn't a regexp. The like() function needs a qr// pattern, not a string";
     }
 
-    my $pass;
-    $pass = $_[1] =~ /$expected/ if !$flip;
-    $pass = $_[1] !~ /$expected/ if $flip;
-    my $display_got = $_[1];
-    $display_got = display($display_got);
-    my $display_expected = $expected;
-    $display_expected = display($display_expected);
+    my $pass = ($flip) ? $_[1] !~ /$expected/ : $_[1] =~ /$expected/;
     unless ($pass) {
-	unshift(@mess, "#      got '$display_got'\n",
-		$flip
-		? "# expected !~ /$display_expected/\n"
-                : "# expected /$display_expected/\n");
+        my $display_got = display($_[1]);
+        my $display_expected = display($expected);
+        unshift(@mess, "#      got '$display_got'\n",
+            $flip
+            ? "# expected !~ /$display_expected/\n"
+            : "# expected /$display_expected/\n");
     }
     local $Level = $Level + 1;
     _ok($pass, _where(), $name, @mess);

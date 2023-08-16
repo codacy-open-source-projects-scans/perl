@@ -898,6 +898,15 @@ symbol would not be defined on C<L</EBCDIC>> platforms.
 #define STANDARD_C
 #endif
 
+/* Don't compile 'code' if PERL_MEM_LOG is defined.  This is used for
+ * constructs that don't play well when PERL_MEM_LOG is active, so that they
+ * automatically don't get compiled without having to use extra #ifdef's */
+#ifndef PERL_MEM_LOG
+#  define UNLESS_PERL_MEM_LOG(code)  code
+#else
+#  define UNLESS_PERL_MEM_LOG(code)
+#endif
+
 /* By compiling a perl with -DNO_TAINT_SUPPORT or -DSILENT_NO_TAINT_SUPPORT,
  * you get a perl without taint support, but doubtlessly with a lesser
  * degree of support. Do not do so unless you know exactly what it means
@@ -1115,7 +1124,6 @@ violations are fatal.
  * repeated in t/loc_tools.pl and makedef.pl;  The three should be kept in
  * sync. */
 #if   ! defined(NO_LOCALE)
-
 #  if ! defined(NO_POSIX_2008_LOCALE)           \
    &&   defined(HAS_NEWLOCALE)                  \
    &&   defined(HAS_USELOCALE)                  \
@@ -1224,6 +1232,20 @@ typedef enum {
  * declarations */
 #  define LOCALE_CATEGORIES_COUNT_        (LC_ALL_INDEX_ + 1)
 
+/* As a development aid for platforms that have LC_ALL name=value notation,
+ * setting -Accflags=-DUSE_FAKE_LC_ALL_POSITIONAL_NOTATION, simulates a
+ * platform that instead uses positional notation.  By doing this, you can find
+ * many bugs without trying it out on a real such platform.  It would be
+ * possible to create the reverse definitions for people who have ready access
+ * to a posiional notation box, but harder to get a name=value box */
+#  if defined(USE_FAKE_LC_ALL_POSITIONAL_NOTATION)            \
+   && defined(PERL_LC_ALL_USES_NAME_VALUE_PAIRS)
+#    undef  PERL_LC_ALL_USES_NAME_VALUE_PAIRS
+
+#    define  PERL_LC_ALL_CATEGORY_POSITIONS_INIT /* Assumes glibc cateories */\
+                                  { 12, 11, 10, 9, 8, 7, 5, 4, 3, 2, 1, 0 }
+#    define  PERL_LC_ALL_SEPARATOR "/ = /"
+#  endif
 /* =========================================================================
  * The defines from here to the following ===== line are unfortunately
  * duplicated in makedef.pl, and changes here MUST also be made there */
@@ -1259,7 +1281,7 @@ typedef enum {
               /* Use querylocale if has it, or has the glibc internal       \
                * undocumented equivalent. */                                \
      || (     defined(_NL_LOCALE_NAME)                                      \
-              /* And asked for */                                           \
+              /* And is asked for */                                        \
          &&   defined(USE_NL_LOCALE_NAME)                                   \
               /* nl_langinfo_l almost certainly will exist on systems that  \
                * have _NL_LOCALE_NAME, so there is nothing lost by          \
@@ -1269,7 +1291,7 @@ typedef enum {
          &&   defined(HAS_NL_LANGINFO_L)                                    \
                /* On systems that accept any locale name, the real          \
                 * underlying locale is often returned by this internal      \
-                * item, so we can't use it */                               \
+                * langinfo item, so we can't use it */                      \
          && ! defined(SETLOCALE_ACCEPTS_ANY_LOCALE_NAME))
 #      define USE_QUERYLOCALE
 #    endif
@@ -1331,10 +1353,17 @@ typedef struct {
     size_t offset;
 } lconv_offset_t;
 
+typedef enum {
+    INTERNAL_FORMAT,
+    EXTERNAL_FORMAT_FOR_SET,
+    EXTERNAL_FORMAT_FOR_QUERY
+} calc_LC_ALL_format;
+
 
 typedef enum {
     invalid,
     no_array,
+    only_element_0,
     full_array
 } parse_LC_ALL_string_return;
 
@@ -1886,6 +1915,12 @@ was saved by C<dSAVE_ERRNO> or C<RESTORE_ERRNO>.
 # undef SETERRNO  /* SOCKS might have defined this */
 #endif
 
+#if defined(VMS) || defined(WIN32) || defined(OS2)
+#    define HAS_EXTENDED_OS_ERRNO
+#    define get_extended_os_errno()  Perl_get_extended_os_errno()
+#  else
+#    define get_extended_os_errno()  errno
+#  endif
 #ifdef VMS
 #   define SETERRNO(errcode,vmserrcode) \
         STMT_START {			\
@@ -7055,20 +7090,23 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
         STMT_START {                                                        \
             CLANG_DIAG_IGNORE(-Wthread-safety)                              \
             if (LIKELY(PL_locale_mutex_depth <= 0)) {                       \
-                DEBUG_Lv(PerlIO_printf(Perl_debug_log,                      \
-                         "%s: %d: locking locale; depth=1\n",               \
+                UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,  \
+                         "%s: %d: locking locale; lock depth=1\n",          \
                          __FILE__, __LINE__));                              \
+                )                                                           \
                 MUTEX_LOCK(&PL_locale_mutex);                               \
                 PL_locale_mutex_depth = 1;                                  \
-                DEBUG_Lv(PerlIO_printf(Perl_debug_log,                      \
-                         "%s: %d: locale locked; depth=1\n",               \
+                UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,  \
+                         "%s: %d: locale locked; lock depth=1\n",           \
                          __FILE__, __LINE__));                              \
+                )                                                           \
             }                                                               \
             else {                                                          \
                 PL_locale_mutex_depth++;                                    \
-                DEBUG_Lv(PerlIO_printf(Perl_debug_log,                      \
-                        "%s: %d: avoided locking locale; new depth=%d\n",   \
+                UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,  \
+                        "%s: %d: avoided locking locale; new lock depth=%d\n",\
                         __FILE__, __LINE__, PL_locale_mutex_depth));        \
+                )                                                           \
                 if (cond_to_panic_if_already_locked) {                      \
                     locale_panic_("Trying to lock locale incompatibly: "    \
                          STRINGIFY(cond_to_panic_if_already_locked));       \
@@ -7080,9 +7118,10 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
 #  define LOCALE_UNLOCK_                                                    \
         STMT_START {                                                        \
             if (LIKELY(PL_locale_mutex_depth == 1)) {                       \
-                DEBUG_Lv(PerlIO_printf(Perl_debug_log,                      \
-                         "%s: %d: unlocking locale; new depth=0\n",         \
+                UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,  \
+                         "%s: %d: unlocking locale; new lock depth=0\n",    \
                          __FILE__, __LINE__));                              \
+                )                                                           \
                 PL_locale_mutex_depth = 0;                                  \
                 MUTEX_UNLOCK(&PL_locale_mutex);                             \
             }                                                               \
@@ -7094,9 +7133,10 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
             }                                                               \
             else {                                                          \
                 PL_locale_mutex_depth--;                                    \
-                DEBUG_Lv(PerlIO_printf(Perl_debug_log,                      \
-                        "%s: %d: avoided unlocking locale; new depth=%d\n", \
-                        __FILE__, __LINE__, PL_locale_mutex_depth));        \
+                UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,  \
+                    "%s: %d: avoided unlocking locale; new lock depth=%d\n",\
+                    __FILE__, __LINE__, PL_locale_mutex_depth));            \
+                )                                                           \
             }                                                               \
         } STMT_END
 
@@ -7215,7 +7255,6 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
 #  define LOCALE_LOCK                NOOP
 #  define LOCALE_UNLOCK              NOOP
 #endif
-
 
       /* On systems that don't have per-thread locales, even though we don't
        * think we are changing the locale ourselves, behind the scenes it does
@@ -7423,7 +7462,8 @@ cannot have changed since the precalculation.
                     (! PL_numeric_underlying && PL_numeric_standard < 2)
 
 #  define DECLARATION_FOR_LC_NUMERIC_MANIPULATION                           \
-    void (*_restore_LC_NUMERIC_function)(pTHX) = NULL
+    void (*_restore_LC_NUMERIC_function)(pTHX_ const char * const file,     \
+                                               const line_t line) = NULL
 
 #  define STORE_LC_NUMERIC_SET_TO_NEEDED_IN(in)                             \
         STMT_START {                                                        \
@@ -7433,14 +7473,14 @@ cannot have changed since the precalculation.
                      || (! _in_lc_numeric && NOT_IN_NUMERIC_STANDARD_)));   \
             if (_in_lc_numeric) {                                           \
                 if (NOT_IN_NUMERIC_UNDERLYING_) {                           \
-                    Perl_set_numeric_underlying(aTHX);                      \
+                    Perl_set_numeric_underlying(aTHX_ __FILE__, __LINE__);  \
                     _restore_LC_NUMERIC_function                            \
                                             = &Perl_set_numeric_standard;   \
                 }                                                           \
             }                                                               \
             else {                                                          \
                 if (NOT_IN_NUMERIC_STANDARD_) {                             \
-                    Perl_set_numeric_standard(aTHX);                        \
+                    Perl_set_numeric_standard(aTHX_ __FILE__, __LINE__);    \
                     _restore_LC_NUMERIC_function                            \
                                             = &Perl_set_numeric_underlying; \
                 }                                                           \
@@ -7453,7 +7493,7 @@ cannot have changed since the precalculation.
 #  define RESTORE_LC_NUMERIC()                                              \
         STMT_START {                                                        \
             if (_restore_LC_NUMERIC_function) {                             \
-                _restore_LC_NUMERIC_function(aTHX);                         \
+                _restore_LC_NUMERIC_function(aTHX_ __FILE__, __LINE__);     \
             }                                                               \
             LC_NUMERIC_UNLOCK;                                              \
         } STMT_END
@@ -7466,7 +7506,7 @@ cannot have changed since the precalculation.
                                "%s: %d: lc_numeric standard=%d\n",          \
                                 __FILE__, __LINE__, PL_numeric_standard));  \
             if (UNLIKELY(NOT_IN_NUMERIC_STANDARD_)) {                       \
-                Perl_set_numeric_standard(aTHX);                            \
+                Perl_set_numeric_standard(aTHX_ __FILE__, __LINE__);        \
             }                                                               \
             DEBUG_Lv(PerlIO_printf(Perl_debug_log,                          \
                                  "%s: %d: lc_numeric standard=%d\n",        \
@@ -7477,7 +7517,7 @@ cannot have changed since the precalculation.
 	STMT_START {                                                        \
           /*assert(PL_locale_mutex_depth > 0);*/                            \
             if (NOT_IN_NUMERIC_UNDERLYING_) {                               \
-                Perl_set_numeric_underlying(aTHX);                          \
+                Perl_set_numeric_underlying(aTHX_ __FILE__, __LINE__);      \
             }                                                               \
         } STMT_END
 
@@ -7488,7 +7528,7 @@ cannot have changed since the precalculation.
             LC_NUMERIC_LOCK(NOT_IN_NUMERIC_STANDARD_);                      \
             if (NOT_IN_NUMERIC_STANDARD_) {                                 \
                 _restore_LC_NUMERIC_function = &Perl_set_numeric_underlying;\
-                Perl_set_numeric_standard(aTHX);                            \
+                Perl_set_numeric_standard(aTHX_ __FILE__, __LINE__);        \
             }                                                               \
         } STMT_END
 
@@ -7498,7 +7538,7 @@ cannot have changed since the precalculation.
 	STMT_START {                                                        \
             LC_NUMERIC_LOCK(NOT_IN_NUMERIC_UNDERLYING_);                    \
             if (NOT_IN_NUMERIC_UNDERLYING_) {                               \
-                Perl_set_numeric_underlying(aTHX);                          \
+                Perl_set_numeric_underlying(aTHX_ __FILE__, __LINE__);      \
                 _restore_LC_NUMERIC_function = &Perl_set_numeric_standard;  \
             }                                                               \
         } STMT_END

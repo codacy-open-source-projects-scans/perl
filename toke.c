@@ -4464,7 +4464,7 @@ S_scan_const(pTHX_ char *start)
  *   {4,5} (any digits around the comma) returns FALSE
  * if we're in a pattern and the first char is a [
  *   [] returns FALSE
- *   [SOMETHING] has a funky algorithm to decide whether it's a
+ *   [SOMETHING] has a funky heuristic to decide whether it's a
  *      character class or not.  It has to deal with things like
  *      /$foo[-3]/ and /$foo[$bar]/ as well as /$foo[$\d]+/
  * anything else returns TRUE
@@ -4477,135 +4477,258 @@ S_intuit_more(pTHX_ char *s, char *e)
 {
     PERL_ARGS_ASSERT_INTUIT_MORE;
 
+    /* This function has been mostly untouched for a long time, due to its,
+     * 'scariness', and lack of comments.  khw has gone through and done some
+     * cleanup, while finding various instances of problematic behavior.
+     * Rather than change this base-level function immediately, khw has added
+     * commentary to those areas. */
+
+    /* If recursed within brackets, there is more to the expression */
     if (PL_lex_brackets)
         return TRUE;
-    if (*s == '-' && s[1] == '>' && (s[2] == '[' || s[2] == '{'))
-        return TRUE;
-    if (*s == '-' && s[1] == '>'
-     && FEATURE_POSTDEREF_QQ_IS_ENABLED
-     && ( (s[2] == '$' && (s[3] == '*' || (s[3] == '#' && s[4] == '*')))
-        ||(s[2] == '@' && memCHRs("*[{",s[3])) ))
-        return TRUE;
-    if (*s != '{' && *s != '[')
+
+    /* If begins with '->' ... */
+    if (s[0] == '-' && s[1] == '>') {
+
+        /* '->[' and '->{' imply more to the expression */
+        if (s[2] == '[' || s[2] == '{') {
+            return TRUE;
+        }
+
+        /* Any post deref construct implies more to the expression */
+        if (   FEATURE_POSTDEREF_QQ_IS_ENABLED
+            && (   (s[2] == '$' && (    s[3] == '*'
+                                    || (s[3] == '#' && s[4] == '*')))
+                || (s[2] == '@' && memCHRs("*[{", s[3])) ))
+        {
+            return TRUE;
+        }
+    }
+
+    if (s[0] != '{' && s[0] != '[')
         return FALSE;
+
+    /* quit immediately from any errors from now on */
     PL_parser->sub_no_recover = TRUE;
+
+    /* Here is '{' or '['.  Outside patterns, they're always subscripts */
     if (!PL_lex_inpat)
         return TRUE;
 
-    /* In a pattern, so maybe we have {n,m}. */
-    if (*s == '{') {
+    /* In a pattern, so maybe we have {n,m}, in which case, there isn't more to
+     * the expression.
+     *
+     * khw: This assumes that anything matching regcurly is a character class.
+     * The syntax of regcurly has been loosened since this function was
+     * written, and regcurly never required a comma, as in {0}.  Probably it is
+     * ok as-is */
+    if (s[0] == '{') {
         if (regcurly(s, e, NULL)) {
             return FALSE;
         }
         return TRUE;
     }
 
-    /* On the other hand, maybe we have a character class */
-
+    /* Here is '[': maybe we have a character class.  Examine the guts */
     s++;
-    if (*s == ']' || *s == '^')
+
+    /* '^' implies a character class; An empty '[]' isn't legal, but it does
+     * mean there isn't more to come */
+    if (s[0] == ']' || s[0] == '^')
         return FALSE;
-    else {
-        /* this is terrifying, and it works */
-        int weight;
-        char seen[256];
-        const char * const send = (char *) memchr(s, ']', e - s);
-        unsigned char un_char, last_un_char;
-        char tmpbuf[sizeof PL_tokenbuf * 4];
 
-        if (!send)		/* has to be an expression */
-            return TRUE;
-        weight = 2;		/* let's weigh the evidence */
+    /* Find matching ']'.  khw: This means any s[1] below is guaranteed to
+     * exist */
+    const char * const send = (char *) memchr(s, ']', e - s);
+    if (! send)		/* has to be an expression */
+        return TRUE;
 
-        if (*s == '$')
-            weight -= 3;
-        else if (isDIGIT(*s)) {
-            if (s[1] != ']') {
-                if (isDIGIT(s[1]) && s[2] == ']')
+    /* If the construct consists entirely of one or two digits, call it a
+     * subscript. */
+    if (isDIGIT(s[0]) && send - s <= 2 && (send - s == 1 || (isDIGIT(s[1])))) {
+        return TRUE;
+    }
+
+    /* this is terrifying, and it mostly works.  See GH #16478.
+     *
+     * khw: That ticket shows that the heuristics here get things wrong.  That
+     * most of the weights are divisible by 5 indicates that not a lot of
+     * tuning was done, and that the values are fairly arbitrary.  Especially
+     * problematic are when all characters in the construct are numeric.  We
+     * have [89] always resolving to a subscript, though that could well be a
+     * character class that is related to finding non-octals.  And [100] is a
+     * character class when it could well be a subscript. */
+
+    int weight;
+
+    if (s[0] == '$') {  /* First char is dollar; lean very slightly to it
+                           being a subscript */
+        weight = -1;
+    }
+    else {              /* Otherwise, lean a little more towards it being a
+                           character class. */
+        weight = 2;
+    }
+
+    /* Unsigned version of current character */
+    unsigned char un_char = 0;
+
+    /* Keep track of how many multiple occurrences of the same character there
+     * are */
+    char seen[256];
+    Zero(seen, 256, char);
+
+    /* Examine each character in the construct */
+    bool first_time = true;
+    for (; s < send; s++, first_time = false) {
+        unsigned char prev_un_char = un_char;
+        un_char = (unsigned char) s[0];
+        switch (s[0]) {
+          case '@':
+          case '&':
+          case '$':
+
+            /* Each additional occurrence of one of these three strongly
+             * indicates it is a subscript */
+            weight -= seen[un_char] * 10;
+
+            /* Following one of these characters, we look to see if there is an
+             * identifier already found in the program by that name.  If so,
+             * strongly suspect this isn't a character class */
+            if (isWORDCHAR_lazy_if_safe(s+1, PL_bufend, UTF)) {
+                int len;
+                char tmpbuf[sizeof PL_tokenbuf * 4];
+                scan_ident(s, tmpbuf, sizeof tmpbuf, FALSE);
+                len = (int)strlen(tmpbuf);
+                if (   len > 1
+                    && gv_fetchpvn_flags(tmpbuf,
+                                         len,
+                                         UTF ? SVf_UTF8 : 0,
+                                         SVt_PV))
+                    weight -= 100;
+                else    /* Not a multi-char identifier already known in the
+                           program; is somewhat likely to be a subscript */
                     weight -= 10;
             }
-            else
-                weight -= 100;
-        }
-        Zero(seen,256,char);
-        un_char = 255;
-        for (; s < send; s++) {
-            last_un_char = un_char;
-            un_char = (unsigned char)*s;
-            switch (*s) {
-            case '@':
-            case '&':
-            case '$':
-                weight -= seen[un_char] * 10;
-                if (isWORDCHAR_lazy_if_safe(s+1, PL_bufend, UTF)) {
-                    int len;
-                    scan_ident(s, tmpbuf, sizeof tmpbuf, FALSE);
-                    len = (int)strlen(tmpbuf);
-                    if (len > 1 && gv_fetchpvn_flags(tmpbuf, len,
-                                                    UTF ? SVf_UTF8 : 0, SVt_PV))
-                        weight -= 100;
-                    else
-                        weight -= 10;
-                }
-                else if (*s == '$'
-                         && s[1]
-                         && memCHRs("[#!%*<>()-=",s[1]))
-                {
-                    if (/*{*/ memCHRs("])} =",s[2]))
-                        weight -= 10;
-                    else
-                        weight -= 1;
-                }
-                break;
-            case '\\':
-                un_char = 254;
-                if (s[1]) {
-                    if (memCHRs("wds]",s[1]))
-                        weight += 100;
-                    else if (seen[(U8)'\''] || seen[(U8)'"'])
-                        weight += 1;
-                    else if (memCHRs("rnftbxcav",s[1]))
-                        weight += 40;
-                    else if (isDIGIT(s[1])) {
-                        weight += 40;
-                        while (s[1] && isDIGIT(s[1]))
-                            s++;
-                    }
-                }
+            else if (   s[0] == '$'
+                     && s[1]
+                     && memCHRs("[#!%*<>()-=", s[1]))
+            {
+                /* Here we have what could be a punctuation variable.  If the
+                 * next character after it is a closing bracket, it makes it
+                 * quite likely to be that, and hence a subscript.  If it is
+                 * something else, more mildly a subscript */
+                if (/*{*/ memCHRs("])} =", s[2]))
+                    weight -= 10;
                 else
-                    weight += 100;
-                break;
-            case '-':
-                if (s[1] == '\\')
-                    weight += 50;
-                if (memCHRs("aA01! ",last_un_char))
-                    weight += 30;
-                if (memCHRs("zZ79~",s[1]))
-                    weight += 30;
-                if (last_un_char == 255 && (isDIGIT(s[1]) || s[1] == '$'))
-                    weight -= 5;	/* cope with negative subscript */
-                break;
-            default:
-                if (!isWORDCHAR(last_un_char)
-                    && !(last_un_char == '$' || last_un_char == '@'
-                         || last_un_char == '&')
-                    && isALPHA(*s) && s[1] && isALPHA(s[1])) {
-                    char *d = s;
-                    while (isALPHA(*s))
-                        s++;
-                    if (keyword(d, s - d, 0))
-                        weight -= 150;
-                }
-                if (un_char == last_un_char + 1)
-                    weight += 5;
-                weight -= seen[un_char];
-                break;
+                    weight -= 1;
             }
-            seen[un_char]++;
-        }
-        if (weight >= 0)	/* probably a character class */
-            return FALSE;
-    }
+            break;
+
+          case '\\':
+            if (s[1]) {
+                if (memCHRs("wds]", s[1]))
+                    weight += 100;  /* \w \d \s => strongly charclass */
+                    /* khw: Why not \W \D \S \h \v, etc as well? */
+                else if (seen[(U8)'\''] || seen[(U8)'"'])
+                    weight += 1;    /* \' => mildly charclass */
+                else if (memCHRs("abcfnrtvx", s[1]))
+                    weight += 40;   /* \n, etc => charclass */
+                    /* khw: Why not \e etc as well? */
+                else if (isDIGIT(s[1])) {
+                    weight += 40;   /* \123 => charclass */
+                    while (s[1] && isDIGIT(s[1]))
+                        s++;
+                }
+            }
+            else /* \ followed by NUL strongly indicates character class */
+                weight += 100;
+            break;
+
+          case '-':
+            /* If it is something like '-\', it is more likely to be a
+             * character class.
+             *
+             * khw: The rest of the conditionals in this 'case' really should
+             * be subject to an 'else' of this condition */
+            if (s[1] == '\\')
+                weight += 50;
+
+            /* If it is something like 'a-' or '0-', it is more likely to
+             * be a character class. '!' is the first ASCII graphic, so '!-'
+             * would be the start of a range of graphics. */
+            if (! first_time && memCHRs("aA01! ", prev_un_char))
+                weight += 30;
+
+            /* If it is something like '-Z' or '-7' (for octal) or '-9' it
+             * is more likely to be a character class. '~' is the final ASCII
+             * graphic, so '-~' would be the end of a range of graphics.
+             *
+             * khw: Having [-z] really doesn't imply what the comments above
+             * indicate, so this should only be tested when '! first_time' */
+            if (memCHRs("zZ79~", s[1]))
+                weight += 30;
+
+            /* If it is something like -1 or -$foo, it is more likely to be a
+             * subscript.  */
+            if (first_time && (isDIGIT(s[1]) || s[1] == '$')) {
+                weight -= 5;	/* cope with negative subscript */
+            }
+            break;
+
+          default:
+            if (  (first_time || (  ! isWORDCHAR(prev_un_char)
+                                  &&  prev_un_char != '$'
+                                  &&  prev_un_char != '@'
+                                  &&  prev_un_char != '&'))
+                && isALPHA(s[0])
+                && isALPHA(s[1]))
+            {
+                /* Here it's \W (that isn't [$@&] ) followed immediately by two
+                 * alphas in a row.  Accumulate all the consecutive alphas */
+                char *d = s;
+                while (isALPHA(s[0]))
+                    s++;
+
+                /* If those alphas spell a keyword, it's almost certainly not a
+                 * character class */
+                if (keyword(d, s - d, 0))
+                    weight -= 150;
+
+                /* khw: Should those alphas be marked as seen? */
+            }
+
+            /* Consecutive chars like [...12...] and [...ab...] are presumed
+             * more likely to be character classes */
+            if (    ! first_time
+                && (   NATIVE_TO_LATIN1(un_char)
+                    == NATIVE_TO_LATIN1(prev_un_char) + 1))
+            {
+                weight += 5;
+            }
+
+            /* But repeating a character inside a character class does nothing,
+             * like [aba], so less likely that someone makes such a class, more
+             * likely that it is a subscript; the more repeats, the less
+             * likely. */
+            weight -= seen[un_char];
+            break;
+        }   /* End of switch */
+
+        /* khw: 'seen' is declared as a char.  This ++ can cause it to wrap.
+         * This gives different results with compilers for which a plain 'char'
+         * is actually unsigned, versus those where it is signed.  I believe it
+         * is undefined behavior to wrap a 'signed'.  I think it should be
+         * instead declared an unsigned int to make the chances of wrapping
+         * essentially zero.
+         *
+         * And I believe that extra backslashes are different from other
+         * repeated characters. */
+        seen[un_char]++;
+    }   /* End of loop through each character of the construct */
+
+    if (weight >= 0)	/* probably a character class */
+        return FALSE;
 
     return TRUE;
 }
