@@ -672,14 +672,11 @@ use File::Glob qw(:case);
     },
 
     'IO::Socket::IP' => {
-        'DISTRIBUTION' => 'PEVANS/IO-Socket-IP-0.41.tar.gz',
+        'DISTRIBUTION' => 'PEVANS/IO-Socket-IP-0.42.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Aug 16 21:34:20 2023',
         'FILES'        => q[cpan/IO-Socket-IP],
         'EXCLUDED'     => [
             qr{^examples/},
-        ],
-        'CUSTOMIZED' => [
-            # https://rt.cpan.org/Ticket/Display.html?id=148293
-            'lib/IO/Socket/IP.pm'
         ],
     },
 
@@ -835,7 +832,7 @@ use File::Glob qw(:case);
     },
 
     'Module::CoreList' => {
-        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20230520.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20230820.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
     },
 
@@ -918,7 +915,8 @@ use File::Glob qw(:case);
     },
 
     'perlfaq' => {
-        'DISTRIBUTION' => 'ETHER/perlfaq-5.20230701.tar.gz',
+        'DISTRIBUTION' => 'ETHER/perlfaq-5.20230812.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Aug 16 18:13:51 2023',
         'FILES'        => q[cpan/perlfaq],
         'EXCLUDED'     => [ qr/^inc/, qr/^xt/, qr{^t/00-} ],
     },
@@ -1088,7 +1086,8 @@ use File::Glob qw(:case);
     },
 
     'Test::Harness' => {
-        'DISTRIBUTION' => 'LEONT/Test-Harness-3.46.tar.gz',
+        'DISTRIBUTION' => 'LEONT/Test-Harness-3.47.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Aug 16 18:28:09 2023',
         'SYNCINFO'     => 'jkeenan on Sat Aug 12 17:05:02 2023',
         'FILES'        => q[cpan/Test-Harness],
         'EXCLUDED'     => [

@@ -4697,10 +4697,12 @@ Perl_newPROG(pTHX_ OP *o)
         if (PERLDB_INTER) {
             CV * const cv = get_cvs("DB::postponed", 0);
             if (cv) {
-                dSP;
-                PUSHMARK(SP);
-                XPUSHs(MUTABLE_SV(CopFILEGV(&PL_compiling)));
-                PUTBACK;
+                PUSHMARK(PL_stack_sp);
+                SV *comp = MUTABLE_SV(CopFILEGV(&PL_compiling));
+#ifdef PERL_RC_STACK
+                assert(rpp_stack_is_rc());
+#endif
+                rpp_xpush_1(comp);
                 call_sv(MUTABLE_SV(cv), G_DISCARD);
             }
         }
@@ -4949,7 +4951,7 @@ S_fold_constants(pTHX_ OP *const o)
     PL_op = curop;
 
     old_cxix = cxstack_ix;
-    create_eval_scope(NULL, G_FAKINGEVAL);
+    create_eval_scope(NULL, PL_stack_sp, G_FAKINGEVAL);
 
     /* Verify that we don't need to save it:  */
     assert(PL_curcop == &PL_compiling);
@@ -4969,7 +4971,11 @@ S_fold_constants(pTHX_ OP *const o)
 
     switch (ret) {
     case 0:
-        sv = *(PL_stack_sp--);
+        sv = *PL_stack_sp;
+        if (rpp_stack_is_rc())
+            SvREFCNT_dec(sv);
+        PL_stack_sp--;
+
         if (o->op_targ && sv == PAD_SV(o->op_targ)) {	/* grab pad temp? */
             pad_swipe(o->op_targ,  FALSE);
         }
@@ -5066,7 +5072,7 @@ S_gen_constant_list(pTHX_ OP *o)
     PL_op = curop;
 
     old_cxix = cxstack_ix;
-    create_eval_scope(NULL, G_FAKINGEVAL);
+    create_eval_scope(NULL, PL_stack_sp, G_FAKINGEVAL);
 
     old_curcop = PL_curcop;
     StructCopy(old_curcop, &not_compiling, COP);
@@ -10370,10 +10376,11 @@ Perl_newMYSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
             if (HvTOTALKEYS(hv) > 0 && hv_exists_ent(hv, tmpstr, 0)) {
                 CV * const pcv = GvCV(db_postponed);
                 if (pcv) {
-                    dSP;
-                    PUSHMARK(SP);
-                    XPUSHs(tmpstr);
-                    PUTBACK;
+                    PUSHMARK(PL_stack_sp);
+#ifdef PERL_RC_STACK
+                    assert(rpp_stack_is_rc());
+#endif
+                    rpp_xpush_1(tmpstr);
                     call_sv(MUTABLE_SV(pcv), G_DISCARD);
                 }
             }
@@ -10973,10 +10980,11 @@ Perl_newATTRSUB_x(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs,
             if (HvTOTALKEYS(hv) > 0 && hv_exists_ent(hv, tmpstr, 0)) {
                 CV * const pcv = GvCV(db_postponed);
                 if (pcv) {
-                    dSP;
-                    PUSHMARK(SP);
-                    XPUSHs(tmpstr);
-                    PUTBACK;
+                    PUSHMARK(PL_stack_sp);
+#ifdef PERL_RC_STACK
+                    assert(rpp_stack_is_rc());
+#endif
+                    rpp_xpush_1(tmpstr);
                     call_sv(MUTABLE_SV(pcv), G_DISCARD);
                 }
             }
@@ -13255,7 +13263,8 @@ Perl_ck_refassign(pTHX_ OP *o)
       settarg:
         o->op_private |= (varop->op_private & (OPpLVAL_INTRO|OPpPAD_STATE));
         o->op_targ = varop->op_targ;
-        varop->op_targ = 0;
+        if (!(o->op_private & (OPpPAD_STATE|OPpLVAL_INTRO)))
+            varop->op_targ = 0;
         PAD_COMPNAME_GEN_set(o->op_targ, PERL_INT_MAX);
         break;
 
@@ -13328,6 +13337,9 @@ Perl_ck_refassign(pTHX_ OP *o)
     else {
         o->op_flags &=~ OPf_STACKED;
         op_sibling_splice(o, right, 1, NULL);
+    }
+    if (o->op_private & OPpPAD_STATE && o->op_private & OPpLVAL_INTRO) {
+        o = S_newONCEOP(aTHX_ o, varop);
     }
     op_free(left);
     return o;

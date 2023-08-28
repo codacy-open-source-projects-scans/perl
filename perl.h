@@ -38,6 +38,11 @@
 #define USE_STDIO
 #endif /* PERL_FOR_X2P */
 
+/* Treat the SVs on the argument stack as having been reference counted.
+ * (Experimental).
+ */
+/* #define PERL_RC_STACK */
+
 #include "config.h"
 
 /* This fakes up using Mingw for locale handling.  In order to not define WIN32
@@ -273,7 +278,11 @@ Now a no-op.
 #  define MEMBER_TO_FPTR(name) name
 #endif /* !PERL_CORE */
 
-#define CALLRUNOPS  PL_runops
+#ifdef PERL_RC_STACK
+#  define CALLRUNOPS  Perl_runops_wrap
+#else
+#  define CALLRUNOPS  PL_runops
+#endif
 
 #define CALLREGCOMP(sv, flags) Perl_pregcomp(aTHX_ (sv),(flags))
 
@@ -1148,49 +1157,6 @@ violations are fatal.
 #ifdef USE_LOCALE
 #   define HAS_SKIP_LOCALE_INIT /* Solely for XS code to test for this
                                    #define */
-#   if !defined(NO_LOCALE_COLLATE) && defined(LC_COLLATE) \
-       && defined(HAS_STRXFRM)
-#	define USE_LOCALE_COLLATE
-#   endif
-#   if !defined(NO_LOCALE_CTYPE) && defined(LC_CTYPE)
-#	define USE_LOCALE_CTYPE
-#   endif
-#   if !defined(NO_LOCALE_NUMERIC) && defined(LC_NUMERIC)
-#	define USE_LOCALE_NUMERIC
-#   endif
-#   if !defined(NO_LOCALE_MESSAGES) && defined(LC_MESSAGES)
-#	define USE_LOCALE_MESSAGES
-#   endif
-#   if !defined(NO_LOCALE_MONETARY) && defined(LC_MONETARY)
-#	define USE_LOCALE_MONETARY
-#   endif
-#   if !defined(NO_LOCALE_TIME) && defined(LC_TIME)
-#	define USE_LOCALE_TIME
-#   endif
-#   if !defined(NO_LOCALE_ADDRESS) && defined(LC_ADDRESS)
-#	define USE_LOCALE_ADDRESS
-#   endif
-#   if !defined(NO_LOCALE_IDENTIFICATION) && defined(LC_IDENTIFICATION)
-#	define USE_LOCALE_IDENTIFICATION
-#   endif
-#   if !defined(NO_LOCALE_MEASUREMENT) && defined(LC_MEASUREMENT)
-#	define USE_LOCALE_MEASUREMENT
-#   endif
-#   if !defined(NO_LOCALE_PAPER) && defined(LC_PAPER)
-#	define USE_LOCALE_PAPER
-#   endif
-#   if !defined(NO_LOCALE_TELEPHONE) && defined(LC_TELEPHONE)
-#	define USE_LOCALE_TELEPHONE
-#   endif
-#   if !defined(NO_LOCALE_NAME) && defined(LC_NAME)
-#	define USE_LOCALE_NAME
-#   endif
-#   if !defined(NO_LOCALE_SYNTAX) && defined(LC_SYNTAX)
-#	define USE_LOCALE_SYNTAX
-#   endif
-#   if !defined(NO_LOCALE_TOD) && defined(LC_TOD)
-#	define USE_LOCALE_TOD
-#   endif
 #endif
 
 /* XXX The Configure probe for categories must be updated when adding new
@@ -1209,17 +1175,18 @@ violations are fatal.
  * LC_NUMERIC, the code below will cause LC_NUMERIC_INDEX_ to be defined to be
  * 0.  That way the foo_INDEX_ values are contiguous non-negative integers,
  * regardless of how the platform defines the actual locale categories.
- */
+ *
+ * It is possible to tell perl it is not to pay attention to certain categories
+ * that exist on a platform (which means they are always kept in the "C"
+ * locale).  For the ones perl is supposed to pay attention to, The hdr file
+ * creates a 'USE_LOCALE_foo' #define.  If any are to be ignored by perl, it
+ * #defines HAS_IGNORED_LOCALE_CATEGORIES_ */
 typedef enum {
 
 #ifdef USE_LOCALE
-
-/* Now create LC_foo_INDEX_ values for just those categories used on this
- * system */
 #    undef PERL_LOCALE_TABLE_ENTRY
-#    define PERL_LOCALE_TABLE_ENTRY(name, call_back)  name ## _INDEX_,
+#    define PERL_LOCALE_TABLE_ENTRY(name, call_back)  LC_ ## name ## _INDEX_,
 #    include "locale_table.h"
-
 #endif  /* USE_LOCALE */
 
     LC_ALL_INDEX_   /* Always defined, even if no LC_ALL on system */
@@ -1359,6 +1326,11 @@ typedef enum {
     EXTERNAL_FORMAT_FOR_QUERY
 } calc_LC_ALL_format;
 
+typedef enum {
+    no_override,
+    override_if_ignored,
+    check_that_overridden
+} parse_LC_ALL_STRING_action;
 
 typedef enum {
     invalid,
@@ -6350,20 +6322,20 @@ EXTCONST U8   PL_deBruijn_bitpos_tab64[];
 #ifdef USE_PERL_SWITCH_LOCALE_CONTEXT
 #  define PERL_SET_LOCALE_CONTEXT(i)                                        \
       STMT_START {                                                          \
-          if (UNLIKELY(PL_veto_switch_non_tTHX_context))                    \
-                Perl_switch_locale_context();                               \
+          if (LIKELY(! PL_veto_switch_non_tTHX_context))                    \
+                Perl_switch_locale_context(i);                              \
       } STMT_END
+
+    /* In some Configurations there may be per-thread information that is
+     * carried in a library instead of perl's tTHX structure.  This macro is to
+     * be used to handle those when tTHX is changed.  Only locale handling is
+     * currently known to be affected. */
+#  define PERL_SET_NON_tTHX_CONTEXT(i)                                      \
+            STMT_START { if (i) PERL_SET_LOCALE_CONTEXT(i); } STMT_END
 #else
-#  define PERL_SET_LOCALE_CONTEXT(i)  NOOP
+#  define PERL_SET_LOCALE_CONTEXT(i)   NOOP
+#  define PERL_SET_NON_tTHX_CONTEXT(i) NOOP
 #endif
-
-/* In some Configurations there may be per-thread information that is carried
- * in a library instead of perl's tTHX structure.  This macro is to be used to
- * handle those when tTHX is changed.  Only locale handling is currently known
- * to be affected. */
-#define PERL_SET_NON_tTHX_CONTEXT(i)                                        \
-                        STMT_START { PERL_SET_LOCALE_CONTEXT(i); } STMT_END
-
 
 #ifndef PERL_GET_CONTEXT
 #  define PERL_GET_CONTEXT		PERL_GET_INTERP
