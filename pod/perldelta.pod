@@ -89,7 +89,8 @@ There may well be none in a stable release.
 
 =item *
 
-XXX
+The negation OPs have been modified to support the generic TARGMY optimization.
+[GH #21442]
 
 =back
 
@@ -128,6 +129,10 @@ XXX Remove this section if Porting/corelist-perldelta.pl did not add any content
 L<XXX> has been upgraded from version A.xx to B.yy.
 
 XXX If there was something important to note about this change, include that here.
+
+=item *
+
+L<Getopt::Std> has been upgraded from version 1.13 to 1.14.  Documentation and test improvements only; no change in functionality.
 
 =back
 
@@ -334,9 +339,10 @@ L</Modules and Pragmata> section.
 
 =over 4
 
-=item XXX-some-platform
+=item MacOS/Darwin
 
-XXX
+Don't set C<MACOSX_DEPLOYMENT_TARGET> when building on OS X 10.5.  [GH
+#21367]
 
 =back
 
@@ -394,6 +400,26 @@ Declared references can now be used with C<state> variables. [GH #21351]
 
 Trailing elements in an C<unshift>ed and resized array will now always be
 initialized. [GH #21265]
+
+=item * Make C<use 5.036> respect the -X flag
+
+perl's -X flag disables all warnings globally, but «use 5.036» didn't
+respect that until now. [GH #21431]
+
+=item *
+
+Fixed an OP leak when an error was produced for initializer for a class
+field. [GH #20812]
+
+=item *
+
+Fixed a slowdown in repeated substitution replacements using special
+variables, such as C<s/....x$1/g>. It actually makes all string
+concatenations involving such "magic" variables less slow, but the
+slowdown was more noticeable on repeated substitutions due to extra memory
+usage that was only freed after the last iteration. The slowdown started
+in perl 5.28.0 - which generally sped up string concatenation but slowed
+down when using special variables. [GH #21360]
 
 =back
 

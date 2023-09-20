@@ -2754,6 +2754,9 @@ APTdp	|char * |rninstr	|NN const char *big			\
 				|NN const char *little			\
 				|NN const char *lend
 p	|void	|rpeep		|NULLOK OP *o
+Adipx	|void	|rpp_context	|NN SV **mark				\
+				|U8 gimme				\
+				|SSize_t extra
 Adipx	|void	|rpp_extend	|SSize_t n
 Adipx	|void	|rpp_invoke_xs	|NN CV *cv
 Adipx	|bool	|rpp_is_lone	|NN SV *sv
@@ -2769,6 +2772,8 @@ Adipx	|void	|rpp_push_2	|NN SV *sv1				\
 Adipx	|void	|rpp_push_1_norc|NN SV *sv
 Adipx	|void	|rpp_replace_1_1|NN SV *sv
 Adipx	|void	|rpp_replace_2_1|NN SV *sv
+Adipx	|void	|rpp_replace_at |NN SV **sp				\
+				|NN SV *sv
 Adipx	|bool	|rpp_stack_is_rc
 Adipx	|bool	|rpp_try_AMAGIC_1					\
 				|int method				\
@@ -3493,7 +3498,7 @@ Apx	|void	|thread_locale_init
 Apx	|void	|thread_locale_term
 
 Fpv	|OP *	|tied_method	|NN SV *methname			\
-				|NN SV **sp				\
+				|NN SV **mark				\
 				|NN SV * const sv			\
 				|NN const MAGIC * const mg		\
 				|const U32 flags			\
@@ -4369,7 +4374,7 @@ S	|utf8ness_t|get_locale_string_utf8ness_i			\
 				|NULLOK const char *string		\
 				|const locale_utf8ness_t known_utf8	\
 				|NULLOK const char *locale		\
-				|const unsigned cat_index
+				|const locale_category_index cat_index
 S	|void	|ints_to_tm	|NN struct tm *my_tm			\
 				|int sec				\
 				|int min				\
@@ -4401,43 +4406,47 @@ S	|void	|populate_hash_from_localeconv				\
 S	|const char *|calculate_LC_ALL_string					\
 				|NULLOK const char **category_locales_list	\
 				|const calc_LC_ALL_format format		\
+				|const calc_LC_ALL_return returning		\
 				|const line_t caller_line
-RS	|unsigned int|get_category_index_helper 			\
+RS	|locale_category_index|get_category_index_helper		\
 				|const int category			\
 				|NULLOK bool *success			\
 				|const line_t caller_line
 Ri	|const char *|mortalized_pv_copy				\
 				|NULLOK const char * const pv
-S	|void	|new_LC_ALL	|NULLOK const char *unused		\
-				|bool force
-void
+S	|const char *|native_querylocale_i				\
+				|const locale_category_index cat_index
 S	|void	|output_check_environment_warning			\
 				|NULLOK const char * const language	\
 				|NULLOK const char * const lc_all	\
 				|NULLOK const char * const lang
 So	|void	|restore_toggled_locale_i				\
-				|const unsigned cat_index		\
+				|const locale_category_index cat_index	\
 				|NULLOK const char *original_locale	\
 				|const line_t caller_line
 S	|const char *|save_to_buffer					\
 				|NULLOK const char *string		\
-				|NULLOK const char **buf		\
+				|NULLOK char **buf			\
 				|NULLOK Size_t *buf_size
 Sr	|void	|setlocale_failure_panic_via_i				\
-				|const unsigned int cat_index		\
+				|const locale_category_index cat_index	\
 				|NULLOK const char *current		\
 				|NN const char *failed			\
 				|const line_t proxy_caller_line 	\
 				|const line_t immediate_caller_line	\
 				|NN const char *higher_caller_file	\
 				|const line_t higher_caller_line
+S	|void	|set_save_buffer_min_size				\
+				|const Size_t min_len			\
+				|NULLOK char **buf			\
+				|NULLOK Size_t *buf_size
 So	|const char *|toggle_locale_i					\
-				|const unsigned switch_cat_index	\
+				|const locale_category_index cat_index	\
 				|NN const char *new_locale		\
 				|const line_t caller_line
 #   if defined(DEBUGGING)
 RS	|char * |my_setlocale_debug_string_i				\
-				|const unsigned cat_index		\
+				|const locale_category_index cat_index	\
 				|NULLOK const char *locale		\
 				|NULLOK const char *retval		\
 				|const line_t line
@@ -4445,17 +4454,17 @@ RS	|char * |my_setlocale_debug_string_i				\
 #   if defined(HAS_NL_LANGINFO) || defined(HAS_NL_LANGINFO_L)
 S	|const char *|my_langinfo_i					\
 				|const nl_item item			\
-				|const unsigned int cat_index		\
+				|const locale_category_index cat_index	\
 				|NN const char *locale			\
-				|NN const char **retbufp		\
+				|NN char **retbufp			\
 				|NULLOK Size_t *retbuf_sizep		\
 				|NULLOK utf8ness_t *utf8ness
 #   else
 S	|const char *|my_langinfo_i					\
 				|const int item 			\
-				|const unsigned int cat_index		\
+				|const locale_category_index cat_index	\
 				|NN const char *locale			\
-				|NN const char **retbufp		\
+				|NN char **retbufp			\
 				|NULLOK Size_t *retbuf_sizep		\
 				|NULLOK utf8ness_t *utf8ness
 #   endif
@@ -4463,6 +4472,8 @@ S	|const char *|my_langinfo_i					\
 S	|void	|give_perl_locale_control				\
 				|NN const char *lc_all_string		\
 				|const line_t caller_line
+S	|void	|new_LC_ALL	|NN const char *lc_all			\
+				|bool force
 S	|parse_LC_ALL_string_return|parse_LC_ALL_string 		\
 				|NN const char *string			\
 				|NN const char **output 		\
@@ -4474,6 +4485,8 @@ S	|parse_LC_ALL_string_return|parse_LC_ALL_string 		\
 S	|void	|give_perl_locale_control				\
 				|NN const char **curlocales		\
 				|const line_t caller_line
+S	|void	|new_LC_ALL	|NN const char **individ_locales	\
+				|bool force
 #   endif
 #   if defined(USE_LOCALE_COLLATE)
 S	|void	|new_collate	|NN const char *newcoll 		\
@@ -4502,16 +4515,16 @@ S	|const char *|get_LC_ALL_display
 #   endif
 #   if defined(USE_POSIX_2008_LOCALE)
 S	|bool	|bool_setlocale_2008_i					\
-				|const unsigned int index		\
+				|const locale_category_index index	\
 				|NN const char *new_locale		\
 				|const line_t caller_line
 S	|const char *|querylocale_2008_i				\
-				|const unsigned int index		\
+				|const locale_category_index index	\
 				|const line_t line
 S	|locale_t|use_curlocale_scratch
 #     if !defined(USE_QUERYLOCALE)
 S	|void	|update_PL_curlocales_i 				\
-				|const unsigned int index		\
+				|const locale_category_index index	\
 				|NN const char *new_locale		\
 				|const line_t caller_line
 #     endif
@@ -4541,7 +4554,7 @@ S	|const char *|wrap_wsetlocale					\
 #   if   defined(WIN32) || defined(WIN32_USE_FAKE_OLD_MINGW_LOCALES) || \
        ( defined(USE_POSIX_2008_LOCALE) && !defined(USE_QUERYLOCALE) )
 S	|const char *|find_locale_from_environment			\
-				|const unsigned int index
+				|const locale_category_index index
 #   endif
 # endif /* defined(USE_LOCALE) */
 # if defined(USE_LOCALE) || defined(DEBUGGING)

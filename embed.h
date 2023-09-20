@@ -537,6 +537,7 @@
 # define repeatcpy                              Perl_repeatcpy
 # define require_pv(a)                          Perl_require_pv(aTHX_ a)
 # define rninstr                                Perl_rninstr
+# define rpp_context(a,b,c)                     Perl_rpp_context(aTHX_ a,b,c)
 # define rpp_extend(a)                          Perl_rpp_extend(aTHX_ a)
 # define rpp_invoke_xs(a)                       Perl_rpp_invoke_xs(aTHX_ a)
 # define rpp_is_lone(a)                         Perl_rpp_is_lone(aTHX_ a)
@@ -550,6 +551,7 @@
 # define rpp_push_2(a,b)                        Perl_rpp_push_2(aTHX_ a,b)
 # define rpp_replace_1_1(a)                     Perl_rpp_replace_1_1(aTHX_ a)
 # define rpp_replace_2_1(a)                     Perl_rpp_replace_2_1(aTHX_ a)
+# define rpp_replace_at(a,b)                    Perl_rpp_replace_at(aTHX_ a,b)
 # define rpp_stack_is_rc()                      Perl_rpp_stack_is_rc(aTHX)
 # define rpp_try_AMAGIC_1(a,b)                  Perl_rpp_try_AMAGIC_1(aTHX_ a,b)
 # define rpp_try_AMAGIC_2(a,b)                  Perl_rpp_try_AMAGIC_2(aTHX_ a,b)
@@ -1298,12 +1300,13 @@
 #       define populate_hash_from_localeconv(a,b,c,d,e) S_populate_hash_from_localeconv(aTHX_ a,b,c,d,e)
 #     endif
 #     if defined(USE_LOCALE)
-#       define calculate_LC_ALL_string(a,b,c)   S_calculate_LC_ALL_string(aTHX_ a,b,c)
+#       define calculate_LC_ALL_string(a,b,c,d) S_calculate_LC_ALL_string(aTHX_ a,b,c,d)
 #       define get_category_index_helper(a,b,c) S_get_category_index_helper(aTHX_ a,b,c)
 #       define mortalized_pv_copy(a)            S_mortalized_pv_copy(aTHX_ a)
-#       define new_LC_ALL(a,b)                  S_new_LC_ALL(aTHX_ a,b)
+#       define native_querylocale_i(a)          S_native_querylocale_i(aTHX_ a)
 #       define output_check_environment_warning(a,b,c) S_output_check_environment_warning(aTHX_ a,b,c)
 #       define save_to_buffer(a,b,c)            S_save_to_buffer(aTHX_ a,b,c)
+#       define set_save_buffer_min_size(a,b,c)  S_set_save_buffer_min_size(aTHX_ a,b,c)
 #       define setlocale_failure_panic_via_i(a,b,c,d,e,f,g) S_setlocale_failure_panic_via_i(aTHX_ a,b,c,d,e,f,g)
 #       if defined(DEBUGGING)
 #         define my_setlocale_debug_string_i(a,b,c,d) S_my_setlocale_debug_string_i(aTHX_ a,b,c,d)
@@ -1315,9 +1318,11 @@
 #       endif
 #       if defined(LC_ALL)
 #         define give_perl_locale_control(a,b)  S_give_perl_locale_control(aTHX_ a,b)
+#         define new_LC_ALL(a,b)                S_new_LC_ALL(aTHX_ a,b)
 #         define parse_LC_ALL_string(a,b,c,d,e,f) S_parse_LC_ALL_string(aTHX_ a,b,c,d,e,f)
 #       else
 #         define give_perl_locale_control(a,b)  S_give_perl_locale_control(aTHX_ a,b)
+#         define new_LC_ALL(a,b)                S_new_LC_ALL(aTHX_ a,b)
 #       endif
 #       if defined(USE_LOCALE_COLLATE)
 #         define new_collate(a,b)               S_new_collate(aTHX_ a,b)

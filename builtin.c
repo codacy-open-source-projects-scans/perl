@@ -157,6 +157,10 @@ XS(XS_builtin_func1_scalar)
             Perl_pp_is_tainted(aTHX);
             break;
 
+        case OP_STRINGIFY:
+            Perl_pp_stringify(aTHX);
+            break;
+
         default:
             Perl_die(aTHX_ "panic: unhandled opcode %" IVdf
                            " for xs_builtin_func1_scalar()", (IV) ix);
@@ -422,7 +426,15 @@ static OP *ck_builtin_func1(pTHX_ OP *entersubop, GV *namegv, SV *ckobj)
 
     op_free(entersubop);
 
-    return newUNOP(opcode, wantflags, argop);
+    if(opcode == OP_STRINGIFY)
+        /* Even though pp_stringify only looks at TOPs and conceptually works
+         * on a single argument, it happens to be a LISTOP. I've no idea why
+         */
+        return newLISTOPn(opcode, wantflags,
+            argop,
+            NULL);
+    else
+        return newUNOP(opcode, wantflags, argop);
 }
 
 XS(XS_builtin_indexed)
@@ -494,6 +506,7 @@ static const struct BuiltinFuncDescriptor builtins[] = {
     { "builtin::floor",      &XS_builtin_func1_scalar, &ck_builtin_func1, OP_FLOOR,      false },
     { "builtin::is_tainted", &XS_builtin_func1_scalar, &ck_builtin_func1, OP_IS_TAINTED, false },
     { "builtin::trim",       &XS_builtin_trim,         &ck_builtin_func1, 0,             false },
+    { "builtin::stringify",  &XS_builtin_func1_scalar, &ck_builtin_func1, OP_STRINGIFY,  true },
 
     { "builtin::created_as_string", &XS_builtin_created_as_string, &ck_builtin_func1, 0, true },
     { "builtin::created_as_number", &XS_builtin_created_as_number, &ck_builtin_func1, 0, true },
@@ -518,7 +531,8 @@ XS(XS_builtin_import)
 
     for(int i = 1; i < items; i++) {
         SV *sym = ST(i);
-        if(strEQ(SvPV_nolen(sym), "import"))
+        const char *sympv = SvPV_nolen(sym);
+        if(strEQ(sympv, "import") || strEQ(sympv, "unimport"))
             Perl_croak(aTHX_ builtin_not_recognised, sym);
 
         SV *ampname = sv_2mortal(Perl_newSVpvf(aTHX_ "&%" SVf, SVfARG(sym)));
@@ -531,6 +545,50 @@ XS(XS_builtin_import)
         export_lexical(ampname, (SV *)cv);
     }
 
+    finish_export_lexical();
+}
+
+XS(XS_builtin_unimport);
+XS(XS_builtin_unimport)
+{
+    dXSARGS;
+
+    if(!PL_compcv)
+        Perl_croak(aTHX_
+                "builtin::unimport can only be called at compile time");
+
+    prepare_export_lexical();
+
+    for(int i = 1; i < items; i++) {
+        SV *sym = ST(i);
+        const char *sympv = SvPV_nolen(sym);
+        if(strEQ(sympv, "import") || strEQ(sympv, "unimport"))
+            Perl_croak(aTHX_ builtin_not_recognised, sym);
+
+        SV *ampname = sv_2mortal(Perl_newSVpvf(aTHX_ "&%" SVf, SVfARG(sym)));
+        SV *fqname = sv_2mortal(Perl_newSVpvf(aTHX_ "builtin::%" SVf, SVfARG(sym)));
+
+        CV *cv = get_cv(SvPV_nolen(fqname), SvUTF8(fqname) ? SVf_UTF8 : 0);
+        if(!cv)
+            Perl_croak(aTHX_ builtin_not_recognised, sym);
+
+        PADOFFSET off = pad_findmy_sv(ampname, 0);
+        if((off == NOT_IN_PAD) ||
+                (PL_curpad[off] != (SV *)cv))
+            Perl_croak(aTHX_
+                    "'%" SVf "' does not appear to be an imported builtin function", SVfARG(ampname));
+
+        /* Add a tombstone entry */
+        /* TODO: If the pad entry we found is going to go out of scope at the
+         * same time as this tombstone would, we could not bother adding the
+         * tombstone and instead COP_SEQ_MAX_HIGH_set() on the padname to
+         * clear it.
+         */
+        off = pad_add_name_sv(ampname, padadd_STATE|padadd_TOMBSTONE, 0, 0);
+        SvREFCNT_dec(PL_curpad[off]);
+    }
+
+    COP_SEQMAX_INC;
     finish_export_lexical();
 }
 
@@ -567,7 +625,8 @@ Perl_boot_core_builtin(pTHX)
         }
     }
 
-    newXS_flags("builtin::import", &XS_builtin_import, __FILE__, NULL, 0);
+    newXS_flags("builtin::import",   &XS_builtin_import,   __FILE__, NULL, 0);
+    newXS_flags("builtin::unimport", &XS_builtin_unimport, __FILE__, NULL, 0);
 }
 
 /*

@@ -78,7 +78,6 @@ PP(pp_initfield)
 
                 av = newAV_alloc_x(count);
 
-                av_extend(av, count);
                 while(svp <= PL_stack_sp) {
                     av_push_simple(av, newSVsv(*svp));
                     svp++;
@@ -635,8 +634,8 @@ Perl_class_seal_stash(pTHX_ HV *stash)
     assert(HvSTASH_IS_CLASS(stash));
     struct xpvhv_aux *aux = HvAUX(stash);
 
-    /* generate initfields CV */
-    {
+    if (PL_parser->error_count == 0) {
+        /* generate initfields CV */
         I32 floor_ix = PL_savestack_ix;
         SAVEI32(PL_subline);
         save_item(PL_subname);
@@ -704,7 +703,6 @@ Perl_class_seal_stash(pTHX_ HV *stash)
                 /* have to clear the OPf_KIDS flag or op_free() will get upset */
                 valop->op_flags &= ~OPf_KIDS;
                 op_free(valop);
-                assert(valop->op_type == OP_FREED);
 
                 OP *fieldcop = o;
                 assert(fieldcop->op_type == OP_NEXTSTATE || fieldcop->op_type == OP_DBSTATE);
@@ -795,6 +793,16 @@ Perl_class_seal_stash(pTHX_ HV *stash)
 
         aux->xhv_class_initfields_cv = initfields;
     }
+    else {
+        /* we had errors, clean up and don't populate initfields */
+        PADNAMELIST *fieldnames = aux->xhv_class_fields;
+        if (fieldnames) {
+            for(SSize_t i = PadnamelistMAX(fieldnames); i >= 0 ; i--) {
+                PADNAME *pn = PadnamelistARRAY(fieldnames)[i];
+                op_free(PadnameFIELDINFO(pn)->defop);
+            }
+        }
+    }
 }
 
 void
@@ -858,8 +866,8 @@ Perl_class_wrap_method_body(pTHX_ OP *o)
         if(fieldix > max_fieldix)
             max_fieldix = fieldix;
 
-        av_push(fieldmap, newSVuv(padix));
-        av_push(fieldmap, newSVuv(fieldix));
+        av_push_simple(fieldmap, newSVuv(padix));
+        av_push_simple(fieldmap, newSVuv(fieldix));
     }
 
     UNOP_AUX_item *aux = NULL;
@@ -1011,10 +1019,12 @@ Perl_class_set_field_defop(pTHX_ PADNAME *pn, OPCODE defmode, OP *defop)
 
     assert(HvSTASH_IS_CLASS(PL_curstash));
 
-    forbid_outofblock_ops(defop, "field initialiser expression");
+    op_free(PadnameFIELDINFO(pn)->defop);
 
-    if(PadnameFIELDINFO(pn)->defop)
-        op_free(PadnameFIELDINFO(pn)->defop);
+    /* set here to ensure clean up if forbid_outofblock_ops() throws */
+    PadnameFIELDINFO(pn)->defop = defop;
+
+    forbid_outofblock_ops(defop, "field initialiser expression");
 
     char sigil = PadnamePV(pn)[0];
     switch(sigil) {
