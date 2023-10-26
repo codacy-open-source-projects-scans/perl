@@ -49,10 +49,10 @@ PERLVARI(I, tmps_ix,	SSize_t,	-1)
 PERLVARI(I, tmps_floor,	SSize_t,	-1)
 PERLVAR(I, tmps_max,	SSize_t)        /* first unalloced slot in tmps stack */
 
-PERLVAR(I, markstack,	I32 *)		/* stack_sp locations we're
+PERLVAR(I, markstack,	Stack_off_t *)	/* stack_sp locations we're
                                            remembering */
-PERLVAR(I, markstack_ptr, I32 *)
-PERLVAR(I, markstack_max, I32 *)
+PERLVAR(I, markstack_ptr, Stack_off_t *)
+PERLVAR(I, markstack_max, Stack_off_t *)
 
 PERLVARI(I, sub_generation, U32, 1)	/* incr to invalidate method cache */
 
@@ -862,11 +862,6 @@ PERLVAR(I, numeric_name, char *)     /* Name of current numeric locale */
 PERLVAR(I, numeric_radix_sv, SV *)	/* The radix separator */
 PERLVAR(I, underlying_radix_sv, SV *)	/* The radix in the program's current underlying locale */
 
-#if defined(USE_LOCALE_NUMERIC) && defined(USE_POSIX_2008_LOCALE)
-
-PERLVARI(I, underlying_numeric_obj, locale_t, NULL)
-
-#endif
 #ifdef USE_POSIX_2008_LOCALE
 PERLVARI(I, scratch_locale_obj, locale_t, 0)
 #endif

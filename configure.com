@@ -2200,7 +2200,6 @@ $     echo4 "...and architecture name already has -ld."
 $   ENDIF
 $ ENDIF
 $!
-$ bool_dflt = "n"
 $ vms_prefix = "perl_root"
 $ vms_prefixup = F$EDIT(vms_prefix,"UPCASE")
 $!
@@ -4051,8 +4050,8 @@ $ WS "#include <stdlib.h>"
 $ WS "#include <math.h>"
 $ WS "int main()"
 $ WS "{"
-$ WS "  long double x = NaN;
-$ WS "  return isnanl(x) ? EXIT_SUCCESS : EXIT_FAILURE;
+$ WS "  long double x = NaN;"
+$ WS "  return isnanl(x) ? EXIT_SUCCESS : EXIT_FAILURE;"
 $ WS "}"
 $ CS
 $ tmp = "isnanl"
@@ -4066,8 +4065,8 @@ $ WS "#include <stdlib.h>"
 $ WS "#include <math.h>"
 $ WS "int main()"
 $ WS "{"
-$ WS "  long long x = llrint(1.5);
-$ WS "  return x == 2 ? EXIT_SUCCESS : EXIT_FAILURE;
+$ WS "  long long x = llrint(1.5);"
+$ WS "  return x == 2 ? EXIT_SUCCESS : EXIT_FAILURE;"
 $ WS "}"
 $ CS
 $ tmp = "llrint"
@@ -4081,8 +4080,8 @@ $ WS "#include <stdlib.h>"
 $ WS "#include <math.h>"
 $ WS "int main()"
 $ WS "{"
-$ WS "  long long x = llrintl(1.5);
-$ WS "  return x == 2 ? EXIT_SUCCESS : EXIT_FAILURE;
+$ WS "  long long x = llrintl(1.5);"
+$ WS "  return x == 2 ? EXIT_SUCCESS : EXIT_FAILURE;"
 $ WS "}"
 $ CS
 $ tmp = "llrintl"
@@ -4096,8 +4095,8 @@ $ WS "#include <stdlib.h>"
 $ WS "#include <math.h>"
 $ WS "int main()"
 $ WS "{"
-$ WS "  long long x = llround(1.5);
-$ WS "  return x == 2 ? EXIT_SUCCESS : EXIT_FAILURE;
+$ WS "  long long x = llround(1.5);"
+$ WS "  return x == 2 ? EXIT_SUCCESS : EXIT_FAILURE;"
 $ WS "}"
 $ CS
 $ tmp = "llround"
@@ -4111,8 +4110,8 @@ $ WS "#include <stdlib.h>"
 $ WS "#include <math.h>"
 $ WS "int main()"
 $ WS "{"
-$ WS "  long long x = llroundl(1.5);
-$ WS "  return x == 2 ? EXIT_SUCCESS : EXIT_FAILURE;
+$ WS "  long long x = llroundl(1.5);"
+$ WS "  return x == 2 ? EXIT_SUCCESS : EXIT_FAILURE;"
 $ WS "}"
 $ CS
 $ tmp = "llroundl"
@@ -4126,8 +4125,8 @@ $ WS "#include <stdlib.h>"
 $ WS "#include <math.h>"
 $ WS "int main()"
 $ WS "{"
-$ WS "  double x = llroundl(1.5);
-$ WS "  return x == 2.0 ? EXIT_SUCCESS : EXIT_FAILURE;
+$ WS "  double x = llroundl(1.5);"
+$ WS "  return x == 2.0 ? EXIT_SUCCESS : EXIT_FAILURE;"
 $ WS "}"
 $ CS
 $ tmp = "nearbyint"
@@ -4141,8 +4140,8 @@ $ WS "#include <stdlib.h>"
 $ WS "#include <math.h>"
 $ WS "int main()"
 $ WS "{"
-$ WS "  double x = round(1.5);
-$ WS "  return x == 2.0 ? EXIT_SUCCESS : EXIT_FAILURE;
+$ WS "  double x = round(1.5);"
+$ WS "  return x == 2.0 ? EXIT_SUCCESS : EXIT_FAILURE;"
 $ WS "}"
 $ CS
 $ tmp = "round"
@@ -4156,8 +4155,8 @@ $ WS "#include <stdlib.h>"
 $ WS "#include <math.h>"
 $ WS "int main()"
 $ WS "{"
-$ WS "  double x = scalbn(1.0, 3);
-$ WS "  return x == 8.0 ? EXIT_SUCCESS : EXIT_FAILURE;
+$ WS "  double x = scalbn(1.0, 3);"
+$ WS "  return x == 8.0 ? EXIT_SUCCESS : EXIT_FAILURE;"
 $ WS "}"
 $ CS
 $ tmp = "scalbn"
@@ -4171,8 +4170,8 @@ $ WS "#include <stdlib.h>"
 $ WS "#include <math.h>"
 $ WS "int main()"
 $ WS "{"
-$ WS "  long double x = scalbn(1.0, 3);
-$ WS "  return x == 8.0 ? EXIT_SUCCESS : EXIT_FAILURE;
+$ WS "  long double x = scalbn(1.0, 3);"
+$ WS "  return x == 8.0 ? EXIT_SUCCESS : EXIT_FAILURE;"
 $ WS "}"
 $ CS
 $ tmp = "scalbnl"
@@ -5092,9 +5091,9 @@ $ OS
 $ WS "#include <sys/stat.h>"
 $ WS "#include <stdio.h>"
 $ WS "#if defined(__DECC) || defined(__DECCXX)"
-$ WS "#include <stdlib.h>
+$ WS "#include <stdlib.h>"
 $ WS "#endif"
-$ WS "int main() {
+$ WS "int main() {"
 $ WS "#''uselargefiles' _LARGEFILE"
 $ WS "#ifdef _LARGEFILE"
 $ WS "    printf(""%d\n"", sizeof(__ino64_t));"
@@ -6216,9 +6215,10 @@ $ WC "d_oldpthreads='" + d_oldpthreads + "'"
 $ WC "d_oldsock='undef'"
 $ WC "d_open3='define'"
 $ WC "d_openat='undef'"
-$ WC "d_perl_lc_all_category_positions_init='undef'"
+$ WC "d_perl_lc_all_category_positions_init='define'"
 $ WC "d_perl_lc_all_separator='undef'"
 $ WC "d_perl_lc_all_uses_name_value_pairs='undef'"
+$ WC "perl_lc_all_category_positions_init='{ 0, 1, 5, 2, 3, 4 }'"
 $ WC "d_unlinkat='undef'"
 $ WC "d_renameat='undef'"
 $ WC "d_linkat='undef'"

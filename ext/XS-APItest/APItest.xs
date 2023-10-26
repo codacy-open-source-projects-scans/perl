@@ -10,6 +10,44 @@
 #include "perl.h"
 #include "XSUB.h"
 
+/* PERL_VERSION_xx sanity checks */
+#if !PERL_VERSION_EQ(PERL_VERSION_MAJOR, PERL_VERSION_MINOR, PERL_VERSION_PATCH)
+#  error PERL_VERSION_EQ(major, minor, patch) is false; expected true
+#endif
+#if !PERL_VERSION_EQ(PERL_VERSION_MAJOR, PERL_VERSION_MINOR, '*')
+#  error PERL_VERSION_EQ(major, minor, '*') is false; expected true
+#endif
+#if PERL_VERSION_NE(PERL_VERSION_MAJOR, PERL_VERSION_MINOR, PERL_VERSION_PATCH)
+#  error PERL_VERSION_NE(major, minor, patch) is true; expected false
+#endif
+#if PERL_VERSION_NE(PERL_VERSION_MAJOR, PERL_VERSION_MINOR, '*')
+#  error PERL_VERSION_NE(major, minor, '*') is true; expected false
+#endif
+#if PERL_VERSION_LT(PERL_VERSION_MAJOR, PERL_VERSION_MINOR, PERL_VERSION_PATCH)
+#  error PERL_VERSION_LT(major, minor, patch) is true; expected false
+#endif
+#if PERL_VERSION_LT(PERL_VERSION_MAJOR, PERL_VERSION_MINOR, '*')
+#  error PERL_VERSION_LT(major, minor, '*') is true; expected false
+#endif
+#if !PERL_VERSION_LE(PERL_VERSION_MAJOR, PERL_VERSION_MINOR, PERL_VERSION_PATCH)
+#  error PERL_VERSION_LE(major, minor, patch) is false; expected true
+#endif
+#if !PERL_VERSION_LE(PERL_VERSION_MAJOR, PERL_VERSION_MINOR, '*')
+#  error PERL_VERSION_LE(major, minor, '*') is false; expected true
+#endif
+#if PERL_VERSION_GT(PERL_VERSION_MAJOR, PERL_VERSION_MINOR, PERL_VERSION_PATCH)
+#  error PERL_VERSION_GT(major, minor, patch) is true; expected false
+#endif
+#if PERL_VERSION_GT(PERL_VERSION_MAJOR, PERL_VERSION_MINOR, '*')
+#  error PERL_VERSION_GT(major, minor, '*') is true; expected false
+#endif
+#if !PERL_VERSION_GE(PERL_VERSION_MAJOR, PERL_VERSION_MINOR, PERL_VERSION_PATCH)
+#  error PERL_VERSION_GE(major, minor, patch) is false; expected true
+#endif
+#if !PERL_VERSION_GE(PERL_VERSION_MAJOR, PERL_VERSION_MINOR, '*')
+#  error PERL_VERSION_GE(major, minor, '*') is false; expected true
+#endif
+
 typedef FILE NativeFile;
 
 #include "fakesdio.h"   /* Causes us to use PerlIO below */
@@ -2722,7 +2760,7 @@ call_sv(sv, flags, ...)
     SV* sv
     I32 flags
     PREINIT:
-        I32 i;
+        SSize_t i;
     PPCODE:
         for (i=0; i<items-2; i++)
             ST(i) = ST(i+2); /* pop first two args */
@@ -3008,7 +3046,7 @@ eval_sv(sv, flags)
     SV* sv
     I32 flags
     PREINIT:
-        I32 i;
+        SSize_t i;
     PPCODE:
         PUTBACK;
         i = eval_sv(sv, flags);
@@ -3286,6 +3324,22 @@ sv_count()
             RETVAL = PL_sv_count;
         OUTPUT:
             RETVAL
+
+IV
+xs_items(...)
+        CODE:
+            RETVAL = items;
+        OUTPUT:
+            RETVAL
+
+void
+wide_marks(...)
+        PPCODE:
+#ifdef PERL_STACK_OFFSET_SSIZET
+          XSRETURN_YES;
+#else
+          XSRETURN_NO;
+#endif
 
 void
 bhk_record(bool on)

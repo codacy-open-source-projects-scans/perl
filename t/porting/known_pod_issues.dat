@@ -26,6 +26,7 @@ arybase
 atan2(3)
 atof(3)
 atoi(3)
+App::find2perl
 Attribute::Constant
 autobox
 B::Debug
@@ -136,6 +137,7 @@ File::MMagic
 File::ShareDir
 Filter::Encoding
 find(1)
+find2perl
 flock(2)
 flock(3)
 fopen(3)
@@ -161,6 +163,7 @@ HTML::StripScripts
 HTTP::Lite
 iconv(1)
 iconv(3)
+Importer
 indirect
 inetd(8)
 invoker
@@ -291,6 +294,7 @@ Role::Tiny
 RPerl
 s2p
 Scalar::Readonly
+Scope::Guard
 Scope::Upper
 sdbm(3)
 select(2)
@@ -421,6 +425,7 @@ pod/perlrun.pod	Verbatim line length including indents exceeds 78 by	3
 pod/perlsolaris.pod	Verbatim line length including indents exceeds 78 by	-1
 pod/perltie.pod	Verbatim line length including indents exceeds 78 by	3
 pod/perltru64.pod	Verbatim line length including indents exceeds 78 by	1
+porting/bisect-runner.pl	Verbatim line length including indents exceeds 78 by	2
 porting/epigraphs.pod	Verbatim line length including indents exceeds 78 by	-1
 porting/release_managers_guide.pod	Verbatim line length including indents exceeds 78 by	1
 lib/benchmark.pm	Verbatim line length including indents exceeds 78 by	2

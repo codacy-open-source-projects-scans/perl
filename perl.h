@@ -4280,6 +4280,15 @@ hint to the compiler that this condition is likely to be false.
 #  define __has_builtin(x) 0 /* not a clang style compiler */
 #endif
 
+#ifdef PERL_STACK_OFFSET_SSIZET
+  typedef SSize_t Stack_off_t;
+#  define Stack_off_t_MAX SSize_t_MAX
+#else
+  typedef I32 Stack_off_t;
+#  define Stack_off_t_MAX I32_MAX
+#endif
+#define PERL_STACK_OFFSET_DEFINED
+
 /*
 =for apidoc Am||ASSUME|bool expr
 C<ASSUME> is like C<assert()>, but it has a benefit in a release build. It is a
@@ -7087,8 +7096,10 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
             else {                                                          \
                 PL_locale_mutex_depth++;                                    \
                 UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,  \
-                        "%s: %d: avoided locking locale; new lock depth=%d\n",\
-                        __FILE__, __LINE__, PL_locale_mutex_depth));        \
+                        "%s: %d: avoided locking locale; new lock"          \
+                        " depth=%d, but will panic if '%s' is true\n",      \
+                        __FILE__, __LINE__, PL_locale_mutex_depth,          \
+                        STRINGIFY(cond_to_panic_if_already_locked)));       \
                 )                                                           \
                 if (cond_to_panic_if_already_locked) {                      \
                     locale_panic_("Trying to lock locale incompatibly: "    \
@@ -7109,10 +7120,10 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
                 MUTEX_UNLOCK(&PL_locale_mutex);                             \
             }                                                               \
             else if (PL_locale_mutex_depth <= 0) {                          \
-                DEBUG_L(PerlIO_printf(Perl_debug_log,                       \
-                        "%s: %d: ignored attempt to unlock already"         \
-                        " unlocked locale; depth unchanged at %d\n",        \
-                       __FILE__, __LINE__, PL_locale_mutex_depth));         \
+                Perl_croak_nocontext("panic: %s: %d: attempting to unlock"  \
+                                     " already unlocked locale; depth was"  \
+                                     " %d\n", __FILE__, __LINE__,           \
+                                     PL_locale_mutex_depth);                \
             }                                                               \
             else {                                                          \
                 PL_locale_mutex_depth--;                                    \

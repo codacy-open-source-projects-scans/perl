@@ -2755,11 +2755,17 @@ S_calculate_LC_ALL_string(pTHX_ const char ** category_locales_list,
      *
      * The caller sets 'returning' to
      *      WANT_TEMP_PV        the function returns the calculated string
-     *                              as a mmortalized temporary, so the caller
+     *                              as a mortalized temporary, so the caller
      *                              doesn't have to worry about it being
      *                              per-thread, nor needs to arrange for its
      *                              clean-up.
-     *      WANT_VOID               NULL is returned.  This is used when the
+     *      WANT_PL_setlocale_buf  the function stores the calculated string
+     *                              into the per-thread buffer PL_setlocale_buf
+     *                              and returns a pointer to that.  The buffer
+     *                              is cleaned up automatically in process
+     *                              destruction.  This return method avoids
+     *                              extra copies in some circumstances.
+     *      WANT_VOID           NULL is returned.  This is used when the
      *                              function is being called only for its side
      *                              effect of updating
      *                              PL_curlocales[LC_ALL_INDEX_]
@@ -2899,12 +2905,18 @@ S_calculate_LC_ALL_string(pTHX_ const char ** category_locales_list,
     }
 
     bool free_if_void_return = false;
-
-    /* Done iterating through all the categories. */
     const char * retval;
 
     /* If all categories have the same locale, we already know the answer */
     if (! disparate) {
+        if (returning == WANT_PL_setlocale_buf) {
+            save_to_buffer(locales_list[0],
+                           &PL_setlocale_buf,
+                           &PL_setlocale_bufsize);
+            retval = PL_setlocale_buf;
+        }
+        else {
+
             retval = locales_list[0];
 
             /* If a temporary is wanted for the return, and we had to create
@@ -2916,12 +2928,25 @@ S_calculate_LC_ALL_string(pTHX_ const char ** category_locales_list,
                 SAVEFREEPV(retval);
             }
 
-        /* In all cases here, there's nothing we create that needs to be freed,
-         * so leave 'free_if_void_return' set to the default 'false'. */
+            /* In all cases here, there's nothing we create that needs to be
+             * freed, so leave 'free_if_void_return' set to the default
+             * 'false'. */
+        }
     }
     else {  /* Here, not all categories have the same locale */
 
-            char * constructed;
+        char * constructed;
+
+        /* If returning to PL_setlocale_buf, set up to write directly to it,
+         * being sure it is resized to be large enough */
+        if (returning == WANT_PL_setlocale_buf) {
+            set_save_buffer_min_size(total_len,
+                                     &PL_setlocale_buf,
+                                     &PL_setlocale_bufsize);
+            constructed = PL_setlocale_buf;
+        }
+        else {  /* Otherwise we need new memory to hold the calculated value. */
+
             Newx(constructed, total_len, char);
 
             /* If returning the new memory, it must be set up to be freed
@@ -2932,6 +2957,7 @@ S_calculate_LC_ALL_string(pTHX_ const char ** category_locales_list,
             else {
                 free_if_void_return = true;
             }
+        }
 
         constructed[0] = '\0';
 
@@ -3319,9 +3345,6 @@ S_new_numeric(pTHX_ const char *newnum, bool force)
      *                  radix character string.  This is copied into
      *                  PL_numeric_radix_sv when the situation warrants.  It
      *                  exists to avoid having to recalculate it when toggling.
-     * PL_underlying_numeric_obj = (only on POSIX 2008 platforms)  An object
-     *                  with everything set up properly so as to avoid work on
-     *                  such platforms.
      */
 
     DEBUG_L( PerlIO_printf(Perl_debug_log,
@@ -3355,20 +3378,6 @@ S_new_numeric(pTHX_ const char *newnum, bool force)
     /* We are in the underlying locale until changed at the end of this
      * function */
     PL_numeric_underlying = TRUE;
-
-#    ifdef USE_POSIX_2008_LOCALE
-
-    /* We keep a special object for easy switching to.
-     *
-     * NOTE: This code may incorrectly show up as a leak under the address
-     * sanitizer. We do not free this object under normal teardown, however
-     * you can set PERL_DESTRUCT_LEVEL=2 to cause it to be freed.
-     */
-    PL_underlying_numeric_obj = newlocale(LC_NUMERIC_MASK,
-                                          PL_numeric_name,
-                                          PL_underlying_numeric_obj);
-
-#      endif
 
     char * radix = NULL;
     utf8ness_t utf8ness = UTF8NESS_IMMATERIAL;
@@ -3690,7 +3699,9 @@ S_new_ctype(pTHX_ const char *newctype, bool force)
      * locale requires more than one byte, there are going to be BIG problems.
      * */
 
-    if (MB_CUR_MAX > 1 && ! PL_in_utf8_CTYPE_locale
+    const int mb_cur_max = MB_CUR_MAX;
+
+    if (mb_cur_max > 1 && ! PL_in_utf8_CTYPE_locale
 
             /* Some platforms return MB_CUR_MAX > 1 for even the "C" locale.
              * Just assume that the implementation for them (plus for POSIX) is
@@ -3700,7 +3711,7 @@ S_new_ctype(pTHX_ const char *newctype, bool force)
         && ! isNAME_C_OR_POSIX(newctype))
     {
         DEBUG_L(PerlIO_printf(Perl_debug_log,
-                            "Unsupported, MB_CUR_MAX=%d\n", (int) MB_CUR_MAX));
+                              "Unsupported, MB_CUR_MAX=%d\n", mb_cur_max));
 
         Perl_ck_warner_d(aTHX_ packWARN(WARN_LOCALE),
                          "Locale '%s' is unsupported, and may crash the"
@@ -5168,12 +5179,8 @@ S_my_localeconv(pTHX_ const int item)
 #  endif
 
         /* Examine each string */
-        while (1) {
-            const char * name = strings[i]->name;
-
-            if (! name) {   /* Reached the end */
-                break;
-            }
+        for (const lconv_offset_t *strp = strings[i]; strp->name; strp++) {
+            const char * name = strp->name;
 
             /* 'value' will contain the string that may need to be marked as
              * UTF-8 */
@@ -5183,21 +5190,19 @@ S_my_localeconv(pTHX_ const int item)
             }
 
             /* Determine if the string should be marked as UTF-8. */
-            if (UTF8NESS_YES == (get_locale_string_utf8ness_i(SvPVX(*value),
+            if (UTF8NESS_YES == (get_locale_string_utf8ness_i(SvPV_nolen(*value),
                                                   locale_is_utf8,
                                                   NULL,
                                                   (locale_category_index) 0)))
             {
                 SvUTF8_on(*value);
             }
-
-            strings[i]++;   /* Iterate */
         }
     }   /* End of fixing up UTF8ness */
 
 
     /* Examine each integer */
-    if (integers) while (1) {
+    for (; integers; integers++) {
         const char * name = integers->name;
 
         if (! name) {   /* Reached the end */
@@ -5213,8 +5218,6 @@ S_my_localeconv(pTHX_ const int item)
         if (SvIV(*value) == CHAR_MAX) {
             sv_setiv(*value, -1);
         }
-
-        integers++;   /* Iterate */
     }
 
     return hv;
@@ -6316,7 +6319,7 @@ S_my_langinfo_i(pTHX_
          * will find out whether a locale is UTF-8 or not */
 
         utf8ness_t is_utf8 = UTF8NESS_UNKNOWN;
-        const char * scratch_buf = NULL;
+        char * scratch_buf = NULL;
 
 #          if defined(USE_LOCALE_MONETARY) && defined(HAS_LOCALECONV)
 #            define LANGINFO_RECURSED_MONETARY  0x1
@@ -6557,6 +6560,7 @@ S_ints_to_tm(pTHX_ struct tm * mytm,
      * variables */
 
     /* Override with the passed-in values */
+    Zero(mytm, 1, struct tm);
     mytm->tm_sec = sec;
     mytm->tm_min = min;
     mytm->tm_hour = hour;
@@ -7130,11 +7134,6 @@ Perl_init_i18nl10n(pTHX_ int printwarn)
 #    ifdef MULTIPLICITY
 
     PL_cur_locale_obj = PL_C_locale_obj;
-
-#    endif
-#    ifdef USE_LOCALE_NUMERIC
-
-    PL_underlying_numeric_obj = duplocale(PL_C_locale_obj);
 
 #    endif
 #  endif

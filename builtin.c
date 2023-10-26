@@ -16,21 +16,24 @@
 
 #include "XSUB.h"
 
+/* copied from op.c */
+#define SHORTVER(maj,min) (((maj) << 8) | (min))
+
 struct BuiltinFuncDescriptor {
     const char *name;
+    U16 since_ver;
     XSUBADDR_t xsub;
     OP *(*checker)(pTHX_ OP *, GV *, SV *);
     IV ckval;
     bool is_experimental;
 };
 
-#define warn_experimental_builtin(name, prefix) S_warn_experimental_builtin(aTHX_ name, prefix)
-static void S_warn_experimental_builtin(pTHX_ const char *name, bool prefix)
+#define warn_experimental_builtin(name) S_warn_experimental_builtin(aTHX_ name)
+static void S_warn_experimental_builtin(pTHX_ const char *name)
 {
     /* diag_listed_as: Built-in function '%s' is experimental */
     Perl_ck_warner_d(aTHX_ packWARN(WARN_EXPERIMENTAL__BUILTIN),
-                     "Built-in function '%s%s' is experimental",
-                     prefix ? "builtin::" : "", name);
+                     "Built-in function 'builtin::%s' is experimental", name);
 }
 
 /* These three utilities might want to live elsewhere to be reused from other
@@ -125,7 +128,7 @@ XS(XS_builtin_func1_scalar)
 
     switch(ix) {
         case OP_IS_BOOL:
-            warn_experimental_builtin(PL_op_name[ix], true);
+            warn_experimental_builtin(PL_op_name[ix]);
             Perl_pp_is_bool(aTHX);
             break;
 
@@ -266,7 +269,7 @@ XS(XS_builtin_export_lexically)
 {
     dXSARGS;
 
-    warn_experimental_builtin("export_lexically", true);
+    warn_experimental_builtin("export_lexically");
 
     if(!PL_compcv)
         Perl_croak(aTHX_
@@ -395,7 +398,7 @@ static OP *ck_builtin_func1(pTHX_ OP *entersubop, GV *namegv, SV *ckobj)
     const struct BuiltinFuncDescriptor *builtin = NUM2PTR(const struct BuiltinFuncDescriptor *, SvUV(ckobj));
 
     if(builtin->is_experimental)
-        warn_experimental_builtin(builtin->name, false);
+        warn_experimental_builtin(builtin->name);
 
     SV *prototype = newSVpvs("$");
     SAVEFREESV(prototype);
@@ -471,12 +474,29 @@ XS(XS_builtin_indexed)
     XSRETURN(retcount);
 }
 
+XS(XS_builtin_load_module);
+XS(XS_builtin_load_module)
+{
+    dXSARGS;
+    if (items != 1)
+        croak_xs_usage(cv, "arg");
+    SV *module_name = newSVsv(ST(0));
+    if (!SvPOK(module_name)) {
+        SvREFCNT_dec(module_name);
+        croak_xs_usage(cv, "defined string");
+    }
+    load_module(PERL_LOADMOD_NOIMPORT, module_name, NULL, NULL);
+    /* The loaded module's name is left intentionally on the stack for the
+     * caller's benefit, and becomes load_module's return value. */
+    XSRETURN(1);
+}
+
 static OP *ck_builtin_funcN(pTHX_ OP *entersubop, GV *namegv, SV *ckobj)
 {
     const struct BuiltinFuncDescriptor *builtin = NUM2PTR(const struct BuiltinFuncDescriptor *, SvUV(ckobj));
 
     if(builtin->is_experimental)
-        warn_experimental_builtin(builtin->name, false);
+        warn_experimental_builtin(builtin->name);
 
     SV *prototype = newSVpvs("@");
     SAVEFREESV(prototype);
@@ -489,34 +509,101 @@ static OP *ck_builtin_funcN(pTHX_ OP *entersubop, GV *namegv, SV *ckobj)
 
 static const char builtin_not_recognised[] = "'%" SVf "' is not recognised as a builtin function";
 
+#define NO_BUNDLE SHORTVER(255,255)
+
 static const struct BuiltinFuncDescriptor builtins[] = {
     /* constants */
-    { "builtin::true",   &XS_builtin_true,   &ck_builtin_const, BUILTIN_CONST_TRUE,  false },
-    { "builtin::false",  &XS_builtin_false,  &ck_builtin_const, BUILTIN_CONST_FALSE, false },
+    { "true",  SHORTVER(5,39), &XS_builtin_true,   &ck_builtin_const, BUILTIN_CONST_TRUE,  false },
+    { "false", SHORTVER(5,39), &XS_builtin_false,  &ck_builtin_const, BUILTIN_CONST_FALSE, false },
 
     /* unary functions */
-    { "builtin::is_bool",    &XS_builtin_func1_scalar, &ck_builtin_func1, OP_IS_BOOL,    true  },
-    { "builtin::weaken",     &XS_builtin_func1_void,   &ck_builtin_func1, OP_WEAKEN,     false },
-    { "builtin::unweaken",   &XS_builtin_func1_void,   &ck_builtin_func1, OP_UNWEAKEN,   false },
-    { "builtin::is_weak",    &XS_builtin_func1_scalar, &ck_builtin_func1, OP_IS_WEAK,    false },
-    { "builtin::blessed",    &XS_builtin_func1_scalar, &ck_builtin_func1, OP_BLESSED,    false },
-    { "builtin::refaddr",    &XS_builtin_func1_scalar, &ck_builtin_func1, OP_REFADDR,    false },
-    { "builtin::reftype",    &XS_builtin_func1_scalar, &ck_builtin_func1, OP_REFTYPE,    false },
-    { "builtin::ceil",       &XS_builtin_func1_scalar, &ck_builtin_func1, OP_CEIL,       false },
-    { "builtin::floor",      &XS_builtin_func1_scalar, &ck_builtin_func1, OP_FLOOR,      false },
-    { "builtin::is_tainted", &XS_builtin_func1_scalar, &ck_builtin_func1, OP_IS_TAINTED, false },
-    { "builtin::trim",       &XS_builtin_trim,         &ck_builtin_func1, 0,             false },
-    { "builtin::stringify",  &XS_builtin_func1_scalar, &ck_builtin_func1, OP_STRINGIFY,  true },
+    { "is_bool",         NO_BUNDLE, &XS_builtin_func1_scalar, &ck_builtin_func1, OP_IS_BOOL,    true  },
+    { "weaken",     SHORTVER(5,39), &XS_builtin_func1_void,   &ck_builtin_func1, OP_WEAKEN,     false },
+    { "unweaken",   SHORTVER(5,39), &XS_builtin_func1_void,   &ck_builtin_func1, OP_UNWEAKEN,   false },
+    { "is_weak",    SHORTVER(5,39), &XS_builtin_func1_scalar, &ck_builtin_func1, OP_IS_WEAK,    false },
+    { "blessed",    SHORTVER(5,39), &XS_builtin_func1_scalar, &ck_builtin_func1, OP_BLESSED,    false },
+    { "refaddr",    SHORTVER(5,39), &XS_builtin_func1_scalar, &ck_builtin_func1, OP_REFADDR,    false },
+    { "reftype",    SHORTVER(5,39), &XS_builtin_func1_scalar, &ck_builtin_func1, OP_REFTYPE,    false },
+    { "ceil",       SHORTVER(5,39), &XS_builtin_func1_scalar, &ck_builtin_func1, OP_CEIL,       false },
+    { "floor",      SHORTVER(5,39), &XS_builtin_func1_scalar, &ck_builtin_func1, OP_FLOOR,      false },
+    { "is_tainted", SHORTVER(5,39), &XS_builtin_func1_scalar, &ck_builtin_func1, OP_IS_TAINTED, false },
+    { "trim",       SHORTVER(5,39), &XS_builtin_trim,         &ck_builtin_func1, 0,             false },
+    { "stringify",       NO_BUNDLE, &XS_builtin_func1_scalar, &ck_builtin_func1, OP_STRINGIFY,  true },
 
-    { "builtin::created_as_string", &XS_builtin_created_as_string, &ck_builtin_func1, 0, true },
-    { "builtin::created_as_number", &XS_builtin_created_as_number, &ck_builtin_func1, 0, true },
+    { "created_as_string", NO_BUNDLE, &XS_builtin_created_as_string, &ck_builtin_func1, 0, true },
+    { "created_as_number", NO_BUNDLE, &XS_builtin_created_as_number, &ck_builtin_func1, 0, true },
+
+    { "load_module", NO_BUNDLE, &XS_builtin_load_module, &ck_builtin_func1, 0, true },
 
     /* list functions */
-    { "builtin::indexed",          &XS_builtin_indexed,          &ck_builtin_funcN, 0, false },
-    { "builtin::export_lexically", &XS_builtin_export_lexically, NULL,              0, true },
+    { "indexed",          SHORTVER(5,39), &XS_builtin_indexed,          &ck_builtin_funcN, 0, false },
+    { "export_lexically",      NO_BUNDLE, &XS_builtin_export_lexically, NULL,              0, true },
 
-    { NULL, NULL, NULL, 0, false }
+    { NULL, 0, NULL, NULL, 0, false }
 };
+
+static bool S_parse_version(const char *vstr, const char *vend, UV *vmajor, UV *vminor)
+{
+    /* Parse a string like "5.35" to yield 5 and 35. Ignores an optional
+     * trailing third component e.g. "5.35.7". Returns false on parse errors.
+     */
+
+    const char *end = vend;
+    if (!grok_atoUV(vstr, vmajor, &end))
+        return FALSE;
+
+    vstr = end;
+    if (*vstr++ != '.')
+        return FALSE;
+
+    end = vend;
+    if (!grok_atoUV(vstr, vminor, &end))
+        return FALSE;
+
+    if(*vminor > 255)
+        return FALSE;
+
+    vstr = end;
+
+    if(vstr[0] == '.') {
+        vstr++;
+
+        UV _dummy;
+        if(!grok_atoUV(vstr, &_dummy, &end))
+            return FALSE;
+        if(_dummy > 255)
+            return FALSE;
+
+        vstr = end;
+    }
+
+    if(vstr != vend)
+        return FALSE;
+
+    return TRUE;
+}
+
+#define import_sym(sym)  S_import_sym(aTHX_ sym)
+static void S_import_sym(pTHX_ SV *sym)
+{
+    SV *ampname = sv_2mortal(Perl_newSVpvf(aTHX_ "&%" SVf, SVfARG(sym)));
+    SV *fqname = sv_2mortal(Perl_newSVpvf(aTHX_ "builtin::%" SVf, SVfARG(sym)));
+
+    CV *cv = get_cv(SvPV_nolen(fqname), SvUTF8(fqname) ? SVf_UTF8 : 0);
+    if(!cv)
+        Perl_croak(aTHX_ builtin_not_recognised, sym);
+
+    export_lexical(ampname, (SV *)cv);
+}
+
+#define import_builtin_bundle(ver)  S_import_builtin_bundle(aTHX_ ver)
+static void S_import_builtin_bundle(pTHX_ U16 ver)
+{
+    for(int i = 0; builtins[i].name; i++) {
+        if(builtins[i].since_ver <= ver)
+            import_sym(newSVpvn_flags(builtins[i].name, strlen(builtins[i].name), SVs_TEMP));
+    }
+}
 
 XS(XS_builtin_import);
 XS(XS_builtin_import)
@@ -531,18 +618,30 @@ XS(XS_builtin_import)
 
     for(int i = 1; i < items; i++) {
         SV *sym = ST(i);
-        const char *sympv = SvPV_nolen(sym);
+        STRLEN symlen;
+        const char *sympv = SvPV(sym, symlen);
         if(strEQ(sympv, "import") || strEQ(sympv, "unimport"))
             Perl_croak(aTHX_ builtin_not_recognised, sym);
 
-        SV *ampname = sv_2mortal(Perl_newSVpvf(aTHX_ "&%" SVf, SVfARG(sym)));
-        SV *fqname = sv_2mortal(Perl_newSVpvf(aTHX_ "builtin::%" SVf, SVfARG(sym)));
+        if(sympv[0] == ':') {
+            UV vmajor, vminor;
+            if(!S_parse_version(sympv + 1, sympv + symlen, &vmajor, &vminor))
+                Perl_croak(aTHX_ "Invalid version bundle %" SVf_QUOTEDPREFIX, sym);
 
-        CV *cv = get_cv(SvPV_nolen(fqname), SvUTF8(fqname) ? SVf_UTF8 : 0);
-        if(!cv)
-            Perl_croak(aTHX_ builtin_not_recognised, sym);
+            U16 want_ver = SHORTVER(vmajor, vminor);
 
-        export_lexical(ampname, (SV *)cv);
+            if(want_ver < SHORTVER(5,39) ||
+                    /* round up devel version to next major release; e.g. 5.39 => 5.40 */
+                    want_ver > SHORTVER(PERL_REVISION, PERL_VERSION + (PERL_VERSION % 2)))
+                Perl_croak(aTHX_ "Builtin version bundle \"%s\" is not supported by Perl " PERL_VERSION_STRING,
+                        sympv);
+
+            import_builtin_bundle(want_ver);
+
+            continue;
+        }
+
+        import_sym(sym);
     }
 
     finish_export_lexical();
@@ -607,7 +706,9 @@ Perl_boot_core_builtin(pTHX)
         else if(builtin->checker == &ck_builtin_funcN)
             proto = "@";
 
-        CV *cv = newXS_flags(builtin->name, builtin->xsub, __FILE__, proto, 0);
+        SV *name = newSVpvs_flags("builtin::", SVs_TEMP);
+        sv_catpv(name, builtin->name);
+        CV *cv = newXS_flags(SvPV_nolen(name), builtin->xsub, __FILE__, proto, 0);
         XSANY.any_i32 = builtin->ckval;
 
         if (   builtin->xsub == &XS_builtin_func1_void

@@ -5,15 +5,15 @@
 [ this is a template for a new perldelta file.  Any text flagged as XXX needs
 to be processed before release. ]
 
-perldelta - what is new for perl v5.39.3
+perldelta - what is new for perl v5.39.5
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.39.2 release and the 5.39.3
+This document describes differences between the 5.39.4 release and the 5.39.5
 release.
 
-If you are upgrading from an earlier release such as 5.39.1, first read
-L<perl5392delta>, which describes differences between 5.39.1 and 5.39.2.
+If you are upgrading from an earlier release such as 5.39.3, first read
+L<perl5394delta>, which describes differences between 5.39.3 and 5.39.4.
 
 =head1 Notice
 
@@ -89,8 +89,7 @@ There may well be none in a stable release.
 
 =item *
 
-The negation OPs have been modified to support the generic TARGMY optimization.
-[GH #21442]
+XXX
 
 =back
 
@@ -126,13 +125,16 @@ XXX Remove this section if Porting/corelist-perldelta.pl did not add any content
 
 =item *
 
-L<XXX> has been upgraded from version A.xx to B.yy.
+L<IO> has been upgraded from version 1.53 to 1.54.
 
-XXX If there was something important to note about this change, include that here.
+Fixed C<IO::Handle/blocking> on Windows, which has been non-functional
+since IO 1.32.  [GH #17455]
 
 =item *
 
-L<Getopt::Std> has been upgraded from version 1.13 to 1.14.  Documentation and test improvements only; no change in functionality.
+L<builtin> has been upgraded from version 0.011 to 0.012.
+
+Added the C<load_module()> builtin function as per L<PPC 0006|https://github.com/Perl/PPCs/blob/main/ppcs/ppc0006-load-module.md>.
 
 =back
 
@@ -259,8 +261,7 @@ L</Platform Support> section, instead.
 
 =item *
 
-Fix here-doc used for code to probe C<LC_ALL> syntax for disparate
-locales introduced in 5.39.2.  [GH #21451]
+XXX
 
 =back
 
@@ -289,10 +290,7 @@ made:
 
 =item *
 
-F<t/op/magic.t> would fail when C<ps> was the BusyBox implementation,
-since that doesn't support the C<-p> flag and otherwise ignores a
-process id on the command-line.  This caused F<TEST> failures on
-BusyBox systems such as Alpine Linux.  [GH #17542]
+XXX
 
 =back
 
@@ -339,10 +337,9 @@ L</Modules and Pragmata> section.
 
 =over 4
 
-=item MacOS/Darwin
+=item XXX-some-platform
 
-Don't set C<MACOSX_DEPLOYMENT_TARGET> when building on OS X 10.5.  [GH
-#21367]
+XXX
 
 =back
 
@@ -358,25 +355,7 @@ well.
 
 =item *
 
-A new API function has been added that simplifies C (or XS) code that creates
-C<LISTOP> optree fragments.  C<newLISTOPn()> is a variadic function that takes
-a C<NULL>-terminated list of child op pointers, and constructs a new checked
-C<LISTOP> to contain them all.  This is simpler than creating a new plain
-C<OP_LIST>, adding each child individually, and finally calling
-C<op_convert_list()> in most code fragments.
-
-=item *
-
-The C<eval_sv()> API now accepts the C<G_USEHINTS> flag, which uses
-the hints such as strict and features from C<PL_curcop> instead of the
-default, which is to use default hints, e.g. no C<use vX.XX;>, no
-strict, default features.
-
-Beware if you use this flag in XS code: your evaluated code will need
-to support whatever strictness or features are in effect at the point
-your XS function is called.
-
-[GH #21415]
+XXX
 
 =back
 
@@ -394,32 +373,7 @@ manager will later use a regex to expand these into links.
 
 =item *
 
-Declared references can now be used with C<state> variables. [GH #21351]
-
-=item *
-
-Trailing elements in an C<unshift>ed and resized array will now always be
-initialized. [GH #21265]
-
-=item * Make C<use 5.036> respect the -X flag
-
-perl's -X flag disables all warnings globally, but «use 5.036» didn't
-respect that until now. [GH #21431]
-
-=item *
-
-Fixed an OP leak when an error was produced for initializer for a class
-field. [GH #20812]
-
-=item *
-
-Fixed a slowdown in repeated substitution replacements using special
-variables, such as C<s/....x$1/g>. It actually makes all string
-concatenations involving such "magic" variables less slow, but the
-slowdown was more noticeable on repeated substitutions due to extra memory
-usage that was only freed after the last iteration. The slowdown started
-in perl 5.28.0 - which generally sped up string concatenation but slowed
-down when using special variables. [GH #21360]
+XXX
 
 =back
 
@@ -459,7 +413,7 @@ died, add a short obituary here.
 
 XXX Generate this with:
 
-  perl Porting/acknowledgements.pl v5.39.2..HEAD
+  perl Porting/acknowledgements.pl v5.39.4..HEAD
 
 =head1 Reporting Bugs
 

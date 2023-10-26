@@ -507,8 +507,8 @@ Perl_xxx(aTHX_ ...) form for any API calls where it's used.
 #endif
 
 #define PERL_JNP_TO_DECIMAL_(maJor,miNor,Patch)                             \
-            /* '10*' leaves room for things like alpha, beta, releases */   \
-                    (10 * ((maJor) * 1000000) + ((miNor) * 1000) + (Patch))
+    /* '10*' leaves room for things like alpha, beta, releases */           \
+    (10 * (((maJor) * 1000000) + ((miNor) * 1000) + (Patch)))
 #define PERL_DECIMAL_VERSION_                                               \
         PERL_JNP_TO_DECIMAL_(PERL_VERSION_MAJOR, PERL_VERSION_MINOR,        \
                                                         PERL_VERSION_PATCH)
@@ -574,13 +574,13 @@ becomes
 # define PERL_VERSION_LT(j,n,p) /* < '*' effectively means < 0 */           \
     (PERL_DECIMAL_VERSION_ < PERL_JNP_TO_DECIMAL_( (j),                     \
                                                    (n),                     \
-                                                 (((p) == '*') ? 0 : p)))
+                                                 (((p) == '*') ? 0 : (p))))
 # define PERL_VERSION_GE(j,n,p)  (! PERL_VERSION_LT(j,n,p))
 
-# define PERL_VERSION_LE(j,n,p)  /* <= '*' effectively means < n+1 */       \
-    (PERL_DECIMAL_VERSION_ < PERL_JNP_TO_DECIMAL_(                  (j),    \
-                                          (((p) == '*') ? ((n)+1) : (n)),   \
-                                          (((p) == '*') ? 0 : p)))
+# define PERL_VERSION_LE(j,n,p)  /* <= '*' effectively means <= 999 */      \
+    (PERL_DECIMAL_VERSION_ <= PERL_JNP_TO_DECIMAL_( (j),                    \
+                                                    (n),                    \
+                                                  (((p) == '*') ? 999 : (p))))
 # define PERL_VERSION_GT(j,n,p) (! PERL_VERSION_LE(j,n,p))
 
 /*

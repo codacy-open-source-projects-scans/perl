@@ -16091,9 +16091,6 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     PL_numeric_underlying = true;
     PL_numeric_underlying_is_standard = true;
 
-#  if defined(USE_POSIX_2008_LOCALE)
-    PL_underlying_numeric_obj = NULL;
-#  endif
 #endif /* !USE_LOCALE_NUMERIC */
 #if defined(USE_POSIX_2008_LOCALE)
     PL_scratch_locale_obj = NULL;
@@ -16192,13 +16189,13 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
 
         /* next PUSHMARK() sets *(PL_markstack_ptr+1) */
         i = proto_perl->Imarkstack_max - proto_perl->Imarkstack;
-        Newx(PL_markstack, i, I32);
+        Newx(PL_markstack, i, Stack_off_t);
         PL_markstack_max	= PL_markstack + (proto_perl->Imarkstack_max
                                                   - proto_perl->Imarkstack);
         PL_markstack_ptr	= PL_markstack + (proto_perl->Imarkstack_ptr
                                                   - proto_perl->Imarkstack);
         Copy(proto_perl->Imarkstack, PL_markstack,
-             PL_markstack_ptr - PL_markstack + 1, I32);
+             PL_markstack_ptr - PL_markstack + 1, Stack_off_t);
 
         /* next push_scope()/ENTER sets PL_scopestack[PL_scopestack_ix]
          * NOTE: unlike the others! */

@@ -639,7 +639,7 @@ ETXip	|void	|append_utf8_from_native_byte				\
 				|const U8 byte				\
 				|NN U8 **dest
 : FIXME - this is only called by pp_chown. They should be merged.
-p	|I32	|apply		|I32 type				\
+p	|SSize_t|apply		|I32 type				\
 				|NN SV **mark				\
 				|NN SV **sp
 Apx	|void	|apply_attrs_string					\
@@ -752,7 +752,7 @@ CTdpx	|U8 *	|bytes_from_utf8_loc					\
 				|NULLOK const U8 **first_unconverted
 Adpx	|U8 *	|bytes_to_utf8	|NN const U8 *s 			\
 				|NN STRLEN *lenp
-AOdp	|I32	|call_argv	|NN const char *sub_name		\
+AOdp	|SSize_t|call_argv	|NN const char *sub_name		\
 				|I32 flags				\
 				|NN char **argv
 
@@ -765,13 +765,13 @@ Adp	|const PERL_CONTEXT *|caller_cx 				\
 				|NULLOK const PERL_CONTEXT **dbcxp
 Cp	|void	|call_list	|I32 oldscope				\
 				|NN AV *paramList
-AOdp	|I32	|call_method	|NN const char *methname		\
+AOdp	|SSize_t|call_method	|NN const char *methname		\
 				|I32 flags
 CTadop	|Malloc_t|calloc	|MEM_SIZE elements			\
 				|MEM_SIZE size
-AOdp	|I32	|call_pv	|NN const char *sub_name		\
+AOdp	|SSize_t|call_pv	|NN const char *sub_name		\
 				|I32 flags
-AOdp	|I32	|call_sv	|NN SV *sv				\
+AOdp	|SSize_t|call_sv	|NN SV *sv				\
 				|volatile I32 flags
 : Used in several source files
 Rp	|bool	|cando		|Mode_t mode				\
@@ -1120,7 +1120,7 @@ EXopx	|void	|emulate_cop_io |NN const COP * const c 		\
 				|NN SV * const sv
 AOdp	|SV *	|eval_pv	|NN const char *p			\
 				|I32 croak_on_error
-AOdp	|I32	|eval_sv	|NN SV *sv				\
+AOdp	|SSize_t|eval_sv	|NN SV *sv				\
 				|I32 flags
 Adp	|void	|fbm_compile	|NN SV *sv				\
 				|U32 flags
@@ -1946,7 +1946,7 @@ p	|int	|magic_wipepack |NN SV *sv				\
 				|NN MAGIC *mg
 
 CTadop	|Malloc_t|malloc	|MEM_SIZE nbytes
-Cp	|I32 *	|markstack_grow
+Cp	|Stack_off_t *|markstack_grow
 EXp	|int	|mbtowc_	|NULLOK const wchar_t *pwc		\
 				|NULLOK const char *s			\
 				|const Size_t len
@@ -2094,13 +2094,13 @@ AMTdp	|int	|my_vsnprintf	|NN char *buffer			\
 				|const Size_t len			\
 				|NN const char *format			\
 				|va_list ap
-Ap	|OP *	|newANONATTRSUB |I32 floor				\
+Adp	|OP *	|newANONATTRSUB |I32 floor				\
 				|NULLOK OP *proto			\
 				|NULLOK OP *attrs			\
 				|NULLOK OP *block
-ARp	|OP *	|newANONHASH	|NULLOK OP *o
-ARp	|OP *	|newANONLIST	|NULLOK OP *o
-Ap	|OP *	|newANONSUB	|I32 floor				\
+ARdp	|OP *	|newANONHASH	|NULLOK OP *o
+ARdp	|OP *	|newANONLIST	|NULLOK OP *o
+Adp	|OP *	|newANONSUB	|I32 floor				\
 				|NULLOK OP *proto			\
 				|NULLOK OP *block
 ARdp	|OP *	|newARGDEFELEMOP|I32 flags				\
@@ -2126,7 +2126,7 @@ ARdm	|AV *	|newAV_alloc_x	|SSize_t size
 ARdm	|AV *	|newAV_alloc_xz |SSize_t size
 ARdp	|AV *	|newAVav	|NULLOK AV *oav
 ARdp	|AV *	|newAVhv	|NULLOK HV *ohv
-ARp	|OP *	|newAVREF	|NN OP *o
+ARdp	|OP *	|newAVREF	|NN OP *o
 ARdp	|OP *	|newBINOP	|I32 type				\
 				|I32 flags				\
 				|NULLOK OP *first			\
@@ -2144,7 +2144,7 @@ Adp	|CV *	|newCONSTSUB_flags					\
 				|STRLEN len				\
 				|U32 flags				\
 				|NULLOK SV *sv
-ARp	|OP *	|newCVREF	|I32 flags				\
+ARdp	|OP *	|newCVREF	|I32 flags				\
 				|NULLOK OP *o
 ARdpx	|OP *	|newDEFEROP	|I32 flags				\
 				|NN OP *block
@@ -2168,11 +2168,11 @@ ARdp	|GV *	|newGVgen_flags |NN const char *pack			\
 ARdp	|OP *	|newGVOP	|I32 type				\
 				|I32 flags				\
 				|NN GV *gv
-ARp	|OP *	|newGVREF	|I32 type				\
+ARdp	|OP *	|newGVREF	|I32 type				\
 				|NULLOK OP *o
 AMRbdp	|HV *	|newHV
 ARdp	|HV *	|newHVhv	|NULLOK HV *hv
-ARp	|OP *	|newHVREF	|NN OP *o
+ARdp	|OP *	|newHVREF	|NN OP *o
 AMRbdp	|IO *	|newIO
 ARdp	|OP *	|newLISTOP	|I32 type				\
 				|I32 flags				\
@@ -2197,7 +2197,7 @@ ARdp	|OP *	|newMETHOP	|I32 type				\
 ARdp	|OP *	|newMETHOP_named|I32 type				\
 				|I32 flags				\
 				|NN SV * const_meth
-Cp	|CV *	|newMYSUB	|I32 floor				\
+Cdp	|CV *	|newMYSUB	|I32 floor				\
 				|NN OP *o				\
 				|NULLOK OP *proto			\
 				|NULLOK OP *attrs			\
@@ -2270,7 +2270,7 @@ ARdp	|SV *	|newSVpvn_share |NULLOK const char *s			\
 				|U32 hash
 ARdp	|SV *	|newSVpv_share	|NULLOK const char *s			\
 				|U32 hash
-ARp	|OP *	|newSVREF	|NN OP *o
+ARdp	|OP *	|newSVREF	|NN OP *o
 Adp	|SV *	|newSVrv	|NN SV * const rv			\
 				|NULLOK const char * const classname
 AMRbdp	|SV *	|newSVsv	|NULLOK SV * const old
@@ -2522,7 +2522,7 @@ p	|OP *	|pmruntime	|NN OP *o				\
 				|NULLOK OP *repl			\
 				|UV flags				\
 				|I32 floor
-Xiop	|I32	|POPMARK
+Xiop	|Stack_off_t|POPMARK
 Cdp	|void	|pop_scope
 Cipx	|void	|pop_stackinfo
 
@@ -3505,7 +3505,7 @@ Fpv	|OP *	|tied_method	|NN SV *methname			\
 				|U32 argc				\
 				|...
 Xp	|SSize_t|tmps_grow_p	|SSize_t ix
-Xiop	|I32	|TOPMARK
+Xiop	|Stack_off_t|TOPMARK
 Cm	|UV	|to_uni_fold	|UV c					\
 				|NN U8 *p				\
 				|NN STRLEN *lenp
@@ -3744,9 +3744,9 @@ Adp	|void	|wrap_op_checker|Optype opcode				\
 				|NN Perl_check_t *old_checker_p
 : Used in pp_ctl.c
 p	|void	|write_to_stderr|NN SV *msv
-Xp	|void	|xs_boot_epilog |const I32 ax
+Xp	|void	|xs_boot_epilog |const SSize_t ax
 
-FTXopv	|I32	|xs_handshake	|const U32 key				\
+FTXopv	|SSize_t|xs_handshake	|const U32 key				\
 				|NN void *v_my_perl			\
 				|NN const char *file			\
 				|...
@@ -4082,11 +4082,11 @@ Cp	|void	|croak_kw_unless_class					\
           defined(PERL_IN_TOKE_C) */
 #if defined(PERL_IN_DEB_C)
 S	|void	|deb_stack_n	|NN SV **stack_base			\
-				|I32 stack_min				\
-				|I32 stack_max				\
-				|I32 mark_min				\
-				|I32 mark_max				\
-				|I32 nonrc_base
+				|SSize_t stack_min			\
+				|SSize_t stack_max			\
+				|SSize_t mark_min			\
+				|SSize_t mark_max			\
+				|SSize_t nonrc_base
 #endif
 #if defined(PERL_IN_DOIO_C)
 S	|bool	|argvout_final	|NN MAGIC *mg				\
@@ -5960,8 +5960,8 @@ Ti	|U32	|ptr_hash	|PTRV u
 S	|SV *	|with_queued_errors					\
 				|NN SV *ex
 So	|void	|xs_version_bootcheck					\
-				|U32 items				\
-				|U32 ax 				\
+				|SSize_t items				\
+				|SSize_t ax				\
 				|NN const char *xs_p			\
 				|STRLEN xs_len
 # if defined(PERL_MEM_LOG) && !defined(PERL_MEM_LOG_NOIMPL)
