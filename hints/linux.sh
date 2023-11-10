@@ -111,7 +111,9 @@ case "`${cc:-cc} -V 2>&1`" in
     # 'Sun' and the 'C':  Examples:
     # cc: Sun C 5.9 Linux_i386 Patch 124871-01 2007/07/31
     # cc: Sun Ceres C 5.10 Linux_i386 2008/07/10
-    test "$optimize" || optimize='-xO2'
+    # cc: Studio 12.6 Sun C 5.15 Linux_i386 2017/05/30
+    # GH #21535 - apparent optimization bug in workshop cc
+    test "$optimize" || optimize='-O1'
     cccdlflags='-KPIC'
     lddlflags='-G -Bdynamic'
     # Sun C doesn't support gcc attributes, but, in many cases, doesn't
@@ -123,6 +125,15 @@ case "`${cc:-cc} -V 2>&1`" in
     d_attribute_pure='undef'
     d_attribute_unused='undef'
     d_attribute_warn_unused_result='undef'
+    case "$cc" in
+    *c99)   # Without -Xa c99 errors on some Linux system headers
+            # in particular zero sized arrays at the end of structs
+	    case "$ccflags" in
+		*-Xa*)	;;
+		*) ccflags="$ccflags -Xa" ;;
+	    esac
+	    ;;
+    esac
     ;;
 esac
 

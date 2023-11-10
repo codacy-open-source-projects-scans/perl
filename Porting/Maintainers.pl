@@ -757,7 +757,8 @@ our %Modules = (
     },
 
     'Math::BigInt' => {
-        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-1.999842.tar.gz',
+        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-2.000000.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Thu Nov  2 17:12:13 2023',
         'SYNCINFO'     => 'jkeenan on Thu Sep 28 07:49:05 2023',
         'SYNCINFO'     => 'jkeenan on Sun Sep 24 08:09:46 2023',
         'FILES'        => q[cpan/Math-BigInt],
@@ -790,20 +791,6 @@ our %Modules = (
                 t/bigintpm.t
                 t/mbimbf.inc
                 t/mbimbf.t
-                ),
-        ],
-    },
-
-    'Math::BigRat' => {
-        'DISTRIBUTION' => 'PJACKLAM/Math-BigRat-0.2624.tar.gz',
-        'FILES'        => q[cpan/Math-BigRat],
-        'EXCLUDED'     => [
-            qr{^xt/},
-            qr{^math-bigrat-pod.diff},
-            qr{^t/author-},
-            qr{^t/release-},
-            qw( t/00sig.t
-                t/01load.t
                 ),
         ],
     },
@@ -1087,7 +1074,8 @@ our %Modules = (
     },
 
     'Term::Table' => {
-        'DISTRIBUTION' => 'EXODIST/Term-Table-0.017.tar.gz',
+        'DISTRIBUTION' => 'EXODIST/Term-Table-0.018.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Nov  1 19:16:24 2023',
         'SYNCINFO'     => 'LeoNerd on Wed Sep 13 18:33:07 2023',
         'FILES'        => q[cpan/Term-Table],
         'EXCLUDED'     => [
@@ -1134,7 +1122,8 @@ our %Modules = (
     },
 
     'Test2::Suite' => {
-        'DISTRIBUTION' => 'EXODIST/Test2-Suite-0.000156.tar.gz',
+        'DISTRIBUTION' => 'EXODIST/Test2-Suite-0.000159.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Nov  1 20:18:33 2023',
         'SYNCINFO'     => 'LeoNerd on Wed Sep 14 10:44:29 2023',
         'FILES'        => q[cpan/Test2-Suite],
         'EXCLUDED'     => [
@@ -1144,13 +1133,6 @@ our %Modules = (
 
             # https://github.com/Test-More/Test2-Suite/issues/208
             't/acceptance/Workflow-Acceptance.t',
-        ],
-        'CUSTOMIZED'   => [
-            qw( t/modules/Plugin/SRand.t
-                t/modules/Require/AuthorTesting.t
-                t/modules/Require/EnvVar.t
-                t/modules/Tools/GenTemp.t
-              )
         ],
     },
 

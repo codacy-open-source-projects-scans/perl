@@ -252,13 +252,22 @@
  *          querylocale() is called only while the locale mutex is locked, and
  *          the result is copied to a per-thread place before unlocking.
  *
- *      -Accflags=-DNO_LOCALE_CTYE
+ *      -Accflags=-DUSE_NL_LOCALE_NAME
+ *          glibc has an undocumented equivalent function to querylocale().  It
+ *          currently isn't used by default because it is undocumented.  But
+ *          testing hasn't found any problems with it.  Using this Configure
+ *          option enables it on systems that have it (with no effect on
+ *          systems lacking it).  Enabling this removes the need for perl
+ *          to keep its own records, hence is more efficient and guaranteed to
+ *          be accurate.
+ *
+ *      -Accflags=-DNO_LOCALE_CTYPE
  *      -Accflags=-DNO_LOCALE_NUMERIC
  *          etc.
  *
  *          If the named category(ies) does(do) not exist on this platform,
  *          these have no effect.  Otherwise they cause perl to be compiled to
- *          always keep the named category(ies) in the C locale XXX
+ *          always keep the named category(ies) in the C locale.
  *
  *      -Accflags=-DHAS_BROKEN_SETLOCALE_QUERY_LC_ALL
  *          This would be set in a hints file to tell perl that doing a libc
@@ -363,13 +372,13 @@ static int debug_initialization = 0;
    /* Use -Accflags=-DWIN32_USE_FAKE_OLD_MINGW_LOCALES on a POSIX or *nix box
     * to get a semblance of pretending the locale handling is that of a MingW
     * that doesn't use UCRT (hence 'OLD' in the name).  This exercizes code
-    * paths that are not compiled on non-Windows boxes, and allows for ASAN.
-    * This is thus a way to see if locale.c on Windows is likely going to
-    * compile, without having to use a real Win32 box.  And running the test
-    * suite will verify to a large extent our logic and memory allocation
-    * handling for such boxes.  And access to ASAN and PERL_MEMLOG Of course the underlying calls are to the POSIX
-    * libc, so any differences in implementation between those and the Windows
-    * versions will not be caught by this. */
+    * paths that are not compiled on non-Windows boxes, and allows for ASAN
+    * and PERL_MEMLOG.  This is thus a way to see if locale.c on Windows is
+    * likely going to compile, without having to use a real Win32 box.  And
+    * running the test suite will verify to a large extent our logic and memory
+    * allocation handling for such boxes.  Of course the underlying calls are
+    * to the POSIX libc, so any differences in implementation between those and
+    * the Windows versions will not be caught by this. */
 
 #  define WIN32
 #  undef P_CS_PRECEDES
@@ -814,7 +823,7 @@ STATIC const bool category_available[] = {
 #  ifdef LC_ALL
     true,
 #  else
-    false
+    false,
 #  endif
 
     false   /* LC_UNKNOWN_AVAIL_ */
@@ -1065,7 +1074,7 @@ Perl_locale_panic(const char * msg,
 #define setlocale_failure_panic_c(cat, cur, fail, line, higher_line)        \
    setlocale_failure_panic_i(cat##_INDEX_, cur, fail, line, higher_line)
 
-#if defined(LC_ALL) && defined(USE_LOCALE)
+#if defined(USE_LOCALE)
 
 /* Expands to the code to
  *      result = savepvn(s, len)
@@ -3949,17 +3958,7 @@ Perl_warn_problematic_locale()
 #  endif /* USE_LOCALE_CTYPE */
 
 STATIC void
-
-#  ifdef LC_ALL
-
 S_new_LC_ALL(pTHX_ const char *lc_all, bool force)
-
-#  else
-
-S_new_LC_ALL(pTHX_ const char ** individ_locales, bool force)
-
-#  endif
-
 {
     PERL_ARGS_ASSERT_NEW_LC_ALL;
 
@@ -3967,8 +3966,6 @@ S_new_LC_ALL(pTHX_ const char ** individ_locales, bool force)
      * called just after a change, so uses the actual underlying locale just
      * set, and not the nominal one (should they differ, as they may in
      * LC_NUMERIC). */
-
-#  ifdef LC_ALL
 
     const char * individ_locales[LC_ALL_INDEX_] = { NULL };
 
@@ -3981,16 +3978,14 @@ S_new_LC_ALL(pTHX_ const char ** individ_locales, bool force)
                                            earlier had to have succeeded */
                                 __LINE__))
     {
-        case invalid:
-        case no_array:
-        case only_element_0:
+      case invalid:
+      case no_array:
+      case only_element_0:
         locale_panic_("Unexpected return from parse_LC_ALL_string");
 
-        case full_array:
+      case full_array:
         break;
     }
-
-#  endif
 
     for_all_individual_category_indexes(i) {
         if (update_functions[i]) {
@@ -3998,12 +3993,7 @@ S_new_LC_ALL(pTHX_ const char ** individ_locales, bool force)
             update_functions[i](aTHX_ this_locale, force);
         }
 
-#  ifdef LC_ALL
-
         Safefree(individ_locales[i]);
-
-#  endif
-
     }
 }
 
@@ -5185,12 +5175,12 @@ S_my_localeconv(pTHX_ const int item)
             /* 'value' will contain the string that may need to be marked as
              * UTF-8 */
             SV ** value = hv_fetch(hv, name, strlen(name), true);
-            if (! value) {
+            if (! value || ! SvPOK(*value)) {
                 continue;
             }
 
             /* Determine if the string should be marked as UTF-8. */
-            if (UTF8NESS_YES == (get_locale_string_utf8ness_i(SvPV_nolen(*value),
+            if (UTF8NESS_YES == (get_locale_string_utf8ness_i(SvPVX(*value),
                                                   locale_is_utf8,
                                                   NULL,
                                                   (locale_category_index) 0)))
@@ -6323,7 +6313,6 @@ S_my_langinfo_i(pTHX_
 
 #          if defined(USE_LOCALE_MONETARY) && defined(HAS_LOCALECONV)
 #            define LANGINFO_RECURSED_MONETARY  0x1
-#            define LANGINFO_RECURSED_TIME      0x2
 
         /* Can't use this method unless localeconv() is available, as that's
          * the way we find out the currency symbol.
@@ -6348,6 +6337,12 @@ S_my_langinfo_i(pTHX_
 
 #          endif
 #          ifdef USE_LOCALE_TIME
+#            define LANGINFO_RECURSED_TIME      0x2
+#            ifdef LANGINFO_RECURSED_MONETARY
+#               if LANGINFO_RECURSED_MONETARY == LANGINFO_RECURSED_TIME
+#                 error LANGINFO_RECURSED_MONETARY must differ from LANGINFO_RECURSED_TIME
+#               endif
+#             endif
 
         /* If we have ruled out being UTF-8, no point in checking further. */
         if (   is_utf8 != UTF8NESS_NO
@@ -6741,8 +6736,7 @@ S_strftime8(pTHX_ const char * fmt,
         break;
 
       case UTF8NESS_YES:    /* Known to be UTF-8; must be UTF-8 locale if can't
-                               downgrade.  But downgrading assumes the locale
-                               is latin 1.  Maybe just fail XXX */
+                               downgrade. */
         if (! is_locale_utf8(locale)) {
             locale_utf8ness = LOCALE_NOT_UTF8;
 
@@ -6862,9 +6856,13 @@ S_give_perl_locale_control(pTHX_
 
 #    else
 
-    new_LC_ALL(locales, true);
-
+    new_LC_ALL(calculate_LC_ALL_string(locales,
+                                       INTERNAL_FORMAT,
+                                       WANT_TEMP_PV,
+                                       caller_line),
+               true);
 #    endif
+
 }
 
 STATIC void
