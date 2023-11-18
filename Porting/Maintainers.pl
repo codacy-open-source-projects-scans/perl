@@ -403,7 +403,8 @@ our %Modules = (
     },
 
     'Encode' => {
-        'DISTRIBUTION' => 'DANKOGAI/Encode-3.19.tar.gz',
+        'DISTRIBUTION' => 'DANKOGAI/Encode-3.20.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Fri Nov 10 15:12:07 2023',
         'FILES'        => q[cpan/Encode],
         'EXCLUDED'     => [
             qw( t/whatwg-aliases.json
@@ -611,7 +612,8 @@ our %Modules = (
     },
 
     'Getopt::Long' => {
-        'DISTRIBUTION' => 'JV/Getopt-Long-2.54.tar.gz',
+        'DISTRIBUTION' => 'JV/Getopt-Long-2.57.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Sat Nov 11 13:09:21 2023',
         'FILES'        => q[cpan/Getopt-Long],
         'EXCLUDED'     => [
             qr{^examples/},
@@ -757,7 +759,8 @@ our %Modules = (
     },
 
     'Math::BigInt' => {
-        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-2.000000.tar.gz',
+        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-2.001000.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Tue Nov 14 17:22:07 2023',
         'SYNCINFO'     => 'jkeenan on Thu Nov  2 17:12:13 2023',
         'SYNCINFO'     => 'jkeenan on Thu Sep 28 07:49:05 2023',
         'SYNCINFO'     => 'jkeenan on Sun Sep 24 08:09:46 2023',

@@ -19,6 +19,13 @@ L<perl5394delta>, which describes differences between 5.39.3 and 5.39.4.
 
 XXX Any important notices here
 
+glibc has an undocumented feature to return the current locale when
+using the POSIX 2008 locale API.  This feature is now experimentally
+enabled by default so as to see if there are problems with it.  This
+enabling expires in v5.39.10.  In the meantime, if you run into
+problems, open a bug ticket and Configure with
+C<-Accflags=-DNO_NL_LOCALE_NAME> to turn it off.
+
 =head1 Core Enhancements
 
 XXX New core language features go here.  Summarize user-visible core language
@@ -297,7 +304,10 @@ made:
 
 =item *
 
-XXX
+F<porting/globvar.t> now uses the more portable C<nm -P ...> to fetch
+the names defined in an object file.  The parsing of the names found
+in the object is now separated from processing them to handle the
+duplication between local and global definitions on AIX.  [GH #21637]
 
 =back
 
@@ -354,6 +364,10 @@ now C<-xO1>. [GH #21535]
 
 Enable C<copysign>, C<signbit>, C<acosh>, C<asinh>, C<atanh>, C<exp2>,
 C<tgamma> in the bundled configuration used for MSVC.  [GH #21610]
+
+The build process no longer supports Visual Studio 2013.  This was
+failing to build at a very basic level and there has been no reports
+of such failures.  [GH #21624]
 
 =back
 
