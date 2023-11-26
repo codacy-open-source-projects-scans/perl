@@ -65,9 +65,6 @@
 : backport the fixed version to modules.  The only disadvantage khw can think
 : of is the namespace pollution one.
 :
-: Since we don't require a C compiler to support variadic macros (C99), the
-: macros can't be generated in such situations.
-:
 : WARNING: Any macro created in a header file is visible to XS code, unless
 : care is taken to wrap it within C preprocessor guards like the following
 :
@@ -3149,7 +3146,7 @@ Adp	|void	|sv_insert_flags|NN SV * const bigstr			\
 Adp	|IO *	|sv_2io 	|NN SV * const sv
 Adp	|int	|sv_isa 	|NULLOK SV *sv				\
 				|NN const char * const name
-ARdpx	|bool	|sv_isa_sv	|NN SV *sv				\
+ARdp	|bool	|sv_isa_sv	|NN SV *sv				\
 				|NN SV *namesv
 Adp	|int	|sv_isobject	|NULLOK SV *sv
 Adip	|IV	|SvIV		|NN SV *sv
