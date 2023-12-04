@@ -824,7 +824,7 @@ our %Modules = (
     },
 
     'Module::CoreList' => {
-        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20231120.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20231129.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
     },
 
@@ -1104,7 +1104,9 @@ our %Modules = (
     },
 
     'Test::Simple' => {
-        'DISTRIBUTION' => 'EXODIST/Test-Simple-1.302195.tar.gz',
+        'DISTRIBUTION' => 'EXODIST/Test-Simple-1.302198.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Fri Dec  1 07:01:54 2023',
+        'SYNCINFO'     => 'jkeenan on Wed Nov 29 11:41:51 2023',
         'FILES'        => q[cpan/Test-Simple],
         'EXCLUDED'     => [
             qr{^examples/},
