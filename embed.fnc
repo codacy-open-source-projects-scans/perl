@@ -1119,6 +1119,9 @@ AOdp	|SV *	|eval_pv	|NN const char *p			\
 				|I32 croak_on_error
 AOdp	|SSize_t|eval_sv	|NN SV *sv				\
 				|I32 flags
+Adfpv	|void	|fatal_warner	|U32 err				\
+				|NN const char *pat			\
+				|...
 Adp	|void	|fbm_compile	|NN SV *sv				\
 				|U32 flags
 ARdp	|char * |fbm_instr	|NN unsigned char *big			\
@@ -2761,7 +2764,11 @@ Cpx	|void	|rpp_obliterate_stack_to				\
 				|I32 ix
 Adipx	|void	|rpp_popfree_1
 Adipx	|void	|rpp_popfree_2
+Adipx	|void	|rpp_popfree_1_NN
+Adipx	|void	|rpp_popfree_2_NN
 Adipx	|void	|rpp_popfree_to |NN SV **sp
+Adipx	|void	|rpp_popfree_to_NN					\
+				|NN SV **sp
 Adipx	|SV *	|rpp_pop_1_norc
 Adipx	|void	|rpp_push_1	|NN SV *sv
 Adipx	|void	|rpp_push_2	|NN SV *sv1				\
@@ -2770,6 +2777,19 @@ Adipx	|void	|rpp_push_1_norc|NN SV *sv
 Adipx	|void	|rpp_replace_1_1|NN SV *sv
 Adipx	|void	|rpp_replace_2_1|NN SV *sv
 Adipx	|void	|rpp_replace_at |NN SV **sp				\
+				|NN SV *sv
+Adipx	|void	|rpp_replace_at_NN					\
+				|NN SV **sp				\
+				|NN SV *sv
+Adipx	|void	|rpp_replace_at_norc					\
+				|NN SV **sp				\
+				|NN SV *sv
+Adipx	|void	|rpp_replace_at_norc_NN 				\
+				|NN SV **sp				\
+				|NN SV *sv
+Adipx	|void	|rpp_replace_1_1_NN					\
+				|NN SV *sv
+Adipx	|void	|rpp_replace_2_1_NN					\
 				|NN SV *sv
 Adipx	|bool	|rpp_stack_is_rc
 Adipx	|bool	|rpp_try_AMAGIC_1					\
@@ -3686,6 +3706,9 @@ Adp	|int	|vcmp		|NN SV *lhv				\
 Adpr	|void	|vcroak 	|NULLOK const char *pat 		\
 				|NULLOK va_list *args
 Adp	|void	|vdeb		|NN const char *pat			\
+				|NULLOK va_list *args
+Adp	|void	|vfatal_warner	|U32 err				\
+				|NN const char *pat			\
 				|NULLOK va_list *args
 Adp	|char * |vform		|NN const char *pat			\
 				|NULLOK va_list *args

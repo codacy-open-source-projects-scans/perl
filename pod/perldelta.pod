@@ -159,6 +159,12 @@ L<XXX> has been upgraded from version A.xx to B.yy.
 
 XXX If there was something important to note about this change, include that here.
 
+=item *
+
+L<Fcntl> has been upgraded from version 1.15 to 1.16.
+
+This version adds support for the C<O_TMPFILE> flag on Linux.
+
 =back
 
 =head2 Removed Modules and Pragmata
@@ -248,7 +254,9 @@ XXX Changes (i.e. rewording) of diagnostic messages go here
 
 =item *
 
-XXX Describe change here
+L<Name "%s::%s" used only once: possible typo|perldiag/"Name "%s::%s" used only once: possible typo">
+
+This warning now honors being marked as fatal.  [GH #13814]
 
 =back
 
@@ -313,7 +321,10 @@ made:
 
 =item *
 
-XXX
+The test F<t/porting/libperl.t> will no longer run in maint releases.
+This test is sensitive to changes in the output of F<nm> on various
+platforms, and tarballs aren't updated as we update this test in
+blead.  [GH #21677]
 
 =back
 
@@ -396,7 +407,11 @@ manager will later use a regex to expand these into links.
 
 =item *
 
-XXX
+The tmps (mortal) stack now grows exponentially.  Previously it grew
+linearly, so if it was growing incrementally, such as through many
+calls to sv_2mortal(), on a system where realloc() is O(size), the
+performance would be O(n*n).  With exponential grows this changes to
+amortized O(n).  [GH #21654]
 
 =back
 

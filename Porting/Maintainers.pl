@@ -129,12 +129,14 @@ our @IGNORABLE = qw(
 our %Modules = (
 
     'Archive::Tar' => {
-        'DISTRIBUTION' => 'BINGOS/Archive-Tar-2.40.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Archive-Tar-3.02_001.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Tue Dec  5 07:32:24 2023',
         'FILES'        => q[cpan/Archive-Tar],
         'BUGS'         => 'bug-archive-tar@rt.cpan.org',
         'EXCLUDED'     => [
             qw(t/07_ptardiff.t),
             qr{t/src/(long|short)/foo.txz},
+            qw(t/90_symlink.t),
         ],
     },
 
@@ -757,7 +759,8 @@ our %Modules = (
     },
 
     'Math::BigInt' => {
-        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-2.001001.tar.gz',
+        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-2.002001.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Mon Dec 11 21:10:38 2023',
         'SYNCINFO'     => 'jkeenan on Fri Nov 24 20:23:52 2023',
         'SYNCINFO'     => 'jkeenan on Tue Nov 14 17:22:07 2023',
         'FILES'        => q[cpan/Math-BigInt],
