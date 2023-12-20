@@ -625,6 +625,13 @@ Perl_croak_no_mem(void)
 #define PERL_ARGS_ASSERT_CROAK_NO_MEM
 
 PERL_CALLCONV_NO_RET void
+Perl_croak_no_mem_ext(const char *context, STRLEN len)
+        __attribute__noreturn__
+        __attribute__visibility__("hidden");
+#define PERL_ARGS_ASSERT_CROAK_NO_MEM_EXT       \
+        assert(context)
+
+PERL_CALLCONV_NO_RET void
 Perl_croak_no_modify(void)
         __attribute__noreturn__;
 #define PERL_ARGS_ASSERT_CROAK_NO_MODIFY
@@ -7012,9 +7019,9 @@ S_my_localeconv(pTHX_ const int item);
 #   define PERL_ARGS_ASSERT_MY_LOCALECONV
 
 STATIC void
-S_populate_hash_from_localeconv(pTHX_ HV *hv, const char *locale, const U32 which_mask, const lconv_offset_t *strings[2], const lconv_offset_t *integers);
-#   define PERL_ARGS_ASSERT_POPULATE_HASH_FROM_LOCALECONV \
-        assert(hv); assert(locale); assert(strings)
+S_populate_hash_from_C_localeconv(pTHX_ HV *hv, const char *locale, const U32 which_mask, const lconv_offset_t *strings[2], const lconv_offset_t *integers[2]);
+#   define PERL_ARGS_ASSERT_POPULATE_HASH_FROM_C_LOCALECONV \
+        assert(hv); assert(locale); assert(strings); assert(integers)
 
 # endif /* defined(HAS_LOCALECONV) */
 # if defined(USE_LOCALE)
@@ -7134,6 +7141,13 @@ S_new_ctype(pTHX_ const char *newctype, bool force);
         assert(newctype)
 
 #   endif /* defined(USE_LOCALE_CTYPE) */
+#   if defined(USE_LOCALE_MONETARY) || defined(USE_LOCALE_NUMERIC)
+STATIC void
+S_populate_hash_from_localeconv(pTHX_ HV *hv, const char *locale, const U32 which_mask, const lconv_offset_t *strings[2], const lconv_offset_t *integers[2]);
+#     define PERL_ARGS_ASSERT_POPULATE_HASH_FROM_LOCALECONV \
+        assert(hv); assert(locale); assert(strings); assert(integers)
+
+#   endif
 #   if defined(USE_LOCALE_NUMERIC)
 STATIC void
 S_new_numeric(pTHX_ const char *newnum, bool force);
@@ -9062,7 +9076,17 @@ S_del_sv(pTHX_ SV *p);
 #   define PERL_ARGS_ASSERT_DEL_SV              \
         assert(p)
 
-# endif
+PERL_CALLCONV void
+Perl_sv_mark_arenas(pTHX)
+        __attribute__visibility__("hidden");
+#   define PERL_ARGS_ASSERT_SV_MARK_ARENAS
+
+PERL_CALLCONV void
+Perl_sv_sweep_arenas(pTHX)
+        __attribute__visibility__("hidden");
+#   define PERL_ARGS_ASSERT_SV_SWEEP_ARENAS
+
+# endif /* defined(DEBUGGING) */
 # if !defined(NV_PRESERVES_UV)
 #   if defined(DEBUGGING)
 STATIC int

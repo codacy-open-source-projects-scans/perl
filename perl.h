@@ -149,7 +149,7 @@ no normal arguments, and used by L</C<comma_pDEPTH>> itself.
 /* Use the reentrant APIs like localtime_r and getpwent_r */
 /* Win32 has naturally threadsafe libraries, no need to use any _r variants.
  * XXX KEEP makedef.pl copy of this code in sync */
-#if defined(USE_ITHREADS) && !defined(USE_REENTRANT_API) && !defined(WIN32)
+#if defined(MULTIPLICITY) && !defined(USE_REENTRANT_API) && !defined(WIN32)
 #   define USE_REENTRANT_API
 #endif
 
@@ -570,7 +570,7 @@ compilation causes it be used just some times.
 #  define PERL_UNUSED_VAR(x) ((void)sizeof(x))
 #endif
 
-#if defined(USE_ITHREADS)
+#if defined(MULTIPLICITY)
 #  define PERL_UNUSED_CONTEXT PERL_UNUSED_ARG(my_perl)
 #else
 #  define PERL_UNUSED_CONTEXT
@@ -5392,8 +5392,6 @@ EXTCONST char PL_no_helem_sv[]
   INIT("Modification of non-creatable hash value attempted, subscript \"%" SVf "\"");
 EXTCONST char PL_no_modify[]
   INIT("Modification of a read-only value attempted");
-EXTCONST char PL_no_mem[sizeof("Out of memory!\n")]
-  INIT("Out of memory!\n");
 EXTCONST char PL_no_security[]
   INIT("Insecure dependency in %s%s");
 EXTCONST char PL_no_sock_func[]
