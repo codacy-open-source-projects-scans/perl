@@ -2488,6 +2488,11 @@ ATdo	|void	|perl_free	|NN PerlInterpreter *my_perl
 
 Cop	|const char *|PerlIO_context_layers				\
 				|NULLOK const char *mode
+ATdo	|const char *|Perl_langinfo					\
+				|const nl_item item
+ATdo	|const char *|Perl_langinfo8					\
+				|const nl_item item			\
+				|NULLOK utf8ness_t *utf8ness
 p	|int	|PerlLIO_dup2_cloexec					\
 				|int oldfd				\
 				|int newfd
@@ -2761,6 +2766,10 @@ Adipx	|void	|rpp_context	|NN SV **mark				\
 				|U8 gimme				\
 				|SSize_t extra
 Adipx	|void	|rpp_extend	|SSize_t n
+Xopx	|void	|rpp_free_2_	|NN SV * const sv1			\
+				|NN SV * const sv2			\
+				|const U32 rc1				\
+				|const U32 rc2
 Adipx	|void	|rpp_invoke_xs	|NN CV *cv
 Adipx	|bool	|rpp_is_lone	|NN SV *sv
 Cpx	|void	|rpp_obliterate_stack_to				\
@@ -2776,6 +2785,7 @@ Adipx	|SV *	|rpp_pop_1_norc
 Adipx	|void	|rpp_push_1	|NN SV *sv
 Adipx	|void	|rpp_push_2	|NN SV *sv1				\
 				|NN SV *sv2
+Adipx	|void	|rpp_push_IMM	|NN SV *sv
 Adipx	|void	|rpp_push_1_norc|NN SV *sv
 Adipx	|void	|rpp_replace_1_1|NN SV *sv
 Adipx	|void	|rpp_replace_2_1|NN SV *sv
@@ -2789,6 +2799,12 @@ Adipx	|void	|rpp_replace_at_norc					\
 				|NN SV *sv
 Adipx	|void	|rpp_replace_at_norc_NN 				\
 				|NN SV **sp				\
+				|NN SV *sv
+Cipx	|void	|rpp_replace_2_1_COMMON 				\
+				|NN SV *sv
+Adipx	|void	|rpp_replace_1_IMM_NN					\
+				|NN SV *sv
+Adipx	|void	|rpp_replace_2_IMM_NN					\
 				|NN SV *sv
 Adipx	|void	|rpp_replace_1_1_NN					\
 				|NN SV *sv
@@ -2804,6 +2820,7 @@ Adipx	|bool	|rpp_try_AMAGIC_2					\
 Adipx	|void	|rpp_xpush_1	|NN SV *sv
 Adipx	|void	|rpp_xpush_2	|NN SV *sv1				\
 				|NN SV *sv2
+Adipx	|void	|rpp_xpush_IMM	|NN SV *sv
 Adp	|Sighandler_t|rsignal	|int i					\
 				|Sighandler_t t
 : Used in pp_sys.c
@@ -3844,19 +3861,6 @@ p	|I32	|do_shmio	|I32 optype				\
 				|NN SV **mark				\
 				|NN SV **sp
 #endif /* defined(HAS_MSG) || defined(HAS_SEM) || defined(HAS_SHM) */
-#if defined(HAS_NL_LANGINFO) && defined(PERL_LANGINFO_H)
-ATdo	|const char *|Perl_langinfo					\
-				|const nl_item item
-ATdo	|const char *|Perl_langinfo8					\
-				|const nl_item item			\
-				|NULLOK utf8ness_t *utf8ness
-#else
-ATdo	|const char *|Perl_langinfo					\
-				|const int item
-ATdo	|const char *|Perl_langinfo8					\
-				|const int item 			\
-				|NULLOK utf8ness_t *utf8ness
-#endif
 #if defined(HAS_PIPE)
 Rp	|int	|PerlProc_pipe_cloexec					\
 				|NN int *pipefd
@@ -4437,6 +4441,13 @@ RS	|locale_category_index|get_category_index_helper		\
 				|const line_t caller_line
 Ri	|const char *|mortalized_pv_copy				\
 				|NULLOK const char * const pv
+S	|const char *|my_langinfo_i					\
+				|const nl_item item			\
+				|const locale_category_index cat_index	\
+				|NN const char *locale			\
+				|NN char **retbufp			\
+				|NULLOK Size_t *retbuf_sizep		\
+				|NULLOK utf8ness_t *utf8ness
 S	|const char *|native_querylocale_i				\
 				|const locale_category_index cat_index
 S	|void	|new_LC_ALL	|NN const char *lc_all			\
@@ -4482,23 +4493,6 @@ RS	|char * |my_setlocale_debug_string_i				\
 				|NULLOK const char *locale		\
 				|NULLOK const char *retval		\
 				|const line_t line
-#   endif
-#   if defined(HAS_NL_LANGINFO) || defined(HAS_NL_LANGINFO_L)
-S	|const char *|my_langinfo_i					\
-				|const nl_item item			\
-				|const locale_category_index cat_index	\
-				|NN const char *locale			\
-				|NN char **retbufp			\
-				|NULLOK Size_t *retbuf_sizep		\
-				|NULLOK utf8ness_t *utf8ness
-#   else
-S	|const char *|my_langinfo_i					\
-				|const int item 			\
-				|const locale_category_index cat_index	\
-				|NN const char *locale			\
-				|NN char **retbufp			\
-				|NULLOK Size_t *retbuf_sizep		\
-				|NULLOK utf8ness_t *utf8ness
 #   endif
 #   if defined(LC_ALL)
 S	|void	|give_perl_locale_control				\

@@ -57,6 +57,14 @@ Perl_PerlLIO_open_cloexec(pTHX_ const char *file, int flag)
 /* PERL_CALLCONV const XOP *
 Perl_custom_op_xop(pTHX_ const OP *o); */
 
+PERL_CALLCONV const char *
+Perl_langinfo(const nl_item item);
+#define PERL_ARGS_ASSERT_PERL_LANGINFO
+
+PERL_CALLCONV const char *
+Perl_langinfo8(const nl_item item, utf8ness_t *utf8ness);
+#define PERL_ARGS_ASSERT_PERL_LANGINFO8
+
 PERL_CALLCONV HV *
 Perl_localeconv(pTHX);
 #define PERL_ARGS_ASSERT_PERL_LOCALECONV
@@ -3831,6 +3839,11 @@ Perl_rpeep(pTHX_ OP *o)
 #define PERL_ARGS_ASSERT_RPEEP
 
 PERL_CALLCONV void
+Perl_rpp_free_2_(pTHX_ SV * const sv1, SV * const sv2, const U32 rc1, const U32 rc2);
+#define PERL_ARGS_ASSERT_RPP_FREE_2_            \
+        assert(sv1); assert(sv2)
+
+PERL_CALLCONV void
 Perl_rpp_obliterate_stack_to(pTHX_ I32 ix);
 #define PERL_ARGS_ASSERT_RPP_OBLITERATE_STACK_TO
 
@@ -5494,25 +5507,6 @@ Perl_do_shmio(pTHX_ I32 optype, SV **mark, SV **sp)
         assert(mark); assert(sp)
 
 #endif /* defined(HAS_MSG) || defined(HAS_SEM) || defined(HAS_SHM) */
-#if defined(HAS_NL_LANGINFO) && defined(PERL_LANGINFO_H)
-PERL_CALLCONV const char *
-Perl_langinfo(const nl_item item);
-# define PERL_ARGS_ASSERT_PERL_LANGINFO
-
-PERL_CALLCONV const char *
-Perl_langinfo8(const nl_item item, utf8ness_t *utf8ness);
-# define PERL_ARGS_ASSERT_PERL_LANGINFO8
-
-#else
-PERL_CALLCONV const char *
-Perl_langinfo(const int item);
-# define PERL_ARGS_ASSERT_PERL_LANGINFO
-
-PERL_CALLCONV const char *
-Perl_langinfo8(const int item, utf8ness_t *utf8ness);
-# define PERL_ARGS_ASSERT_PERL_LANGINFO8
-
-#endif
 #if defined(HAS_PIPE)
 PERL_CALLCONV int
 Perl_PerlProc_pipe_cloexec(pTHX_ int *pipefd)
@@ -7035,6 +7029,11 @@ S_get_category_index_helper(pTHX_ const int category, bool *success, const line_
 #   define PERL_ARGS_ASSERT_GET_CATEGORY_INDEX_HELPER
 
 STATIC const char *
+S_my_langinfo_i(pTHX_ const nl_item item, const locale_category_index cat_index, const char *locale, char **retbufp, Size_t *retbuf_sizep, utf8ness_t *utf8ness);
+#   define PERL_ARGS_ASSERT_MY_LANGINFO_I       \
+        assert(locale); assert(retbufp)
+
+STATIC const char *
 S_native_querylocale_i(pTHX_ const locale_category_index cat_index);
 #   define PERL_ARGS_ASSERT_NATIVE_QUERYLOCALE_I
 
@@ -7080,19 +7079,6 @@ STATIC char *
 S_my_setlocale_debug_string_i(pTHX_ const locale_category_index cat_index, const char *locale, const char *retval, const line_t line)
         __attribute__warn_unused_result__;
 #     define PERL_ARGS_ASSERT_MY_SETLOCALE_DEBUG_STRING_I
-
-#   endif
-#   if defined(HAS_NL_LANGINFO) || defined(HAS_NL_LANGINFO_L)
-STATIC const char *
-S_my_langinfo_i(pTHX_ const nl_item item, const locale_category_index cat_index, const char *locale, char **retbufp, Size_t *retbuf_sizep, utf8ness_t *utf8ness);
-#     define PERL_ARGS_ASSERT_MY_LANGINFO_I     \
-        assert(locale); assert(retbufp)
-
-#   else
-STATIC const char *
-S_my_langinfo_i(pTHX_ const int item, const locale_category_index cat_index, const char *locale, char **retbufp, Size_t *retbuf_sizep, utf8ness_t *utf8ness);
-#     define PERL_ARGS_ASSERT_MY_LANGINFO_I     \
-        assert(locale); assert(retbufp)
 
 #   endif
 #   if defined(LC_ALL)
@@ -9897,6 +9883,11 @@ Perl_rpp_push_2(pTHX_ SV *sv1, SV *sv2);
         assert(sv1); assert(sv2)
 
 PERL_STATIC_INLINE void
+Perl_rpp_push_IMM(pTHX_ SV *sv);
+# define PERL_ARGS_ASSERT_RPP_PUSH_IMM          \
+        assert(sv)
+
+PERL_STATIC_INLINE void
 Perl_rpp_replace_1_1(pTHX_ SV *sv);
 # define PERL_ARGS_ASSERT_RPP_REPLACE_1_1       \
         assert(sv)
@@ -9907,13 +9898,28 @@ Perl_rpp_replace_1_1_NN(pTHX_ SV *sv);
         assert(sv)
 
 PERL_STATIC_INLINE void
+Perl_rpp_replace_1_IMM_NN(pTHX_ SV *sv);
+# define PERL_ARGS_ASSERT_RPP_REPLACE_1_IMM_NN  \
+        assert(sv)
+
+PERL_STATIC_INLINE void
 Perl_rpp_replace_2_1(pTHX_ SV *sv);
 # define PERL_ARGS_ASSERT_RPP_REPLACE_2_1       \
         assert(sv)
 
 PERL_STATIC_INLINE void
+Perl_rpp_replace_2_1_COMMON(pTHX_ SV *sv);
+# define PERL_ARGS_ASSERT_RPP_REPLACE_2_1_COMMON \
+        assert(sv)
+
+PERL_STATIC_INLINE void
 Perl_rpp_replace_2_1_NN(pTHX_ SV *sv);
 # define PERL_ARGS_ASSERT_RPP_REPLACE_2_1_NN    \
+        assert(sv)
+
+PERL_STATIC_INLINE void
+Perl_rpp_replace_2_IMM_NN(pTHX_ SV *sv);
+# define PERL_ARGS_ASSERT_RPP_REPLACE_2_IMM_NN  \
         assert(sv)
 
 PERL_STATIC_INLINE void
@@ -9957,6 +9963,11 @@ PERL_STATIC_INLINE void
 Perl_rpp_xpush_2(pTHX_ SV *sv1, SV *sv2);
 # define PERL_ARGS_ASSERT_RPP_XPUSH_2           \
         assert(sv1); assert(sv2)
+
+PERL_STATIC_INLINE void
+Perl_rpp_xpush_IMM(pTHX_ SV *sv);
+# define PERL_ARGS_ASSERT_RPP_XPUSH_IMM         \
+        assert(sv)
 
 PERL_STATIC_INLINE char *
 Perl_savepv(pTHX_ const char *pv)

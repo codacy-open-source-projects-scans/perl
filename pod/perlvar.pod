@@ -1123,15 +1123,15 @@ This variable was added in 5.25.7
 If you need access to this functionality in older Perls you can use this
 function immediately after your regexp.
 
-	sub get_captures {
-		no strict 'refs';
+    sub get_captures {
+        no strict 'refs';
 
-		my $last_idx = scalar(@-) - 1;
-		my @arr      = 1 .. $last_idx;
-		my @ret      = map { $$_; } @arr;
+        my $last_idx = scalar(@-) - 1;
+        my @arr      = 1 .. $last_idx;
+        my @ret      = map { $$_; } @arr;
 
-		return @ret;
-	}
+        return @ret;
+    }
 
 =item $MATCH
 
@@ -1358,7 +1358,7 @@ match and any capture buffers it contains.
 
 The number of elements it contains will be one more than the number of
 the highest capture buffers (also called a subgroup) that actually
-matched something. (As opposed to C<@+> which may have fewer elements.)
+matched something. (As opposed to C<@+> which may have more elements.)
 
 C<$-[0]> is the offset of the start of the last successful match.
 C<$-[I<n>]> is the offset of the start of the substring matched by

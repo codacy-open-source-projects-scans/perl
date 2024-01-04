@@ -6452,17 +6452,17 @@ Perl_sv_kill_backrefs(pTHX_ SV *const sv, AV *const av)
 }
 
 /*
-=for apidoc sv_insert
+=for apidoc      sv_insert
+=for apidoc_item sv_insert_flags
 
-Inserts and/or replaces a string at the specified offset/length within the SV.
-Similar to the Perl C<substr()> function, with C<littlelen> bytes starting at
-C<little> replacing C<len> bytes of the string in C<bigstr> starting at
-C<offset>.  Handles get magic.
+These insert and/or replace a string at the specified offset/length within the
+SV.  Similar to the Perl C<substr()> function, with C<littlelen> bytes starting
+at C<little> replacing C<len> bytes of the string in C<bigstr> starting at
+C<offset>.  They handle get magic.
 
-=for apidoc sv_insert_flags
-
-Same as C<sv_insert>, but the extra C<flags> are passed to the
-C<SvPV_force_flags> that applies to C<bigstr>.
+C<sv_insert_flags> is identical to plain C<sv_insert>, but the extra C<flags>
+are passed to the C<SvPV_force_flags> operation that is internally applied to
+C<bigstr>.
 
 =cut
 */
@@ -7085,6 +7085,12 @@ Perl_sv_clear(pTHX_ SV *const orig_sv)
             }
             if (--(SvREFCNT(sv)))
                 continue;
+            if (SvIMMORTAL(sv)) {
+                /* make sure SvREFCNT(sv)==0 happens very seldom */
+                SvREFCNT(sv) = SvREFCNT_IMMORTAL;
+                SvTEMP_off(sv);
+                continue;
+            }
 #ifdef DEBUGGING
             if (SvTEMP(sv)) {
                 Perl_ck_warner_d(aTHX_ packWARN(WARN_DEBUGGING),
@@ -7093,11 +7099,6 @@ Perl_sv_clear(pTHX_ SV *const orig_sv)
                 continue;
             }
 #endif
-            if (SvIMMORTAL(sv)) {
-                /* make sure SvREFCNT(sv)==0 happens very seldom */
-                SvREFCNT(sv) = SvREFCNT_IMMORTAL;
-                continue;
-            }
             break;
         } /* while 1 */
 
@@ -7280,6 +7281,12 @@ Perl_sv_free2(pTHX_ SV *const sv, const U32 rc)
         /* normal case */
         SvREFCNT(sv) = 0;
 
+        if (SvIMMORTAL(sv)) {
+            /* make sure SvREFCNT(sv)==0 happens very seldom */
+            SvREFCNT(sv) = SvREFCNT_IMMORTAL;
+            SvTEMP_off(sv);
+            return;
+        }
 #ifdef DEBUGGING
         if (SvTEMP(sv)) {
             Perl_ck_warner_d(aTHX_ packWARN(WARN_DEBUGGING),
@@ -7288,11 +7295,6 @@ Perl_sv_free2(pTHX_ SV *const sv, const U32 rc)
             return;
         }
 #endif
-        if (SvIMMORTAL(sv)) {
-            /* make sure SvREFCNT(sv)==0 happens very seldom */
-            SvREFCNT(sv) = SvREFCNT_IMMORTAL;
-            return;
-        }
         sv_clear(sv);
         if (! SvREFCNT(sv)) /* may have have been resurrected */
             del_SV(sv);

@@ -5,15 +5,15 @@
 [ this is a template for a new perldelta file.  Any text flagged as XXX needs
 to be processed before release. ]
 
-perldelta - what is new for perl v5.39.6
+perldelta - what is new for perl v5.39.7
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.39.5 release and the 5.39.6
+This document describes differences between the 5.39.6 release and the 5.39.7
 release.
 
-If you are upgrading from an earlier release such as 5.39.4, first read
-L<perl5395delta>, which describes differences between 5.39.4 and 5.39.5.
+If you are upgrading from an earlier release such as 5.39.5, first read
+L<perl5396delta>, which describes differences between 5.39.5 and 5.39.6.
 
 =head1 Notice
 
@@ -35,36 +35,6 @@ L</Selected Bug Fixes> section.
 
 [ List each security issue as a =head2 entry ]
 
-This release fixes the following security issues.
-
-=head2 CVE-2023-47038 - Write past buffer end via illegal user-defined Unicode property
-
-This vulnerability was reported directly to the Perl security team by
-Nathan Mills C<the.true.nathan.mills@gmail.com>.
-
-A crafted regular expression when compiled by perl 5.30.0 through
-5.38.0 can cause a one-byte attacker controlled buffer overflow in a
-heap allocated buffer.
-
-=head2 CVE-2023-47039 - Perl for Windows binary hijacking vulnerability
-
-This vulnerability was reported to the Intel Product Security Incident
-Response Team (PSIRT) by GitHub user ycdxsb
-L<https://github.com/ycdxsb/WindowsPrivilegeEscalation>. PSIRT then
-reported it to the Perl security team.
-
-Perl for Windows relies on the system path environment variable to
-find the shell (C<cmd.exe>). When running an executable which uses
-Windows Perl interpreter, Perl attempts to find and execute C<cmd.exe>
-within the operating system. However, due to path search order issues,
-Perl initially looks for cmd.exe in the current working directory.
-
-An attacker with limited privileges can exploit this behavior by
-placing C<cmd.exe> in locations with weak permissions, such as
-C<C:\ProgramData>. By doing so, when an administrator attempts to use
-this executable from these compromised locations, arbitrary code can
-be executed.
-
 =head1 Incompatible Changes
 
 XXX For a release on a stable branch, this section aspires to be:
@@ -73,28 +43,7 @@ XXX For a release on a stable branch, this section aspires to be:
     If any exist, they are bugs, and we request that you submit a
     report.  See L</Reporting Bugs> below.
 
-=head2 C<return> no longer allows an indirect object
-
-The C<return> operator syntax now rejects indirect objects.  In most
-cases this would compile and even run, but wasn't documented and could
-produce confusing results, for example:
-
-  # note that sum hasn't been defined
-  sub sum_positive {
-    return sum grep $_ > 0, @_;
-    # unexpectedly parsed as:
-    #   return *sum, grep $_ > 0, @_;
-    # ... with the bareword acting like an extra (typeglob) argument
-  }
-  say for sum_positive(-1, 2, 3)
-
-produced:
-
-  *main::sum
-  2
-  3
-
-[GH #21716]
+[ List each incompatible change as a =head2 entry ]
 
 =head1 Deprecations
 
@@ -180,19 +129,6 @@ L<XXX> has been upgraded from version A.xx to B.yy.
 
 XXX If there was something important to note about this change, include that here.
 
-=item *
-
-L<threads> has been upgraded from version 2.39 to 2.40.
-
-An internal error has been made slightly more verbose
-(C<Out of memory in perl:threads:ithread_create>).
-
-=item *
-
-L<Fcntl> has been upgraded from version 1.15 to 1.16.
-
-This version adds support for the C<O_TMPFILE> flag on Linux.
-
 =back
 
 =head2 Removed Modules and Pragmata
@@ -260,20 +196,7 @@ and New Warnings
 
 =item *
 
-L<Missing comma after first argument to return|perldiag/"Missing comma after first argument to return">
-
-(F) While certain operators allow you to specify a filehandle or an
-"indirect object" before the argument list, C<return> isn't one of
-them.
-
-=item *
-
-L<Out of memory during vec in lvalue context|perldiag/"Out of memory during vec in lvalue context">
-
-(F) An attempt was made to extend a string beyond the largest possible memory
-allocation by assigning to C<vec()> called with a large second argument.
-
-(This case used to throw a generic C<Out of memory!> error.)
+XXX L<message|perldiag/"message">
 
 =back
 
@@ -295,33 +218,7 @@ XXX Changes (i.e. rewording) of diagnostic messages go here
 
 =item *
 
-L<Name "%s::%s" used only once: possible typo|perldiag/"Name "%s::%s" used only once: possible typo">
-
-This warning now honors being marked as fatal.  [GH #13814]
-
-=item *
-
-L<Out of memory in perl:%s|perldiag/"Out of memory in perl:%s">
-
-There used to be several places in the perl core that would print a generic
-C<Out of memory!> message and abort when memory allocation failed, giving no
-indication which program it was that ran out of memory.  These have been
-modified to include the word C<perl> and the general area of the allocation
-failure, e.g. C<Out of memory in perl:util:safesysrealloc>.  [GH #21672]
-
-=item *
-
-L<Possible precedence issue with control flow operator (%s)|perldiag/"Possible precedence issue with control flow operator (%s)">
-
-This warning now mentions the name of the control flow operator that triggered
-the diagnostic (e.g. C<return>, C<exit>, C<die>, etc).
-
-It also covers more cases: Previously, the warning was only triggered if a
-low-precedence logical operator (like C<and>, C<or>, C<xor>) was involved.  Now
-it is also shown for misleading code like this:
-
-    exit $x ? 0 : 1;  # actually parses as: exit($x) ? 0 : 1;
-    exit $x == 0;     # actually parses as: exit($x) == 0;
+XXX Describe change here
 
 =back
 
@@ -386,10 +283,7 @@ made:
 
 =item *
 
-The test F<t/porting/libperl.t> will no longer run in maint releases.
-This test is sensitive to changes in the output of F<nm> on various
-platforms, and tarballs aren't updated as we update this test in
-blead.  [GH #21677]
+XXX
 
 =back
 
@@ -463,7 +357,7 @@ XXX
 XXX Important bug fixes in the core language are summarized here.  Bug fixes in
 files in F<ext/> and F<lib/> are best summarized in L</Modules and Pragmata>.
 
-Include references to GitHub issues and PRs as: [GH #12345] and the release
+XXX Include references to GitHub issues and PRs as: [GH #12345] and the release
 manager will later use a regex to expand these into links.
 
 [ List each fix as an =item entry ]
@@ -472,11 +366,7 @@ manager will later use a regex to expand these into links.
 
 =item *
 
-The tmps (mortal) stack now grows exponentially.  Previously it grew
-linearly, so if it was growing incrementally, such as through many
-calls to sv_2mortal(), on a system where realloc() is O(size), the
-performance would be O(n*n).  With exponential grows this changes to
-amortized O(n).  [GH #21654]
+XXX
 
 =back
 
@@ -516,7 +406,7 @@ died, add a short obituary here.
 
 XXX Generate this with:
 
-  perl Porting/acknowledgements.pl v5.39.5..HEAD
+  perl Porting/acknowledgements.pl v5.39.6..HEAD
 
 =head1 Reporting Bugs
 
