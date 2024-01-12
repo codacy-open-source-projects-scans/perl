@@ -5351,7 +5351,7 @@ PERL_CALLCONV void
 Perl_xs_boot_epilog(pTHX_ const SSize_t ax);
 #define PERL_ARGS_ASSERT_XS_BOOT_EPILOG
 
-PERL_CALLCONV SSize_t
+PERL_CALLCONV Stack_off_t
 Perl_xs_handshake(const U32 key, void *v_my_perl, const char *file, ...);
 #define PERL_ARGS_ASSERT_XS_HANDSHAKE           \
         assert(v_my_perl); assert(file)
@@ -6996,6 +6996,14 @@ S_is_locale_utf8(pTHX_ const char *locale);
 # define PERL_ARGS_ASSERT_IS_LOCALE_UTF8        \
         assert(locale)
 
+STATIC const char *
+S_save_to_buffer(pTHX_ const char *string, char **buf, Size_t *buf_size);
+# define PERL_ARGS_ASSERT_SAVE_TO_BUFFER
+
+STATIC void
+S_set_save_buffer_min_size(pTHX_ const Size_t min_len, char **buf, Size_t *buf_size);
+# define PERL_ARGS_ASSERT_SET_SAVE_BUFFER_MIN_SIZE
+
 STATIC char *
 S_strftime8(pTHX_ const char *fmt, const struct tm *mytm, const utf8ness_t fmt_utf8ness, utf8ness_t *result_utf8ness, const bool came_from_sv);
 # define PERL_ARGS_ASSERT_STRFTIME8             \
@@ -7007,6 +7015,14 @@ S_strftime_tm(pTHX_ const char *fmt, const struct tm *mytm)
 # define PERL_ARGS_ASSERT_STRFTIME_TM           \
         assert(fmt); assert(mytm)
 
+# if  defined(HAS_IGNORED_LOCALE_CATEGORIES_) || !defined(HAS_NL_LANGINFO) || \
+     !defined(LC_MESSAGES)
+STATIC const char *
+S_emulate_langinfo(pTHX_ const int item, const char *locale, char **retbufp, Size_t *retbuf_sizep, utf8ness_t *utf8ness);
+#   define PERL_ARGS_ASSERT_EMULATE_LANGINFO    \
+        assert(locale); assert(retbufp)
+
+# endif
 # if defined(HAS_LOCALECONV)
 STATIC HV *
 S_my_localeconv(pTHX_ const int item);
@@ -7023,15 +7039,15 @@ STATIC const char *
 S_calculate_LC_ALL_string(pTHX_ const char **category_locales_list, const calc_LC_ALL_format format, const calc_LC_ALL_return returning, const line_t caller_line);
 #   define PERL_ARGS_ASSERT_CALCULATE_LC_ALL_STRING
 
+STATIC const char *
+S_external_call_langinfo(pTHX_ const nl_item item, utf8ness_t *utf8ness, char **retbufp, Size_t *retbuf_sizep);
+#   define PERL_ARGS_ASSERT_EXTERNAL_CALL_LANGINFO \
+        assert(retbufp)
+
 STATIC locale_category_index
 S_get_category_index_helper(pTHX_ const int category, bool *success, const line_t caller_line)
         __attribute__warn_unused_result__;
 #   define PERL_ARGS_ASSERT_GET_CATEGORY_INDEX_HELPER
-
-STATIC const char *
-S_my_langinfo_i(pTHX_ const nl_item item, const locale_category_index cat_index, const char *locale, char **retbufp, Size_t *retbuf_sizep, utf8ness_t *utf8ness);
-#   define PERL_ARGS_ASSERT_MY_LANGINFO_I       \
-        assert(locale); assert(retbufp)
 
 STATIC const char *
 S_native_querylocale_i(pTHX_ const locale_category_index cat_index);
@@ -7055,14 +7071,6 @@ STATIC void
 S_restore_toggled_locale_i(pTHX_ const locale_category_index cat_index, const char *original_locale, const line_t caller_line);
 #   define PERL_ARGS_ASSERT_RESTORE_TOGGLED_LOCALE_I
 
-STATIC const char *
-S_save_to_buffer(pTHX_ const char *string, char **buf, Size_t *buf_size);
-#   define PERL_ARGS_ASSERT_SAVE_TO_BUFFER
-
-STATIC void
-S_set_save_buffer_min_size(pTHX_ const Size_t min_len, char **buf, Size_t *buf_size);
-#   define PERL_ARGS_ASSERT_SET_SAVE_BUFFER_MIN_SIZE
-
 PERL_STATIC_NO_RET void
 S_setlocale_failure_panic_via_i(pTHX_ const locale_category_index cat_index, const char *current, const char *failed, const line_t proxy_caller_line, const line_t immediate_caller_line, const char *higher_caller_file, const line_t higher_caller_line)
         __attribute__noreturn__;
@@ -7079,6 +7087,13 @@ STATIC char *
 S_my_setlocale_debug_string_i(pTHX_ const locale_category_index cat_index, const char *locale, const char *retval, const line_t line)
         __attribute__warn_unused_result__;
 #     define PERL_ARGS_ASSERT_MY_SETLOCALE_DEBUG_STRING_I
+
+#   endif
+#   if defined(HAS_NL_LANGINFO)
+STATIC const char *
+S_my_langinfo_i(pTHX_ const nl_item item, locale_category_index cat_index, const char *locale, char **retbufp, Size_t *retbuf_sizep, utf8ness_t *utf8ness);
+#     define PERL_ARGS_ASSERT_MY_LANGINFO_I     \
+        assert(locale); assert(retbufp)
 
 #   endif
 #   if defined(LC_ALL)

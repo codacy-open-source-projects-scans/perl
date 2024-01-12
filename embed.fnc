@@ -3786,7 +3786,8 @@ Adp	|void	|wrap_op_checker|Optype opcode				\
 p	|void	|write_to_stderr|NN SV *msv
 Xp	|void	|xs_boot_epilog |const SSize_t ax
 
-FTXopv	|SSize_t|xs_handshake	|const U32 key				\
+FTXopv	|Stack_off_t|xs_handshake					\
+				|const U32 key				\
 				|NN void *v_my_perl			\
 				|NN const char *file			\
 				|...
@@ -4413,6 +4414,14 @@ S	|void	|ints_to_tm	|NN struct tm *my_tm			\
 				|int yday				\
 				|int isdst
 S	|bool	|is_locale_utf8 |NN const char *locale
+S	|const char *|save_to_buffer					\
+				|NULLOK const char *string		\
+				|NULLOK char **buf			\
+				|NULLOK Size_t *buf_size
+S	|void	|set_save_buffer_min_size				\
+				|const Size_t min_len			\
+				|NULLOK char **buf			\
+				|NULLOK Size_t *buf_size
 S	|char * |strftime8	|NN const char *fmt			\
 				|NN const struct tm *mytm		\
 				|const utf8ness_t fmt_utf8ness		\
@@ -4420,6 +4429,15 @@ S	|char * |strftime8	|NN const char *fmt			\
 				|const bool came_from_sv
 Sf	|char * |strftime_tm	|NN const char *fmt			\
 				|NN const struct tm *mytm
+# if  defined(HAS_IGNORED_LOCALE_CATEGORIES_) || !defined(HAS_NL_LANGINFO) || \
+     !defined(LC_MESSAGES)
+S	|const char *|emulate_langinfo					\
+				|const int item 			\
+				|NN const char *locale			\
+				|NN char **retbufp			\
+				|NULLOK Size_t *retbuf_sizep		\
+				|NULLOK utf8ness_t *utf8ness
+# endif
 # if defined(HAS_LOCALECONV)
 S	|HV *	|my_localeconv	|const int item
 S	|void	|populate_hash_from_C_localeconv			\
@@ -4435,19 +4453,17 @@ S	|const char *|calculate_LC_ALL_string					\
 				|const calc_LC_ALL_format format		\
 				|const calc_LC_ALL_return returning		\
 				|const line_t caller_line
+S	|const char *|external_call_langinfo				\
+				|const nl_item item			\
+				|NULLOK utf8ness_t *utf8ness		\
+				|NN char **retbufp			\
+				|NULLOK Size_t *retbuf_sizep
 RS	|locale_category_index|get_category_index_helper		\
 				|const int category			\
 				|NULLOK bool *success			\
 				|const line_t caller_line
 Ri	|const char *|mortalized_pv_copy				\
 				|NULLOK const char * const pv
-S	|const char *|my_langinfo_i					\
-				|const nl_item item			\
-				|const locale_category_index cat_index	\
-				|NN const char *locale			\
-				|NN char **retbufp			\
-				|NULLOK Size_t *retbuf_sizep		\
-				|NULLOK utf8ness_t *utf8ness
 S	|const char *|native_querylocale_i				\
 				|const locale_category_index cat_index
 S	|void	|new_LC_ALL	|NN const char *lc_all			\
@@ -4467,10 +4483,6 @@ So	|void	|restore_toggled_locale_i				\
 				|const locale_category_index cat_index	\
 				|NULLOK const char *original_locale	\
 				|const line_t caller_line
-S	|const char *|save_to_buffer					\
-				|NULLOK const char *string		\
-				|NULLOK char **buf			\
-				|NULLOK Size_t *buf_size
 Sr	|void	|setlocale_failure_panic_via_i				\
 				|const locale_category_index cat_index	\
 				|NULLOK const char *current		\
@@ -4479,10 +4491,6 @@ Sr	|void	|setlocale_failure_panic_via_i				\
 				|const line_t immediate_caller_line	\
 				|NN const char *higher_caller_file	\
 				|const line_t higher_caller_line
-S	|void	|set_save_buffer_min_size				\
-				|const Size_t min_len			\
-				|NULLOK char **buf			\
-				|NULLOK Size_t *buf_size
 So	|const char *|toggle_locale_i					\
 				|const locale_category_index cat_index	\
 				|NN const char *new_locale		\
@@ -4493,6 +4501,15 @@ RS	|char * |my_setlocale_debug_string_i				\
 				|NULLOK const char *locale		\
 				|NULLOK const char *retval		\
 				|const line_t line
+#   endif
+#   if defined(HAS_NL_LANGINFO)
+S	|const char *|my_langinfo_i					\
+				|const nl_item item			\
+				|locale_category_index cat_index	\
+				|NN const char *locale			\
+				|NN char **retbufp			\
+				|NULLOK Size_t *retbuf_sizep		\
+				|NULLOK utf8ness_t *utf8ness
 #   endif
 #   if defined(LC_ALL)
 S	|void	|give_perl_locale_control				\

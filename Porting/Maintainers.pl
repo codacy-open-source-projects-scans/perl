@@ -762,7 +762,8 @@ our %Modules = (
     },
 
     'Math::BigInt' => {
-        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-2.003001.tar.gz',
+        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-2.003002.tar.gz',
+        'SYNCINFO'     => 'corion on Thu Jan 11 20:23:12 2024',
         'SYNCINFO'     => 'book on Tue Dec 26 22:44:58 2023',
         'FILES'        => q[cpan/Math-BigInt],
         'EXCLUDED'     => [
@@ -775,7 +776,8 @@ our %Modules = (
     },
 
     'Math::BigInt::FastCalc' => {
-        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-FastCalc-0.5016.tar.gz',
+        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-FastCalc-0.5018.tar.gz',
+        'SYNCINFO'     => 'corion on Thu Jan 11 20:24:21 2024',
         'SYNCINFO'     => 'jkeenan on Sat Dec 30 14:31:28 2023',
         'SYNCINFO'     => 'jkeenan on Sun Sep 24 08:29:56 2023',
         'FILES'        => q[cpan/Math-BigInt-FastCalc],
@@ -924,7 +926,8 @@ our %Modules = (
     },
 
     'Pod::Checker' => {
-        'DISTRIBUTION' => 'MAREKR/Pod-Checker-1.75.tar.gz',
+        'DISTRIBUTION' => 'MAREKR/Pod-Checker-1.76.tar.gz',
+        'SYNCINFO'     => 'corion on Tue Jan  9 20:34:18 2024',
         'FILES'        => q[cpan/Pod-Checker],
     },
 
