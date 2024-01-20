@@ -2492,7 +2492,7 @@ ATdo	|const char *|Perl_langinfo					\
 				|const nl_item item
 ATdo	|const char *|Perl_langinfo8					\
 				|const nl_item item			\
-				|NULLOK utf8ness_t *utf8ness
+				|NN utf8ness_t *utf8ness
 p	|int	|PerlLIO_dup2_cloexec					\
 				|int oldfd				\
 				|int newfd
@@ -3194,6 +3194,7 @@ CMbp	|IV	|sv_2iv 	|NN SV *sv
 Adp	|IV	|sv_2iv_flags	|NN SV * const sv			\
 				|const I32 flags
 Adip	|IV	|SvIV_nomg	|NN SV *sv
+Adp	|SV *	|sv_langinfo	|const nl_item item
 Adp	|STRLEN |sv_len 	|NULLOK SV * const sv
 Adp	|STRLEN |sv_len_utf8	|NULLOK SV * const sv
 Adp	|STRLEN |sv_len_utf8_nomg					\
@@ -4414,6 +4415,13 @@ S	|void	|ints_to_tm	|NN struct tm *my_tm			\
 				|int yday				\
 				|int isdst
 S	|bool	|is_locale_utf8 |NN const char *locale
+S	|HV *	|my_localeconv	|const int item
+S	|void	|populate_hash_from_C_localeconv			\
+				|NN HV *hv				\
+				|NN const char *locale			\
+				|const U32 which_mask			\
+				|NN const lconv_offset_t *strings[2]	\
+				|NN const lconv_offset_t *integers[2]
 S	|const char *|save_to_buffer					\
 				|NULLOK const char *string		\
 				|NULLOK char **buf			\
@@ -4429,23 +4437,12 @@ S	|char * |strftime8	|NN const char *fmt			\
 				|const bool came_from_sv
 Sf	|char * |strftime_tm	|NN const char *fmt			\
 				|NN const struct tm *mytm
-# if  defined(HAS_IGNORED_LOCALE_CATEGORIES_) || !defined(HAS_NL_LANGINFO) || \
-     !defined(LC_MESSAGES)
+# if defined(HAS_MISSING_LANGINFO_ITEM_) || !defined(HAS_NL_LANGINFO)
 S	|const char *|emulate_langinfo					\
 				|const int item 			\
 				|NN const char *locale			\
-				|NN char **retbufp			\
-				|NULLOK Size_t *retbuf_sizep		\
+				|NN SV *sv				\
 				|NULLOK utf8ness_t *utf8ness
-# endif
-# if defined(HAS_LOCALECONV)
-S	|HV *	|my_localeconv	|const int item
-S	|void	|populate_hash_from_C_localeconv			\
-				|NN HV *hv				\
-				|NN const char *locale			\
-				|const U32 which_mask			\
-				|NN const lconv_offset_t *strings[2]	\
-				|NN const lconv_offset_t *integers[2]
 # endif
 # if defined(USE_LOCALE)
 S	|const char *|calculate_LC_ALL_string					\
@@ -4455,9 +4452,8 @@ S	|const char *|calculate_LC_ALL_string					\
 				|const line_t caller_line
 S	|const char *|external_call_langinfo				\
 				|const nl_item item			\
-				|NULLOK utf8ness_t *utf8ness		\
-				|NN char **retbufp			\
-				|NULLOK Size_t *retbuf_sizep
+				|NN SV *sv				\
+				|NULLOK utf8ness_t *utf8ness
 RS	|locale_category_index|get_category_index_helper		\
 				|const int category			\
 				|NULLOK bool *success			\
@@ -4503,12 +4499,11 @@ RS	|char * |my_setlocale_debug_string_i				\
 				|const line_t line
 #   endif
 #   if defined(HAS_NL_LANGINFO)
-S	|const char *|my_langinfo_i					\
+S	|const char *|langinfo_sv_i					\
 				|const nl_item item			\
 				|locale_category_index cat_index	\
 				|NN const char *locale			\
-				|NN char **retbufp			\
-				|NULLOK Size_t *retbuf_sizep		\
+				|NN SV *sv				\
 				|NULLOK utf8ness_t *utf8ness
 #   endif
 #   if defined(LC_ALL)

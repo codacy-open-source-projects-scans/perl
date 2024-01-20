@@ -438,7 +438,7 @@ our %Modules = (
     },
 
     'Exporter' => {
-        'DISTRIBUTION' => 'TODDR/Exporter-5.77.tar.gz',
+        'DISTRIBUTION' => 'TODDR/Exporter-5.78.tar.gz',
         'FILES'        => q[dist/Exporter],
         'EXCLUDED' => [
             qw( t/pod.t
@@ -658,7 +658,7 @@ our %Modules = (
     },
 
     'IO' => {
-        'DISTRIBUTION' => 'TODDR/IO-1.51.tar.gz',
+        'DISTRIBUTION' => 'TODDR/IO-1.55.tar.gz',
         'FILES'        => q[dist/IO],
         'EXCLUDED'     => ['t/test.pl'],
     },
@@ -741,7 +741,7 @@ our %Modules = (
     },
 
     'Locale::Maketext' => {
-        'DISTRIBUTION' => 'TODDR/Locale-Maketext-1.32.tar.gz',
+        'DISTRIBUTION' => 'TODDR/Locale-Maketext-1.33.tar.gz',
         'FILES'        => q[dist/Locale-Maketext],
         'EXCLUDED'     => [
             qw(

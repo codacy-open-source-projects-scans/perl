@@ -5023,8 +5023,9 @@ first encountered C<NUL> byte.
 In the forms that take a C<ptr> argument, if it is NULL, the SV will become
 undefined.
 
-The UTF-8 flag is not changed by these functions.  A terminating NUL byte is
-guaranteed in the result.
+B<The UTF-8 flag is not changed by these functions.>
+
+A terminating NUL byte is guaranteed in the result.
 
 The C<_mg> forms handle 'set' magic; the other forms skip all magic.
 
@@ -16161,8 +16162,8 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     PL_wcrtomb_ps = proto_perl->Iwcrtomb_ps;
 #endif
 
-    PL_langinfo_buf = NULL;
-    PL_langinfo_bufsize = 0;
+    PL_langinfo_sv = newSVpvs("");
+    PL_scratch_langinfo = newSVpvs("");
 
     PL_setlocale_buf = NULL;
     PL_setlocale_bufsize = 0;

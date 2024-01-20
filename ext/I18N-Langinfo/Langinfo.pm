@@ -11,66 +11,106 @@ require XSLoader;
 our @EXPORT = qw(langinfo);
 
 our @EXPORT_OK = qw(
-	ABDAY_1
-	ABDAY_2
-	ABDAY_3
-	ABDAY_4
-	ABDAY_5
-	ABDAY_6
-	ABDAY_7
-	ABMON_1
-	ABMON_10
-	ABMON_11
-	ABMON_12
-	ABMON_2
-	ABMON_3
-	ABMON_4
-	ABMON_5
-	ABMON_6
-	ABMON_7
-	ABMON_8
-	ABMON_9
-	ALT_DIGITS
-	AM_STR
-	CODESET
-	CRNCYSTR
-	DAY_1
-	DAY_2
-	DAY_3
-	DAY_4
-	DAY_5
-	DAY_6
-	DAY_7
-	D_FMT
-	D_T_FMT
-	ERA
-	ERA_D_FMT
-	ERA_D_T_FMT
-	ERA_T_FMT
-	MON_1
-	MON_10
-	MON_11
-	MON_12
-	MON_2
-	MON_3
-	MON_4
-	MON_5
-	MON_6
-	MON_7
-	MON_8
-	MON_9
-	NOEXPR
-	NOSTR
-	PM_STR
-	RADIXCHAR
-	THOUSEP
-	T_FMT
-	T_FMT_AMPM
-	YESEXPR
-	YESSTR
-);
+                    ABDAY_1
+                    ABDAY_2
+                    ABDAY_3
+                    ABDAY_4
+                    ABDAY_5
+                    ABDAY_6
+                    ABDAY_7
+                    ABMON_1
+                    ABMON_2
+                    ABMON_3
+                    ABMON_4
+                    ABMON_5
+                    ABMON_6
+                    ABMON_7
+                    ABMON_8
+                    ABMON_9
+                    ABMON_10
+                    ABMON_11
+                    ABMON_12
+                    ALT_DIGITS
+                    AM_STR
+                    CODESET
+                    CRNCYSTR
+                    DAY_1
+                    DAY_2
+                    DAY_3
+                    DAY_4
+                    DAY_5
+                    DAY_6
+                    DAY_7
+                    D_FMT
+                    D_T_FMT
+                    ERA
+                    ERA_D_FMT
+                    ERA_D_T_FMT
+                    ERA_T_FMT
+                    MON_1
+                    MON_2
+                    MON_3
+                    MON_4
+                    MON_5
+                    MON_6
+                    MON_7
+                    MON_8
+                    MON_9
+                    MON_10
+                    MON_11
+                    MON_12
+                    NOEXPR
+                    NOSTR
+                    PM_STR
+                    RADIXCHAR
+                    THOUSEP
+                    T_FMT
+                    T_FMT_AMPM
+                    YESEXPR
+                    YESSTR
+                    _NL_ADDRESS_POSTAL_FMT
+                    _NL_ADDRESS_COUNTRY_NAME
+                    _NL_ADDRESS_COUNTRY_POST
+                    _NL_ADDRESS_COUNTRY_AB2
+                    _NL_ADDRESS_COUNTRY_AB3
+                    _NL_ADDRESS_COUNTRY_CAR
+                    _NL_ADDRESS_COUNTRY_NUM
+                    _NL_ADDRESS_COUNTRY_ISBN
+                    _NL_ADDRESS_LANG_NAME
+                    _NL_ADDRESS_LANG_AB
+                    _NL_ADDRESS_LANG_TERM
+                    _NL_ADDRESS_LANG_LIB
+                    _NL_IDENTIFICATION_TITLE
+                    _NL_IDENTIFICATION_SOURCE
+                    _NL_IDENTIFICATION_ADDRESS
+                    _NL_IDENTIFICATION_CONTACT
+                    _NL_IDENTIFICATION_EMAIL
+                    _NL_IDENTIFICATION_TEL
+                    _NL_IDENTIFICATION_FAX
+                    _NL_IDENTIFICATION_LANGUAGE
+                    _NL_IDENTIFICATION_TERRITORY
+                    _NL_IDENTIFICATION_AUDIENCE
+                    _NL_IDENTIFICATION_APPLICATION
+                    _NL_IDENTIFICATION_ABBREVIATION
+                    _NL_IDENTIFICATION_REVISION
+                    _NL_IDENTIFICATION_DATE
+                    _NL_IDENTIFICATION_CATEGORY
+                    _NL_MEASUREMENT_MEASUREMENT
+                    _NL_NAME_NAME_FMT
+                    _NL_NAME_NAME_GEN
+                    _NL_NAME_NAME_MR
+                    _NL_NAME_NAME_MRS
+                    _NL_NAME_NAME_MISS
+                    _NL_NAME_NAME_MS
+                    _NL_PAPER_HEIGHT
+                    _NL_PAPER_WIDTH
+                    _NL_TELEPHONE_TEL_INT_FMT
+                    _NL_TELEPHONE_TEL_DOM_FMT
+                    _NL_TELEPHONE_INT_SELECT
+                    _NL_TELEPHONE_INT_PREFIX
+                   );
 
-our $VERSION = '0.22';
+our $VERSION = '0.23';
 
 XSLoader::load();
 
@@ -149,9 +189,40 @@ meridiem time formats:
 =item *
 
 For the character code set being used (such as "ISO8859-1", "cp850",
-"koi8-r", "sjis", "utf8", etc.), and for the currency string:
+"koi8-r", "sjis", "utf8", etc.):
 
-    CODESET CRNCYSTR
+    CODESET
+
+=item *
+
+For the symbol or string of characters that indicates a number is a monetary
+value:
+
+    CRNCYSTR
+
+An example is the dollar sign C<$>.  Some locales not associated with
+particular locations may have an empty currency string.  (The C locale is
+one.)  Otherwise, the return of this is always prefixed by one of these three
+characters:
+
+=over
+
+=item C<->
+
+indicates that in this locale, the string precedes the numeric value, as in a
+U.S. locale: C<$9.95>.
+
+=item C<+>
+
+indicates that in this locale, the string follows the numeric value, like
+C<9.95USD>.
+
+=item C<.>
+
+indicates that in this locale, the string replaces the radix character, like
+C<9$95>.
+
+=back
 
 =item *
 
@@ -175,6 +246,114 @@ For the eras based on typically some ruler, such as the Japanese Emperor
 (naturally only defined in the appropriate locales):
 
     ERA ERA_D_FMT ERA_D_T_FMT ERA_T_FMT
+
+=back
+
+In addition, Linux boxes have extra items, as follows.  (When called from
+other platform types, these return a stub value, of not much use.)
+
+=over
+
+=item C<_NL_ADDRESS_POSTAL_FMT>
+
+=item C<_NL_ADDRESS_COUNTRY_NAME>
+
+=item C<_NL_ADDRESS_COUNTRY_POST>
+
+=item C<_NL_ADDRESS_COUNTRY_AB2>
+
+=item C<_NL_ADDRESS_COUNTRY_AB3>
+
+=item C<_NL_ADDRESS_COUNTRY_CAR>
+
+=item C<_NL_ADDRESS_COUNTRY_NUM>
+
+=item C<_NL_ADDRESS_COUNTRY_ISBN>
+
+=item C<_NL_ADDRESS_LANG_NAME>
+
+=item C<_NL_ADDRESS_LANG_AB>
+
+=item C<_NL_ADDRESS_LANG_TERM>
+
+=item C<_NL_ADDRESS_LANG_LIB>
+
+On Linux boxes, these return information about the country for the current
+locale.  Further information is found in F<langinfo.h>
+
+=item C<_NL_IDENTIFICATION_TITLE>
+
+=item C<_NL_IDENTIFICATION_SOURCE>
+
+=item C<_NL_IDENTIFICATION_ADDRESS>
+
+=item C<_NL_IDENTIFICATION_CONTACT>
+
+=item C<_NL_IDENTIFICATION_EMAIL>
+
+=item C<_NL_IDENTIFICATION_TEL>
+
+=item C<_NL_IDENTIFICATION_FAX>
+
+=item C<_NL_IDENTIFICATION_LANGUAGE>
+
+=item C<_NL_IDENTIFICATION_TERRITORY>
+
+=item C<_NL_IDENTIFICATION_AUDIENCE>
+
+=item C<_NL_IDENTIFICATION_APPLICATION>
+
+=item C<_NL_IDENTIFICATION_ABBREVIATION>
+
+=item C<_NL_IDENTIFICATION_REVISION>
+
+=item C<_NL_IDENTIFICATION_DATE>
+
+=item C<_NL_IDENTIFICATION_CATEGORY>
+
+On Linux boxes, these return meta information about the current locale,
+such as how to get in touch with its maintainers.
+Further information is found in F<langinfo.h>
+
+=item C<_NL_MEASUREMENT_MEASUREMENT>
+
+On Linux boxes, it returns 1 if the metric system of measurement prevails in
+the locale; or 2 if US customary units prevail.
+
+=item C<_NL_NAME_NAME_FMT>
+
+=item C<_NL_NAME_NAME_GEN>
+
+=item C<_NL_NAME_NAME_MR>
+
+=item C<_NL_NAME_NAME_MRS>
+
+=item C<_NL_NAME_NAME_MISS>
+
+=item C<_NL_NAME_NAME_MS>
+
+On Linux boxes, these return information about how names are formatted and
+the personal salutations used in the current locale.  Further information
+is found in L<locale(7)> and F<langinfo.h>
+
+=item C<_NL_PAPER_HEIGHT>
+
+=item C<_NL_PAPER_WIDTH>
+
+On Linux boxes, these return the standard size of sheets of paper (in
+millimeters) in the current locale.
+
+=item C<_NL_TELEPHONE_TEL_INT_FMT>
+
+=item C<_NL_TELEPHONE_TEL_DOM_FMT>
+
+=item C<_NL_TELEPHONE_INT_SELECT>
+
+=item C<_NL_TELEPHONE_INT_PREFIX>
+
+On Linux boxes, these return information about how telephone numbers are
+formatted (both domestically and international calling) in the current locale.
+Further information is found in F<langinfo.h>
 
 =back
 
@@ -227,12 +406,6 @@ Always evaluates to C<%X>, the locale's appropriate time representation.
 Always evaluates to C<%c>, the locale's appropriate date and time
 representation.
 
-=item C<CRNCYSTR>
-
-The return may be incorrect for those rare locales where the currency symbol
-replaces the radix character.  If you have examples of it needing to work
-differently, please file a report at L<https://github.com/Perl/perl5/issues>.
-
 =item C<ALT_DIGITS>
 
 Currently this gives the same results as Linux does.  If you have examples of
@@ -249,6 +422,11 @@ L<https://github.com/Perl/perl5/issues>.
 
 These are derived by using C<strftime()>, and not all versions of that function
 know about them.  C<""> is returned for these on such systems.
+
+=item All C<_NL_I<foo>> items
+
+These return the same values as they do on boxes that don't have the
+appropriate underlying locale categories.
 
 =back
 
