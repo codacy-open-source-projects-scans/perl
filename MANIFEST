@@ -5714,6 +5714,7 @@ pod/perl5393delta.pod			Perl changes in version 5.39.3
 pod/perl5394delta.pod			Perl changes in version 5.39.4
 pod/perl5395delta.pod			Perl changes in version 5.39.5
 pod/perl5396delta.pod			Perl changes in version 5.39.6
+pod/perl5397delta.pod			Perl changes in version 5.39.7
 pod/perl561delta.pod			Perl changes in version 5.6.1
 pod/perl56delta.pod			Perl changes in version 5.6
 pod/perl581delta.pod			Perl changes in version 5.8.1
@@ -6489,6 +6490,7 @@ t/porting/header_parser.t		Check that regen/HeaderParser.pm works as expected
 t/porting/known_pod_issues.dat		Data file for porting/podcheck.t
 t/porting/libperl.t			Check libperl.a sanity
 t/porting/maintainers.t			Test that Porting/Maintainers.pl is up to date
+t/porting/makerel.t			Test that files used by Porting/makerel exist
 t/porting/manifest.t			Test that this MANIFEST file is well formed
 t/porting/perlfunc.t			Test that Functions_pm.PL can parse perlfunc.pod
 t/porting/pod_rules.t			Check that various pod lists are consistent

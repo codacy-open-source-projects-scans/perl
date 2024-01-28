@@ -5,15 +5,15 @@
 [ this is a template for a new perldelta file.  Any text flagged as XXX needs
 to be processed before release. ]
 
-perldelta - what is new for perl v5.39.7
+perldelta - what is new for perl v5.39.8
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.39.6 release and the 5.39.7
+This document describes differences between the 5.39.7 release and the 5.39.8
 release.
 
-If you are upgrading from an earlier release such as 5.39.5, first read
-L<perl5396delta>, which describes differences between 5.39.5 and 5.39.6.
+If you are upgrading from an earlier release such as 5.39.6, first read
+L<perl5397delta>, which describes differences between 5.39.6 and 5.39.7.
 
 =head1 Notice
 
@@ -125,10 +125,14 @@ XXX Remove this section if Porting/corelist-perldelta.pl did not add any content
 
 =item *
 
-L<I18N::Langinfo> has been upgraded from version 0.22 to 0.23.
+L<XXX> has been upgraded from version A.xx to B.yy.
 
-It now handles the additional locale categories that Linux defines
-beyond those in the POSIX Standard.
+XXX If there was something important to note about this change, include that here.
+
+L<I18N::Langinfo> has been upgraded from version 0.23 to 0.24.
+
+This fixes what is returned for the C<ALT_DIGITS> item, which has never
+before worked properly in Perl.
 
 =back
 
@@ -349,21 +353,7 @@ well.
 
 =item *
 
-C<dAX>, C<dITEMS> and hence C<dXSARGS> now declare C<AX> and C<items>
-as C<Stack_off_t> rather than C<SSize_t>.  This reverts back to
-compatibility with pre-64-bit stack support for default builds of perl
-where C<Stack_off_t> is C<I32>.  [GH #21782]
-
-=item *
-
-A new function is now available to C<XS> code, L<perlapi/sv_langinfo>.
-This provides the same information as the existing
-L<perlapi/Perl_langinfo8>, but returns an SV instead of a S<C<char *>>,
-so that programmers don't have to concern themselves with the UTF-8ness
-of the result.  This new function is now the preferred interface for
-C<XS> code to the L<nl_langinfo(3)> C<libc> function.  From Perl space,
-this information continues to be provided by the L<I18N::Langinfo>
-module.
+XXX
 
 =back
 
@@ -421,7 +411,7 @@ died, add a short obituary here.
 
 XXX Generate this with:
 
-  perl Porting/acknowledgements.pl v5.39.6..HEAD
+  perl Porting/acknowledgements.pl v5.39.8..HEAD
 
 =head1 Reporting Bugs
 
