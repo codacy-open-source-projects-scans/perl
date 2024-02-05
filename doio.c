@@ -66,6 +66,8 @@ Perl_setfd_cloexec(int fd)
     assert(fd >= 0);
 #if defined(HAS_FCNTL) && defined(F_SETFD) && defined(FD_CLOEXEC)
     (void) fcntl(fd, F_SETFD, FD_CLOEXEC);
+#elif !defined(DEBUGGING)
+    PERL_UNUSED_ARG(fd);
 #endif
 }
 
@@ -75,6 +77,8 @@ Perl_setfd_inhexec(int fd)
     assert(fd >= 0);
 #if defined(HAS_FCNTL) && defined(F_SETFD) && defined(FD_CLOEXEC)
     (void) fcntl(fd, F_SETFD, 0);
+#elif !defined(DEBUGGING)
+    PERL_UNUSED_ARG(fd);
 #endif
 }
 
@@ -2967,6 +2971,7 @@ Perl_cando(pTHX_ Mode_t mode, bool effective, const Stat_t *statbufp)
      /* Atari stat() does pretty much the same thing. we set x_bit_set_in_stat
       * too so it will actually look into the files for magic numbers
       */
+    PERL_UNUSED_ARG(effective);
     return cBOOL(mode & statbufp->st_mode);
 
 #else /* ! DOSISH */
@@ -2998,16 +3003,17 @@ Perl_cando(pTHX_ Mode_t mode, bool effective, const Stat_t *statbufp)
 }
 #endif /* ! VMS */
 
+#ifndef DOSISH
 static bool
 S_ingroup(pTHX_ Gid_t testgid, bool effective)
 {
-#ifndef PERL_IMPLICIT_SYS
+# ifndef PERL_IMPLICIT_SYS
     /* PERL_IMPLICIT_SYS like Win32: getegid() etc. require the context. */
     PERL_UNUSED_CONTEXT;
-#endif
+# endif
     if (testgid == (effective ? PerlProc_getegid() : PerlProc_getgid()))
         return TRUE;
-#ifdef HAS_GETGROUPS
+# ifdef HAS_GETGROUPS
     {
         Groups_t *gary = NULL;
         I32 anum;
@@ -3027,10 +3033,11 @@ S_ingroup(pTHX_ Gid_t testgid, bool effective)
         }
         return rc;
     }
-#else
+# else
     return FALSE;
-#endif
+# endif
 }
+#endif /* ! DOSISH */
 
 #if defined(HAS_MSG) || defined(HAS_SEM) || defined(HAS_SHM)
 

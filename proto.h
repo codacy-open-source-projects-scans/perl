@@ -2752,6 +2752,10 @@ newAV_alloc_x(pTHX_ SSize_t size)
 newAV_alloc_xz(pTHX_ SSize_t size)
         __attribute__warn_unused_result__; */
 
+/* PERL_CALLCONV AV *
+newAV_mortal(pTHX)
+        __attribute__warn_unused_result__; */
+
 PERL_CALLCONV AV *
 Perl_newAVav(pTHX_ AV *oav)
         __attribute__warn_unused_result__;
@@ -6659,11 +6663,6 @@ S_exec_failed(pTHX_ const char *cmd, int fd, int do_report);
         assert(cmd)
 
 STATIC bool
-S_ingroup(pTHX_ Gid_t testgid, bool effective)
-        __attribute__warn_unused_result__;
-# define PERL_ARGS_ASSERT_INGROUP
-
-STATIC bool
 S_is_fork_open(const char *name);
 # define PERL_ARGS_ASSERT_IS_FORK_OPEN          \
         assert(name)
@@ -6679,6 +6678,13 @@ S_openn_setup(pTHX_ GV *gv, char *mode, PerlIO **saveifp, PerlIO **saveofp, int 
         assert(gv); assert(mode); assert(saveifp); assert(saveofp); assert(savefd); \
         assert(savetype)
 
+# if !defined(DOSISH)
+STATIC bool
+S_ingroup(pTHX_ Gid_t testgid, bool effective)
+        __attribute__warn_unused_result__;
+#   define PERL_ARGS_ASSERT_INGROUP
+
+# endif
 #endif /* defined(PERL_IN_DOIO_C) */
 #if defined(PERL_IN_DOOP_C)
 STATIC Size_t

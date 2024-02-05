@@ -5596,11 +5596,10 @@ S_populate_hash_from_localeconv(pTHX_ HV * hv,
 
 #    ifdef USE_LOCALE_NUMERIC
 
-    /* We need to toggle to the underlying NUMERIC locale if we are getting
-     * NUMERIC strings */
+    /* We need to toggle the NUMERIC locale to the desired one if we are
+     * getting NUMERIC strings */
     const char * orig_NUMERIC_locale = NULL;
     if (CALL_IS_FOR(NUMERIC)) {
-        LC_NUMERIC_LOCK(0);
 
 #      if defined(WIN32)
 
@@ -5623,14 +5622,24 @@ S_populate_hash_from_localeconv(pTHX_ HV * hv,
     }
 
 #    endif
-#    if defined(USE_LOCALE_MONETARY) && defined(WIN32)
+#    ifdef USE_LOCALE_MONETARY
 
-    /* Same Windows bug as described just above for NUMERIC.  Otherwise, no
-     * need to toggle LC_MONETARY, as it is kept in the underlying locale */
+    /* Same logic as LC_NUMERIC, and same Windows bug */
     const char * orig_MONETARY_locale = NULL;
     if (CALL_IS_FOR(MONETARY)) {
+
+#      ifdef WIN32
+
         orig_MONETARY_locale = toggle_locale_c(LC_MONETARY, "C");
         toggle_locale_c(LC_MONETARY, locale);
+
+#      else
+
+        /* No need for the extra toggle when not on Windows */
+        orig_MONETARY_locale = toggle_locale_c(LC_MONETARY, locale);
+
+#      endif
+
     }
 
 #    endif
@@ -5751,8 +5760,7 @@ S_populate_hash_from_localeconv(pTHX_ HV * hv,
 
     gwLOCALE_UNLOCK;    /* Finished with the critical section of a
                            globally-accessible buffer */
-
-#    if defined(USE_LOCALE_MONETARY) && defined(WIN32)
+#    if defined(USE_LOCALE_MONETARY)
 
     restore_toggled_locale_c(LC_MONETARY, orig_MONETARY_locale);
 
@@ -5760,9 +5768,6 @@ S_populate_hash_from_localeconv(pTHX_ HV * hv,
 #    ifdef USE_LOCALE_NUMERIC
 
     restore_toggled_locale_c(LC_NUMERIC, orig_NUMERIC_locale);
-    if (CALL_IS_FOR(NUMERIC)) {
-        LC_NUMERIC_UNLOCK;
-    }
 
 #    endif
 
@@ -6321,6 +6326,22 @@ S_langinfo_sv_i(pTHX_
             if (sep_pos) {
                 separator = *sep_pos;
             }
+            else if (strpbrk(retval, "123456789")) {
+
+                /* Alternate digits, with the possible exception of 0,
+                 * shouldn't be standard digits, so if we get any back, return
+                 * that there aren't alternate digits.  0 is an exception
+                 * because there may be locales that do not have a zero, such
+                 * as Roman numerals.  It could therefore be that alt-0 is 0,
+                 * but alt-1 better be some multi-byte Unicode character(s)
+                 * like U+2160, ROMAN NUMERAL ONE.  This clause is necessary
+                 * because the total length of the ASCII digits won't trigger
+                 * the conditional in the next clause that protects against
+                 * non-Standard libc returns, such as in Alpine platforms, but
+                 * multi-byte returns will trigger it */
+                retval = "";
+                total_len = 0;
+            }
             else if (UNLIKELY(total_len >
                                         2 * UVCHR_SKIP(PERL_UNICODE_MAX) * 4))
             {   /* But as a check against the possibility that the separator is
@@ -6438,9 +6459,8 @@ S_emulate_langinfo(pTHX_ const int item,
                          utf8ness_t * utf8ness)
 {
     PERL_ARGS_ASSERT_EMULATE_LANGINFO;
-#  ifndef USE_LOCALE
-    PERL_UNUSED_ARG(locale);
-#  endif
+    PERL_UNUSED_ARG(locale);    /* Too complicated to specify which
+                                   Configurations use this vs which don't */
 
     /* This emulates nl_langinfo() on platforms:
      *   1) where it doesn't exist; or
@@ -7231,6 +7251,12 @@ S_emulate_langinfo(pTHX_ const int item,
         }
 
         restore_toggled_locale_c(LC_TIME, orig_TIME_locale);
+
+        /* If strftime() returned an error, we return an empty string */
+        if (! temp) {
+            retval = "";
+            break;
+        }
 
         if (LIKELY(item != ALT_DIGITS)) {
 
