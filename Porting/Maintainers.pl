@@ -379,13 +379,6 @@ our %Modules = (
         'SYNCINFO'     => 'root on Sat Dec 30 21:42:47 2023',
         'FILES'        => q[cpan/Digest-MD5],
         'EXCLUDED'     => [ 'rfc1321.txt', 'bin/md5sum.pl' ],
-        'CUSTOMIZED'   => [
-            # https://github.com/Dual-Life/digest-md5/pull/24
-            'MD5.pm',
-            'MD5.xs',
-
-            't/files.t'
-        ],
     },
 
     'Digest::SHA' => {
@@ -926,7 +919,8 @@ our %Modules = (
     },
 
     'Pod::Checker' => {
-        'DISTRIBUTION' => 'MAREKR/Pod-Checker-1.76.tar.gz',
+        'DISTRIBUTION' => 'MAREKR/Pod-Checker-1.77.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Mon Feb  5 16:37:53 2024',
         'SYNCINFO'     => 'corion on Tue Jan  9 20:34:18 2024',
         'FILES'        => q[cpan/Pod-Checker],
     },
@@ -1314,8 +1308,6 @@ our %Modules = (
         # only necessary with the CPAN release.
         'CUSTOMIZED'   => [
             'lib/version.pm',
-
-            't/07locale.t'
          ],
 
         'MAP' => {

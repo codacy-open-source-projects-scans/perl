@@ -1122,6 +1122,13 @@ violations are fatal.
 #   include <xlocale.h>
 #endif
 
+/* Even if not using locales, this header should be #included so as to #define
+ * some symbols which avoid #ifdefs to get things to compile.  But make sure
+ * the macro it calls does nothing */
+#undef PERL_LOCALE_TABLE_ENTRY
+#define PERL_LOCALE_TABLE_ENTRY(name, call_back)
+#include "locale_table.h"
+
 #include "perl_langinfo.h"    /* Needed for _NL_LOCALE_NAME */
 
 /* =========================================================================
@@ -1157,15 +1164,6 @@ violations are fatal.
 #ifdef USE_LOCALE
 #   define HAS_SKIP_LOCALE_INIT /* Solely for XS code to test for this
                                    #define */
-#endif
-
-/* Even if not using locales, this header should be #included so as to #define
- * some symbols which avoid #ifdefs to get things to compile.  But make sure
- * the macro it calls does nothing */
-#ifndef USE_LOCALE
-#    undef PERL_LOCALE_TABLE_ENTRY
-#    define PERL_LOCALE_TABLE_ENTRY(name, call_back)
-#    include "locale_table.h"
 #endif
 
 /* XXX The Configure probe for categories must be updated when adding new
@@ -7454,9 +7452,11 @@ cannot have changed since the precalculation.
 
 #  define NOT_IN_NUMERIC_STANDARD_ (! PL_numeric_standard)
 
-/* We can lock the category to stay in the C locale, making requests to the
- * contrary be noops, in the dynamic scope by setting PL_numeric_standard to 2.
- * */
+/* This macro is designed to be a helper macro when we think an operation needs
+ * to take place in the underlying numeric locale category.  When 'true', the
+ * caller will attempt to toggle to that category.  But a later addition was an
+ * override that prevents that toggle when PL_numeric_standard >= 2.  The name
+ * of the macro was not changed when this was added. */
 #  define NOT_IN_NUMERIC_UNDERLYING_                                        \
                     (! PL_numeric_underlying && PL_numeric_standard < 2)
 

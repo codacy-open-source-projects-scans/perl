@@ -7033,24 +7033,16 @@ S_populate_hash_from_C_localeconv(pTHX_ HV *hv, const char *locale, const U32 wh
 # define PERL_ARGS_ASSERT_POPULATE_HASH_FROM_C_LOCALECONV \
         assert(hv); assert(locale); assert(strings); assert(integers)
 
-STATIC const char *
-S_save_to_buffer(pTHX_ const char *string, char **buf, Size_t *buf_size);
-# define PERL_ARGS_ASSERT_SAVE_TO_BUFFER
-
-STATIC void
-S_set_save_buffer_min_size(pTHX_ const Size_t min_len, char **buf, Size_t *buf_size);
-# define PERL_ARGS_ASSERT_SET_SAVE_BUFFER_MIN_SIZE
-
-STATIC char *
-S_strftime8(pTHX_ const char *fmt, const struct tm *mytm, const utf8ness_t fmt_utf8ness, utf8ness_t *result_utf8ness, const bool came_from_sv);
+STATIC bool
+S_strftime8(pTHX_ const char *fmt, SV *sv, const struct tm *mytm, const utf8ness_t fmt_utf8ness, utf8ness_t *result_utf8ness, const bool called_externally);
 # define PERL_ARGS_ASSERT_STRFTIME8             \
-        assert(fmt); assert(mytm); assert(result_utf8ness)
+        assert(fmt); assert(sv); assert(mytm); assert(result_utf8ness)
 
-STATIC char *
-S_strftime_tm(pTHX_ const char *fmt, const struct tm *mytm)
+STATIC bool
+S_strftime_tm(pTHX_ const char *fmt, SV *sv, const struct tm *mytm)
         __attribute__format__(__strftime__,pTHX_1,0);
 # define PERL_ARGS_ASSERT_STRFTIME_TM           \
-        assert(fmt); assert(mytm)
+        assert(fmt); assert(sv); assert(mytm)
 
 # if defined(HAS_MISSING_LANGINFO_ITEM_) || !defined(HAS_NL_LANGINFO)
 STATIC const char *
@@ -7095,6 +7087,14 @@ S_parse_LC_ALL_string(pTHX_ const char *string, const char **output, const parse
 STATIC void
 S_restore_toggled_locale_i(pTHX_ const locale_category_index cat_index, const char *original_locale, const line_t caller_line);
 #   define PERL_ARGS_ASSERT_RESTORE_TOGGLED_LOCALE_I
+
+STATIC const char *
+S_save_to_buffer(pTHX_ const char *string, char **buf, Size_t *buf_size);
+#   define PERL_ARGS_ASSERT_SAVE_TO_BUFFER
+
+STATIC void
+S_set_save_buffer_min_size(pTHX_ const Size_t min_len, char **buf, Size_t *buf_size);
+#   define PERL_ARGS_ASSERT_SET_SAVE_BUFFER_MIN_SIZE
 
 PERL_STATIC_NO_RET void
 S_setlocale_failure_panic_via_i(pTHX_ const locale_category_index cat_index, const char *current, const char *failed, const line_t proxy_caller_line, const line_t immediate_caller_line, const char *higher_caller_file, const line_t higher_caller_line)

@@ -4432,20 +4432,14 @@ S	|void	|populate_hash_from_C_localeconv			\
 				|const U32 which_mask			\
 				|NN const lconv_offset_t *strings[2]	\
 				|NN const lconv_offset_t *integers[2]
-S	|const char *|save_to_buffer					\
-				|NULLOK const char *string		\
-				|NULLOK char **buf			\
-				|NULLOK Size_t *buf_size
-S	|void	|set_save_buffer_min_size				\
-				|const Size_t min_len			\
-				|NULLOK char **buf			\
-				|NULLOK Size_t *buf_size
-S	|char * |strftime8	|NN const char *fmt			\
+S	|bool	|strftime8	|NN const char *fmt			\
+				|NN SV *sv				\
 				|NN const struct tm *mytm		\
 				|const utf8ness_t fmt_utf8ness		\
 				|NN utf8ness_t *result_utf8ness 	\
-				|const bool came_from_sv
-Sf	|char * |strftime_tm	|NN const char *fmt			\
+				|const bool called_externally
+Sf	|bool	|strftime_tm	|NN const char *fmt			\
+				|NN SV *sv				\
 				|NN const struct tm *mytm
 # if defined(HAS_MISSING_LANGINFO_ITEM_) || !defined(HAS_NL_LANGINFO)
 S	|const char *|emulate_langinfo					\
@@ -4489,6 +4483,10 @@ So	|void	|restore_toggled_locale_i				\
 				|const locale_category_index cat_index	\
 				|NULLOK const char *original_locale	\
 				|const line_t caller_line
+S	|const char *|save_to_buffer					\
+				|NULLOK const char *string		\
+				|NULLOK char **buf			\
+				|NULLOK Size_t *buf_size
 Sr	|void	|setlocale_failure_panic_via_i				\
 				|const locale_category_index cat_index	\
 				|NULLOK const char *current		\
@@ -4497,6 +4495,10 @@ Sr	|void	|setlocale_failure_panic_via_i				\
 				|const line_t immediate_caller_line	\
 				|NN const char *higher_caller_file	\
 				|const line_t higher_caller_line
+S	|void	|set_save_buffer_min_size				\
+				|const Size_t min_len			\
+				|NULLOK char **buf			\
+				|NULLOK Size_t *buf_size
 So	|const char *|toggle_locale_i					\
 				|const locale_category_index cat_index	\
 				|NN const char *new_locale		\
