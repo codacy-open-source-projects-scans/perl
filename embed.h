@@ -776,8 +776,6 @@
 # define sync_locale()                          Perl_sync_locale(aTHX)
 # define taint_env()                            Perl_taint_env(aTHX)
 # define taint_proper(a,b)                      Perl_taint_proper(aTHX_ a,b)
-# define thread_locale_init()                   Perl_thread_locale_init(aTHX)
-# define thread_locale_term()                   Perl_thread_locale_term(aTHX)
 # define to_uni_lower(a,b,c)                    Perl_to_uni_lower(aTHX_ a,b,c)
 # define to_uni_title(a,b,c)                    Perl_to_uni_title(aTHX_ a,b,c)
 # define to_uni_upper(a,b,c)                    Perl_to_uni_upper(aTHX_ a,b,c)
@@ -859,7 +857,8 @@
 #   define warn_nocontext                       Perl_warn_nocontext
 #   define warner_nocontext                     Perl_warner_nocontext
 # endif /* defined(MULTIPLICITY) */
-# if !defined(MULTIPLICITY) || defined(PERL_CORE)
+# if !defined(MULTIPLICITY) || defined(PERL_CORE) || \
+      defined(PERL_WANT_VARARGS)
 #   define ck_warner(a,...)                     Perl_ck_warner(aTHX_ a,__VA_ARGS__)
 #   define ck_warner_d(a,...)                   Perl_ck_warner_d(aTHX_ a,__VA_ARGS__)
 #   define croak(...)                           Perl_croak(aTHX_ __VA_ARGS__)
@@ -877,7 +876,8 @@
 #   define sv_setpvf_mg(a,...)                  Perl_sv_setpvf_mg(aTHX_ a,__VA_ARGS__)
 #   define warn(...)                            Perl_warn(aTHX_ __VA_ARGS__)
 #   define warner(a,...)                        Perl_warner(aTHX_ a,__VA_ARGS__)
-# endif /* !defined(MULTIPLICITY) || defined(PERL_CORE) */
+# endif /* !defined(MULTIPLICITY) || defined(PERL_CORE) ||
+            defined(PERL_WANT_VARARGS) */
 # if defined(MYMALLOC)
 #   define dump_mstats(a)                       Perl_dump_mstats(aTHX_ a)
 #   define get_mstats(a,b,c)                    Perl_get_mstats(aTHX_ a,b,c)
@@ -1180,7 +1180,8 @@
 #   else
 #     define magic_regdatum_set(a,b)            Perl_magic_regdatum_set(aTHX_ a,b)
 #   endif
-#   if !defined(MULTIPLICITY) || defined(PERL_CORE)
+#   if !defined(MULTIPLICITY) || defined(PERL_CORE) || \
+        defined(PERL_WANT_VARARGS)
 #     define tied_method(a,b,c,d,e,...)         Perl_tied_method(aTHX_ a,b,c,d,e,__VA_ARGS__)
 #     if defined(PERL_IN_REGCOMP_C)
 #       define re_croak(a,...)                  S_re_croak(aTHX_ a,__VA_ARGS__)
@@ -1315,12 +1316,13 @@
 #   endif /* defined(PERL_IN_HV_C) */
 #   if defined(PERL_IN_LOCALE_C)
 #     define get_locale_string_utf8ness_i(a,b,c,d) S_get_locale_string_utf8ness_i(aTHX_ a,b,c,d)
-#     define ints_to_tm(a,b,c,d,e,f,g,h,i,j)    S_ints_to_tm(aTHX_ a,b,c,d,e,f,g,h,i,j)
+#     define ints_to_tm(a,b,c,d,e,f,g,h,i,j,k)  S_ints_to_tm(aTHX_ a,b,c,d,e,f,g,h,i,j,k)
 #     define is_locale_utf8(a)                  S_is_locale_utf8(aTHX_ a)
 #     define my_localeconv(a)                   S_my_localeconv(aTHX_ a)
 #     define populate_hash_from_C_localeconv(a,b,c,d,e) S_populate_hash_from_C_localeconv(aTHX_ a,b,c,d,e)
-#     define strftime8(a,b,c,d,e,f)             S_strftime8(aTHX_ a,b,c,d,e,f)
-#     define strftime_tm(a,b,c)                 S_strftime_tm(aTHX_ a,b,c)
+#     define strftime8(a,b,c,d,e,f,g)           S_strftime8(aTHX_ a,b,c,d,e,f,g)
+#     define strftime_tm(a,b,c,d)               S_strftime_tm(aTHX_ a,b,c,d)
+#     define sv_strftime_common(a,b,c)          S_sv_strftime_common(aTHX_ a,b,c)
 #     if defined(HAS_MISSING_LANGINFO_ITEM_) || !defined(HAS_NL_LANGINFO)
 #       define emulate_langinfo(a,b,c,d)        S_emulate_langinfo(aTHX_ a,b,c,d)
 #     endif
@@ -1339,6 +1341,10 @@
 #       if defined(DEBUGGING)
 #         define my_setlocale_debug_string_i(a,b,c,d) S_my_setlocale_debug_string_i(aTHX_ a,b,c,d)
 #       endif
+#       if   defined(HAS_LOCALECONV) && \
+           ( defined(USE_LOCALE_MONETARY) || defined(USE_LOCALE_NUMERIC) )
+#         define populate_hash_from_localeconv(a,b,c,d,e) S_populate_hash_from_localeconv(aTHX_ a,b,c,d,e)
+#       endif
 #       if defined(HAS_NL_LANGINFO)
 #         define langinfo_sv_i(a,b,c,d,e)       S_langinfo_sv_i(aTHX_ a,b,c,d,e)
 #       endif
@@ -1356,9 +1362,6 @@
 #       if defined(USE_LOCALE_CTYPE)
 #         define is_codeset_name_UTF8           S_is_codeset_name_UTF8
 #         define new_ctype(a,b)                 S_new_ctype(aTHX_ a,b)
-#       endif
-#       if defined(USE_LOCALE_MONETARY) || defined(USE_LOCALE_NUMERIC)
-#         define populate_hash_from_localeconv(a,b,c,d,e) S_populate_hash_from_localeconv(aTHX_ a,b,c,d,e)
 #       endif
 #       if defined(USE_LOCALE_NUMERIC)
 #         define new_numeric(a,b)               S_new_numeric(aTHX_ a,b)
@@ -2000,7 +2003,8 @@
 #     if defined(DEBUGGING)
 #       define debug_start_match(a,b,c,d,e)     S_debug_start_match(aTHX_ a,b,c,d,e)
 #       define dump_exec_pos(a,b,c,d,e,f,g)     S_dump_exec_pos(aTHX_ a,b,c,d,e,f,g)
-#       if !defined(MULTIPLICITY) || defined(PERL_CORE)
+#       if !defined(MULTIPLICITY) || defined(PERL_CORE) || \
+            defined(PERL_WANT_VARARGS)
 #         define re_exec_indentf(a,...)         Perl_re_exec_indentf(aTHX_ a,__VA_ARGS__)
 #       endif
 #     endif
@@ -2035,20 +2039,19 @@
 #   define check_regnode_after(a,b)             Perl_check_regnode_after(aTHX_ a,b)
 #   define regnext(a)                           Perl_regnext(aTHX_ a)
 #   define regnode_after(a,b)                   Perl_regnode_after(aTHX_ a,b)
-#   if defined(DEBUGGING)
-#     if ( !defined(MULTIPLICITY) || defined(PERL_CORE) ) && \
-         (  defined(PERL_CORE)    || defined(PERL_EXT) )
+#   if defined(DEBUGGING) && ( defined(PERL_CORE) || defined(PERL_EXT) )
+#     define debug_peep(a,b,c,d,e)              Perl_debug_peep(aTHX_ a,b,c,d,e)
+#     define debug_show_study_flags(a,b,c)      Perl_debug_show_study_flags(aTHX_ a,b,c)
+#     define debug_studydata(a,b,c,d,e,f,g)     Perl_debug_studydata(aTHX_ a,b,c,d,e,f,g)
+#     define dumpuntil(a,b,c,d,e,f,g,h)         Perl_dumpuntil(aTHX_ a,b,c,d,e,f,g,h)
+#     define regprop(a,b,c,d,e)                 Perl_regprop(aTHX_ a,b,c,d,e)
+#     if !defined(MULTIPLICITY) || defined(PERL_CORE) || \
+          defined(PERL_WANT_VARARGS)
 #       define re_indentf(a,...)                Perl_re_indentf(aTHX_ a,__VA_ARGS__)
 #       define re_printf(...)                   Perl_re_printf(aTHX_ __VA_ARGS__)
 #     endif
-#     if defined(PERL_CORE) || defined(PERL_EXT)
-#       define debug_peep(a,b,c,d,e)            Perl_debug_peep(aTHX_ a,b,c,d,e)
-#       define debug_show_study_flags(a,b,c)    Perl_debug_show_study_flags(aTHX_ a,b,c)
-#       define debug_studydata(a,b,c,d,e,f,g)   Perl_debug_studydata(aTHX_ a,b,c,d,e,f,g)
-#       define dumpuntil(a,b,c,d,e,f,g,h)       Perl_dumpuntil(aTHX_ a,b,c,d,e,f,g,h)
-#       define regprop(a,b,c,d,e)               Perl_regprop(aTHX_ a,b,c,d,e)
-#     endif
-#   endif /* defined(DEBUGGING) */
+#   endif /*   defined(DEBUGGING) &&
+             ( defined(PERL_CORE) || defined(PERL_EXT) ) */
 #   if defined(PERL_EXT_RE_BUILD)
 #     if defined(PERL_CORE) || defined(PERL_EXT)
 #       define get_re_gclass_aux_data(a,b,c,d,e,f) Perl_get_re_gclass_aux_data(aTHX_ a,b,c,d,e,f)
@@ -2210,6 +2213,10 @@
 #   define PerlIO_unread(a,b,c)                 Perl_PerlIO_unread(aTHX_ a,b,c)
 #   define PerlIO_write(a,b,c)                  Perl_PerlIO_write(aTHX_ a,b,c)
 # endif /* defined(USE_PERLIO) */
+# if defined(USE_THREADS)
+#   define thread_locale_init()                 Perl_thread_locale_init(aTHX)
+#   define thread_locale_term()                 Perl_thread_locale_term(aTHX)
+# endif
 # if defined(VMS) || defined(WIN32)
 #   define do_aspawn(a,b,c)                     Perl_do_aspawn(aTHX_ a,b,c)
 #   define do_spawn(a)                          Perl_do_spawn(aTHX_ a)

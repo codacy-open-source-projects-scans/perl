@@ -3533,8 +3533,6 @@ CTop	|void	|sys_term
 Cdp	|void	|taint_env
 Cdp	|void	|taint_proper	|NULLOK const char *f			\
 				|NN const char * const s
-Apx	|void	|thread_locale_init
-Apx	|void	|thread_locale_term
 
 Fpv	|OP *	|tied_method	|NN SV *methname			\
 				|NN SV **mark				\
@@ -4415,6 +4413,7 @@ S	|utf8ness_t|get_locale_string_utf8ness_i			\
 				|NULLOK const char *locale		\
 				|const locale_category_index cat_index
 S	|void	|ints_to_tm	|NN struct tm *my_tm			\
+				|NN const char *locale			\
 				|int sec				\
 				|int min				\
 				|int hour				\
@@ -4434,16 +4433,22 @@ S	|void	|populate_hash_from_C_localeconv			\
 				|NN const lconv_offset_t *integers[2]
 S	|bool	|strftime8	|NN const char *fmt			\
 				|NN SV *sv				\
+				|NN const char *locale			\
 				|NN const struct tm *mytm		\
 				|const utf8ness_t fmt_utf8ness		\
 				|NN utf8ness_t *result_utf8ness 	\
 				|const bool called_externally
 Sf	|bool	|strftime_tm	|NN const char *fmt			\
 				|NN SV *sv				\
+				|NN const char *locale			\
+				|NN const struct tm *mytm
+S	|SV *	|sv_strftime_common					\
+				|NN SV *fmt				\
+				|NN const char *locale			\
 				|NN const struct tm *mytm
 # if defined(HAS_MISSING_LANGINFO_ITEM_) || !defined(HAS_NL_LANGINFO)
 S	|const char *|emulate_langinfo					\
-				|const int item 			\
+				|const PERL_INTMAX_T item		\
 				|NN const char *locale			\
 				|NN SV *sv				\
 				|NULLOK utf8ness_t *utf8ness
@@ -4510,6 +4515,15 @@ RS	|char * |my_setlocale_debug_string_i				\
 				|NULLOK const char *retval		\
 				|const line_t line
 #   endif
+#   if   defined(HAS_LOCALECONV) && \
+       ( defined(USE_LOCALE_MONETARY) || defined(USE_LOCALE_NUMERIC) )
+S	|void	|populate_hash_from_localeconv				\
+				|NN HV *hv				\
+				|NN const char *locale			\
+				|const U32 which_mask			\
+				|NN const lconv_offset_t *strings[2]	\
+				|NN const lconv_offset_t *integers[2]
+#   endif
 #   if defined(HAS_NL_LANGINFO)
 S	|const char *|langinfo_sv_i					\
 				|const nl_item item			\
@@ -4544,14 +4558,6 @@ ST	|bool	|is_codeset_name_UTF8					\
 				|NN const char *name
 S	|void	|new_ctype	|NN const char *newctype		\
 				|bool force
-#   endif
-#   if defined(USE_LOCALE_MONETARY) || defined(USE_LOCALE_NUMERIC)
-S	|void	|populate_hash_from_localeconv				\
-				|NN HV *hv				\
-				|NN const char *locale			\
-				|const U32 which_mask			\
-				|NN const lconv_offset_t *strings[2]	\
-				|NN const lconv_offset_t *integers[2]
 #   endif
 #   if defined(USE_LOCALE_NUMERIC)
 S	|void	|new_numeric	|NN const char *newnum			\
@@ -6304,6 +6310,10 @@ Tdp	|bool	|quadmath_format_needed 				\
 				|NN const char *format
 Tdp	|bool	|quadmath_format_valid					\
 				|NN const char *format
+#endif
+#if defined(USE_THREADS)
+Apx	|void	|thread_locale_init
+Apx	|void	|thread_locale_term
 #endif
 #if defined(VMS) || defined(WIN32)
 Cp	|int	|do_aspawn	|NULLOK SV *really			\

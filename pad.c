@@ -372,9 +372,7 @@ Perl_cv_undef_flags(pTHX_ CV *cv, U32 flags)
         else CvGV_set(cv, NULL);
     }
 
-    /* This statement and the subsequence if block was pad_undef().  */
-    pad_peg("pad_undef");
-
+    /* This 'if' block used to be a separate function, pad_undef().  */
     if (!CvISXSUB(&cvbody) && CvPADLIST(&cvbody)) {
         PADOFFSET ix;
         const PADLIST *padlist = CvPADLIST(&cvbody);
@@ -594,7 +592,8 @@ variable.  Stores the name and other metadata in the name part of the
 pad, and makes preparations to manage the variable's lexical scoping.
 Returns the offset of the allocated pad slot.
 
-C<namepv>/C<namelen> specify the variable's name, including leading sigil.
+C<namepv>/C<namelen> specify the variable's name in UTF-8, including
+leading sigil.
 If C<typestash> is non-null, the name is for a typed lexical, and this
 identifies the type.  If C<ourstash> is non-null, it's a lexical reference
 to a package variable, and this identifies the package.  The following
@@ -830,7 +829,6 @@ Perl_pad_add_anon(pTHX_ CV* func, I32 optype)
     PERL_ARGS_ASSERT_PAD_ADD_ANON;
     assert (SvTYPE(func) == SVt_PVCV);
 
-    pad_peg("add_anon");
     /* These two aren't used; just make sure they're not equal to
      * PERL_PADSEQ_INTRO.  They should be 0 by default.  */
     assert(COP_SEQ_RANGE_LOW (name) != PERL_PADSEQ_INTRO);
@@ -954,6 +952,15 @@ S_pad_check_dup(pTHX_ PADNAME *name, U32 flags, const HV *ourstash)
             --off;
         }
     }
+    /* check the package for my sub &x vs. sub PACKAGE::x collisions */
+    if (PadnamePV(name)[0] == '&') {
+        /* PadnamePV is always in UTF-8 */
+        CV *cv = get_cvn_flags(PadnamePV(name)+1, PadnameLEN(name)-1, GV_NOTQUAL|SVf_UTF8);
+        if(cv)
+            warner(packWARN(WARN_SHADOW),
+                "Lexical subroutine %" PNf " masks previously declared package subroutine",
+                PNfARG(name));
+    }
 }
 
 
@@ -982,8 +989,6 @@ Perl_pad_findmy_pvn(pTHX_ const char *namepv, STRLEN namelen, U32 flags)
     PADNAME **name_p;
 
     PERL_ARGS_ASSERT_PAD_FINDMY_PVN;
-
-    pad_peg("pad_findmy_pvn");
 
     if (flags)
         Perl_croak(aTHX_ "panic: pad_findmy_pvn illegal flag bits 0x%" UVxf,

@@ -5062,14 +5062,6 @@ Perl_taint_proper(pTHX_ const char *f, const char * const s);
 #define PERL_ARGS_ASSERT_TAINT_PROPER           \
         assert(s)
 
-PERL_CALLCONV void
-Perl_thread_locale_init(pTHX);
-#define PERL_ARGS_ASSERT_THREAD_LOCALE_INIT
-
-PERL_CALLCONV void
-Perl_thread_locale_term(pTHX);
-#define PERL_ARGS_ASSERT_THREAD_LOCALE_TERM
-
 PERL_CALLCONV OP *
 Perl_tied_method(pTHX_ SV *methname, SV **mark, SV * const sv, const MAGIC * const mg, const U32 flags, U32 argc, ...)
         __attribute__visibility__("hidden");
@@ -7015,9 +7007,9 @@ S_get_locale_string_utf8ness_i(pTHX_ const char *string, const locale_utf8ness_t
 # define PERL_ARGS_ASSERT_GET_LOCALE_STRING_UTF8NESS_I
 
 STATIC void
-S_ints_to_tm(pTHX_ struct tm *my_tm, int sec, int min, int hour, int mday, int mon, int year, int wday, int yday, int isdst);
+S_ints_to_tm(pTHX_ struct tm *my_tm, const char *locale, int sec, int min, int hour, int mday, int mon, int year, int wday, int yday, int isdst);
 # define PERL_ARGS_ASSERT_INTS_TO_TM            \
-        assert(my_tm)
+        assert(my_tm); assert(locale)
 
 STATIC bool
 S_is_locale_utf8(pTHX_ const char *locale);
@@ -7034,19 +7026,24 @@ S_populate_hash_from_C_localeconv(pTHX_ HV *hv, const char *locale, const U32 wh
         assert(hv); assert(locale); assert(strings); assert(integers)
 
 STATIC bool
-S_strftime8(pTHX_ const char *fmt, SV *sv, const struct tm *mytm, const utf8ness_t fmt_utf8ness, utf8ness_t *result_utf8ness, const bool called_externally);
+S_strftime8(pTHX_ const char *fmt, SV *sv, const char *locale, const struct tm *mytm, const utf8ness_t fmt_utf8ness, utf8ness_t *result_utf8ness, const bool called_externally);
 # define PERL_ARGS_ASSERT_STRFTIME8             \
-        assert(fmt); assert(sv); assert(mytm); assert(result_utf8ness)
+        assert(fmt); assert(sv); assert(locale); assert(mytm); assert(result_utf8ness)
 
 STATIC bool
-S_strftime_tm(pTHX_ const char *fmt, SV *sv, const struct tm *mytm)
+S_strftime_tm(pTHX_ const char *fmt, SV *sv, const char *locale, const struct tm *mytm)
         __attribute__format__(__strftime__,pTHX_1,0);
 # define PERL_ARGS_ASSERT_STRFTIME_TM           \
-        assert(fmt); assert(sv); assert(mytm)
+        assert(fmt); assert(sv); assert(locale); assert(mytm)
+
+STATIC SV *
+S_sv_strftime_common(pTHX_ SV *fmt, const char *locale, const struct tm *mytm);
+# define PERL_ARGS_ASSERT_SV_STRFTIME_COMMON    \
+        assert(fmt); assert(locale); assert(mytm)
 
 # if defined(HAS_MISSING_LANGINFO_ITEM_) || !defined(HAS_NL_LANGINFO)
 STATIC const char *
-S_emulate_langinfo(pTHX_ const int item, const char *locale, SV *sv, utf8ness_t *utf8ness);
+S_emulate_langinfo(pTHX_ const PERL_INTMAX_T item, const char *locale, SV *sv, utf8ness_t *utf8ness);
 #   define PERL_ARGS_ASSERT_EMULATE_LANGINFO    \
         assert(locale); assert(sv)
 
@@ -7114,6 +7111,14 @@ S_my_setlocale_debug_string_i(pTHX_ const locale_category_index cat_index, const
 #     define PERL_ARGS_ASSERT_MY_SETLOCALE_DEBUG_STRING_I
 
 #   endif
+#   if   defined(HAS_LOCALECONV) && \
+       ( defined(USE_LOCALE_MONETARY) || defined(USE_LOCALE_NUMERIC) )
+STATIC void
+S_populate_hash_from_localeconv(pTHX_ HV *hv, const char *locale, const U32 which_mask, const lconv_offset_t *strings[2], const lconv_offset_t *integers[2]);
+#     define PERL_ARGS_ASSERT_POPULATE_HASH_FROM_LOCALECONV \
+        assert(hv); assert(locale); assert(strings); assert(integers)
+
+#   endif
 #   if defined(HAS_NL_LANGINFO)
 STATIC const char *
 S_langinfo_sv_i(pTHX_ const nl_item item, locale_category_index cat_index, const char *locale, SV *sv, utf8ness_t *utf8ness);
@@ -7167,13 +7172,6 @@ S_new_ctype(pTHX_ const char *newctype, bool force);
         assert(newctype)
 
 #   endif /* defined(USE_LOCALE_CTYPE) */
-#   if defined(USE_LOCALE_MONETARY) || defined(USE_LOCALE_NUMERIC)
-STATIC void
-S_populate_hash_from_localeconv(pTHX_ HV *hv, const char *locale, const U32 which_mask, const lconv_offset_t *strings[2], const lconv_offset_t *integers[2]);
-#     define PERL_ARGS_ASSERT_POPULATE_HASH_FROM_LOCALECONV \
-        assert(hv); assert(locale); assert(strings); assert(integers)
-
-#   endif
 #   if defined(USE_LOCALE_NUMERIC)
 STATIC void
 S_new_numeric(pTHX_ const char *newnum, bool force);
@@ -10808,6 +10806,16 @@ Perl_quadmath_format_valid(const char *format)
         assert(format)
 
 #endif /* defined(USE_QUADMATH) */
+#if defined(USE_THREADS)
+PERL_CALLCONV void
+Perl_thread_locale_init(pTHX);
+# define PERL_ARGS_ASSERT_THREAD_LOCALE_INIT
+
+PERL_CALLCONV void
+Perl_thread_locale_term(pTHX);
+# define PERL_ARGS_ASSERT_THREAD_LOCALE_TERM
+
+#endif
 #if defined(VMS) || defined(WIN32)
 PERL_CALLCONV int
 Perl_do_aspawn(pTHX_ SV *really, SV **mark, SV **sp);
