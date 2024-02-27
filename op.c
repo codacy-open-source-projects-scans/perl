@@ -712,17 +712,27 @@ Perl_no_bareword_allowed(pTHX_ OP *o)
     o->op_private &= ~OPpCONST_STRICT; /* prevent warning twice about the same OP */
 }
 
+/*
+Return true if the supplied string is the name of one of the built-in
+filehandles.
+*/
+
+PERL_STATIC_INLINE bool
+S_is_standard_filehandle_name(const char *fhname) {
+    return strEQ(fhname, "STDERR")
+        || strEQ(fhname, "STDOUT")
+        || strEQ(fhname, "STDIN")
+        || strEQ(fhname, "_")
+        || strEQ(fhname, "ARGV")
+        || strEQ(fhname, "ARGVOUT")
+        || strEQ(fhname, "DATA");
+}
+
 void
 Perl_no_bareword_filehandle(pTHX_ const char *fhname) {
     PERL_ARGS_ASSERT_NO_BAREWORD_FILEHANDLE;
 
-    if (strNE(fhname, "STDERR")
-        && strNE(fhname, "STDOUT")
-        && strNE(fhname, "STDIN")
-        && strNE(fhname, "_")
-        && strNE(fhname, "ARGV")
-        && strNE(fhname, "ARGVOUT")
-        && strNE(fhname, "DATA")) {
+    if (!is_standard_filehandle_name(fhname)) {
         qerror(Perl_mess(aTHX_ "Bareword filehandle \"%s\" not allowed under 'no feature \"bareword_filehandles\"'", fhname));
     }
 }
@@ -8030,6 +8040,10 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
             /* downgrading from >= 5.11 to < 5.11 is now fatal */
             if (PL_prevailing_version >= SHORTVER(5, 11) && shortver < SHORTVER(5, 11))
                 croak("Downgrading a use VERSION declaration to below v5.11 is not permitted");
+
+            /* OK let's at least warn */
+            deprecate_fatal_in(WARN_DEPRECATED__SUBSEQUENT_USE_VERSION, "5.46",
+                    "use VERSION while another use VERSION is in scope");
         }
 
         /* If a version >= 5.11.0 is requested, strictures are on by default! */
@@ -8062,7 +8076,7 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
          */
         if ((shortver >= SHORTVER(5, 39)) || (PL_prevailing_version >= SHORTVER(5, 39))) {
             prepare_export_lexical();
-            import_builtin_bundle(shortver, true);
+            import_builtin_bundle(shortver);
             finish_export_lexical();
         }
 
@@ -14841,6 +14855,7 @@ Perl_ck_subr(pTHX_ OP *o)
     CV *cv;
     GV *namegv;
     SV **const_class = NULL;
+    OP *const_op = NULL;
 
     PERL_ARGS_ASSERT_CK_SUBR;
 
@@ -14870,20 +14885,29 @@ Perl_ck_subr(pTHX_ OP *o)
             if (aop->op_type == OP_CONST) {
                 aop->op_private &= ~OPpCONST_STRICT;
                 const_class = &cSVOPx(aop)->op_sv;
+                const_op = aop;
             }
             else if (aop->op_type == OP_LIST) {
                 OP * const sib = OpSIBLING(cUNOPx(aop)->op_first);
                 if (sib && sib->op_type == OP_CONST) {
                     sib->op_private &= ~OPpCONST_STRICT;
                     const_class = &cSVOPx(sib)->op_sv;
+                    const_op = sib;
                 }
             }
             /* make class name a shared cow string to speedup method calls */
             /* constant string might be replaced with object, f.e. bigint */
             if (const_class && SvPOK(*const_class)) {
+                assert(const_op);
                 STRLEN len;
                 const char* str = SvPV(*const_class, len);
                 if (len) {
+                    if (!FEATURE_BAREWORD_FILEHANDLES_IS_ENABLED
+                        && !is_standard_filehandle_name(str)
+                        && (const_op->op_private & OPpCONST_BARE)) {
+                        cvop->op_private |= OPpMETH_NO_BAREWORD_IO;
+                    }
+
                     SV* const shared = newSVpvn_share(
                         str, SvUTF8(*const_class)
                                     ? -(SSize_t)len : (SSize_t)len,

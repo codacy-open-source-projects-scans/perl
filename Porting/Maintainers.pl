@@ -211,7 +211,8 @@ our %Modules = (
     },
 
     'Compress::Raw::Bzip2' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.206.tar.gz',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.210.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Mon Feb 26 09:07:43 2024',
         'SYNCINFO'     => 'yorton on Tue Jul 25 20:45:42 2023',
         'FILES'        => q[cpan/Compress-Raw-Bzip2],
         'EXCLUDED'     => [
@@ -224,7 +225,9 @@ our %Modules = (
     },
 
     'Compress::Raw::Zlib' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.206.tar.gz',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.209.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Mon Feb 26 13:48:59 2024',
+        'SYNCINFO'     => 'jkeenan on Sun Feb 25 20:07:03 2024',
         'SYNCINFO'     => 'yorton on Tue Jul 25 20:37:04 2023',
         'FILES'    => q[cpan/Compress-Raw-Zlib],
         'EXCLUDED' => [
@@ -399,7 +402,8 @@ our %Modules = (
     },
 
     'Encode' => {
-        'DISTRIBUTION' => 'DANKOGAI/Encode-3.20.tar.gz',
+        'DISTRIBUTION' => 'DANKOGAI/Encode-3.21.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Sun Feb 25 19:56:46 2024',
         'SYNCINFO'     => 'jkeenan on Fri Nov 10 15:12:07 2023',
         'FILES'        => q[cpan/Encode],
         'EXCLUDED'     => [
@@ -657,7 +661,8 @@ our %Modules = (
     },
 
     'IO-Compress' => {
-        'DISTRIBUTION' => 'PMQS/IO-Compress-2.206.tar.gz',
+        'DISTRIBUTION' => 'PMQS/IO-Compress-2.207.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Mon Feb 26 09:17:18 2024',
         'SYNCINFO'     => 'yorton on Tue Jul 25 20:51:33 2023',
         'MAIN_MODULE'  => 'IO::Compress::Base',
         'FILES'        => q[cpan/IO-Compress],
@@ -824,7 +829,7 @@ our %Modules = (
     },
 
     'Module::CoreList' => {
-        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20240120.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20240223.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
     },
 
@@ -1150,7 +1155,8 @@ our %Modules = (
     },
 
     'Text-Tabs+Wrap' => {
-        'DISTRIBUTION' => 'ARISTOTLE/Text-Tabs+Wrap-2023.0511.tar.gz',
+        'DISTRIBUTION' => 'ARISTOTLE/Text-Tabs+Wrap-2024.001.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Sun Feb 25 20:37:52 2024',
         'MAIN_MODULE'  => 'Text::Tabs',
         'FILES'        => q[cpan/Text-Tabs],
         'EXCLUDED'   => [

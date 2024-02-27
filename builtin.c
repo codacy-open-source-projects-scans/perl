@@ -636,7 +636,7 @@ static bool S_cv_is_builtin(pTHX_ CV *cv)
 }
 
 void
-Perl_import_builtin_bundle(pTHX_ U16 ver, bool do_unimport)
+Perl_import_builtin_bundle(pTHX_ U16 ver)
 {
     SV *ampname = sv_newmortal();
 
@@ -656,9 +656,6 @@ Perl_import_builtin_bundle(pTHX_ U16 ver, bool do_unimport)
         if(!got && want) {
             import_sym(newSVpvn_flags(builtins[i].name, strlen(builtins[i].name), SVs_TEMP));
         }
-        else if(do_unimport && got && !want) {
-            pad_add_name_sv(ampname, padadd_STATE|padadd_TOMBSTONE, 0, 0);
-        }
     }
 }
 
@@ -677,7 +674,7 @@ XS(XS_builtin_import)
         SV *sym = ST(i);
         STRLEN symlen;
         const char *sympv = SvPV(sym, symlen);
-        if(strEQ(sympv, "import") || strEQ(sympv, "unimport"))
+        if(strEQ(sympv, "import"))
             Perl_croak(aTHX_ builtin_not_recognised, sym);
 
         if(sympv[0] == ':') {
@@ -693,7 +690,7 @@ XS(XS_builtin_import)
                 Perl_croak(aTHX_ "Builtin version bundle \"%s\" is not supported by Perl " PERL_VERSION_STRING,
                         sympv);
 
-            import_builtin_bundle(want_ver, false);
+            import_builtin_bundle(want_ver);
 
             continue;
         }
@@ -701,49 +698,6 @@ XS(XS_builtin_import)
         import_sym(sym);
     }
 
-    finish_export_lexical();
-}
-
-XS(XS_builtin_unimport);
-XS(XS_builtin_unimport)
-{
-    dXSARGS;
-
-    if(!PL_compcv)
-        Perl_croak(aTHX_
-                "builtin::unimport can only be called at compile time");
-
-    prepare_export_lexical();
-
-    for(int i = 1; i < items; i++) {
-        SV *sym = ST(i);
-        const char *sympv = SvPV_nolen(sym);
-        if(strEQ(sympv, "import") || strEQ(sympv, "unimport"))
-            Perl_croak(aTHX_ builtin_not_recognised, sym);
-
-        SV *ampname = sv_2mortal(Perl_newSVpvf(aTHX_ "&%" SVf, SVfARG(sym)));
-        SV *fqname = sv_2mortal(Perl_newSVpvf(aTHX_ "builtin::%" SVf, SVfARG(sym)));
-
-        CV *cv = get_cv(SvPV_nolen(fqname), SvUTF8(fqname) ? SVf_UTF8 : 0);
-        if(!cv)
-            Perl_croak(aTHX_ builtin_not_recognised, sym);
-
-        PADOFFSET off = pad_findmy_sv(ampname, 0);
-        if((off == NOT_IN_PAD) ||
-                (PL_curpad[off] != (SV *)cv))
-            Perl_croak(aTHX_
-                    "'%" SVf "' does not appear to be an imported builtin function", SVfARG(ampname));
-
-        /* Add a tombstone entry */
-        /* TODO: If the pad entry we found is going to go out of scope at the
-         * same time as this tombstone would, we could not bother adding the
-         * tombstone and instead COP_SEQ_MAX_HIGH_set() on the padname to
-         * clear it.
-         */
-        pad_add_name_sv(ampname, padadd_STATE|padadd_TOMBSTONE, 0, 0);
-    }
-
-    COP_SEQMAX_INC;
     finish_export_lexical();
 }
 
@@ -782,8 +736,7 @@ Perl_boot_core_builtin(pTHX)
         }
     }
 
-    newXS_flags("builtin::import",   &XS_builtin_import,   __FILE__, NULL, 0);
-    newXS_flags("builtin::unimport", &XS_builtin_unimport, __FILE__, NULL, 0);
+    newXS_flags("builtin::import", &XS_builtin_import, __FILE__, NULL, 0);
 }
 
 /*

@@ -1202,7 +1202,7 @@
 #   endif
 #   if defined(PERL_IN_BUILTIN_C) || defined(PERL_IN_OP_C)
 #     define finish_export_lexical()            Perl_finish_export_lexical(aTHX)
-#     define import_builtin_bundle(a,b)         Perl_import_builtin_bundle(aTHX_ a,b)
+#     define import_builtin_bundle(a)           Perl_import_builtin_bundle(aTHX_ a)
 #     define prepare_export_lexical()           Perl_prepare_export_lexical(aTHX)
 #   endif
 #   if defined(PERL_IN_CLASS_C) || defined(PERL_IN_GLOBALS_C) || \
@@ -1435,6 +1435,7 @@
 #     define gen_constant_list(a)               S_gen_constant_list(aTHX_ a)
 #     define inplace_aassign(a)                 S_inplace_aassign(aTHX_ a)
 #     define is_handle_constructor              S_is_handle_constructor
+#     define is_standard_filehandle_name        S_is_standard_filehandle_name
 #     define listkids(a)                        S_listkids(aTHX_ a)
 #     define looks_like_bool(a)                 S_looks_like_bool(aTHX_ a)
 #     define modkids(a,b)                       S_modkids(aTHX_ a,b)

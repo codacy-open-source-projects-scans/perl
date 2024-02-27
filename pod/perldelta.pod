@@ -5,15 +5,15 @@
 [ this is a template for a new perldelta file.  Any text flagged as XXX needs
 to be processed before release. ]
 
-perldelta - what is new for perl v5.39.8
+perldelta - what is new for perl v5.39.9
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.39.7 release and the 5.39.8
+This document describes differences between the 5.39.8 release and the 5.39.9
 release.
 
-If you are upgrading from an earlier release such as 5.39.6, first read
-L<perl5397delta>, which describes differences between 5.39.6 and 5.39.7.
+If you are upgrading from an earlier release such as 5.39.7, first read
+L<perl5398delta>, which describes differences between 5.39.7 and 5.39.8.
 
 =head1 Notice
 
@@ -26,34 +26,6 @@ enhancements.  Particularly prominent performance optimisations could go
 here, but most should go in the L</Performance Enhancements> section.
 
 [ List each enhancement as a =head2 entry ]
-
-=head2 C<:reader> attribute for field variables
-
-When using the C<class> feature, field variables can now take a C<:reader>
-attribute.  This requests that an accessor method be automatically created
-that simply returns the value of the field variable from the given instance.
-
-    field $name :reader;
-
-Is equivalent to
-
-    field $name;
-    method name () { return $name; }
-
-An alternative name can also be provided:
-
-    field $name :reader(get_name);
-
-For more detail, see L<perlclass/:reader>.
-
-=head2 Permit a space in C<-M> command-line option
-
-When processing command-line options, perl now allows a space between the
-C<-M> switch and the name of the module after it.
-
-    $ perl -M Data::Dumper=Dumper -E 'say Dumper [1,2,3]'
-
-This matches the existing behaviour of the C<-I> option.
 
 =head1 Security
 
@@ -157,11 +129,6 @@ L<XXX> has been upgraded from version A.xx to B.yy.
 
 XXX If there was something important to note about this change, include that here.
 
-L<I18N::Langinfo> has been upgraded from version 0.23 to 0.24.
-
-This fixes what is returned for the C<ALT_DIGITS> item, which has never
-before worked properly in Perl.
-
 =back
 
 =head2 Removed Modules and Pragmata
@@ -239,11 +206,7 @@ XXX L<message|perldiag/"message">
 
 =item *
 
-L<Lexical subroutine %s masks previously declared package subroutine|perldiag/"Lexical subroutine %s masks previously declared package subroutine">
-
-The current package already contains a subroutine whose name matches that of
-a newly-declared lexical or lexically imported subroutine.  The latter will
-take precedence and make the package one inaccessible by name.
+XXX L<message|perldiag/"message">
 
 =back
 
@@ -256,50 +219,6 @@ XXX Changes (i.e. rewording) of diagnostic messages go here
 =item *
 
 XXX Describe change here
-
-=item *
-
-L<Use of uninitialized value%s|perldiag/"Use of uninitialized value%s">
-
-This warning is now slightly more accurate in cases involving C<length>,
-C<pop>, C<shift>, or C<splice>:
-
-    my $x;
-    length($x) == 0
-    # Before:
-    #  Use of uninitialized value $x in numeric eq (==) at ...
-    # Now:
-    #  Use of uninitialized value length($x) in numeric eq (==) at ...
-
-That is, the warning no longer implies that C<$x> was used directly as an
-operand of C<==>, which it wasn't.
-
-Similarly:
-
-    my @xs;
-    shift @xs == 0
-    # Before:
-    #  Use of uninitialized value within @xs in numeric eq (==) at ...
-    # Now:
-    #  Use of uninitialized value shift(@xs) in numeric eq (==) at ...
-
-This is more accurate because there never was an C<undef> within C<@xs> as the
-warning implied. (The warning for C<pop> works analogously.)
-
-Finally:
-
-    my @xs = (1, 2, 3);
-    splice(@xs, 0, 0) == 0
-    # Before:
-    #  Use of uninitialized value within @xs in numeric eq (==) at ...
-    # Now:
-    #  Use of uninitialized value in numeric eq (==) at ...
-
-That is, in cases where C<splice> returns C<undef>, it no longer
-unconditionally blames its first argument. This was misleading because
-C<splice> can return C<undef> even if none of its arguments contain C<undef>.
-
-[GH #21930]
 
 =back
 

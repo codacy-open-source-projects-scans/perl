@@ -4078,8 +4078,7 @@ S	|MAGIC *|get_aux_mg	|NN AV *av
 #if defined(PERL_IN_BUILTIN_C) || defined(PERL_IN_OP_C)
 p	|void	|finish_export_lexical
 p	|void	|import_builtin_bundle					\
-				|U16 ver				\
-				|bool do_unimport
+				|U16 ver
 p	|void	|prepare_export_lexical
 #endif
 #if defined(PERL_IN_CLASS_C) || defined(PERL_IN_OP_C)    || \
@@ -4715,6 +4714,8 @@ S	|void	|inplace_aassign|NN OP *o
 RST	|bool	|is_handle_constructor					\
 				|NN const OP *o 			\
 				|I32 numargs
+Ti	|bool	|is_standard_filehandle_name				\
+				|NN const char *fhname
 S	|OP *	|listkids	|NULLOK OP *o
 S	|bool	|looks_like_bool|NN const OP *o
 S	|OP *	|modkids	|NULLOK OP *o				\
