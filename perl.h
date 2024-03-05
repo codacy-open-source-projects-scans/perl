@@ -6372,6 +6372,93 @@ EXTCONST U8   PL_deBruijn_bitpos_tab64[];
 #  define PERL_SET_THX(t)		NOOP
 #endif
 
+#ifdef WIN32
+    /* Windows mutexes are all general semaphores; we don't currently bother
+     * with reproducing the same panic behavior as on other systems */
+#  define PERL_REENTRANT_LOCK(name, mutex, counter,                         \
+                              cond_to_panic_if_already_locked)              \
+        MUTEX_LOCK(mutex)
+#  define PERL_REENTRANT_UNLOCK(name, mutex, counter)  MUTEX_UNLOCK(mutex)
+#else
+
+    /* Simulate a general (or recursive) semaphore on 'mutex' whose name will
+     * be displayed as 'name' in any messages.  There must be a per-thread
+     * variable 'counter', initialized to 0 upon thread creation that this
+     * macro otherwise controls and keeps set to the recursion depth of the
+     * mutex.  'cond_to_panic_if_already_locked' should be set to '0' for a
+     * fully reentrant semaphore.  Otherwise set it to a bit of code which will
+     * be evaluated if the macro is called recursively.  If it evaluates to
+     * 'true', it means something is seriously wrong, and the process panics.
+     *
+     * It locks the mutex if the 'counter' is zero, and then increments
+     * 'counter'.  Each corresponding UNLOCK decrements 'counter' until it is
+     * 0, at which point it actually unlocks the mutex.  Since the variable is
+     * per-thread, initialized to 0, there is no race with other threads.
+     *
+     * Clang improperly gives warnings for this, if not silenced:
+     * https://clang.llvm.org/docs/ThreadSafetyAnalysis.html#conditional-locks
+     */
+#  define PERL_REENTRANT_LOCK(name, mutex, counter,                         \
+                              cond_to_panic_if_already_locked)              \
+    STMT_START {                                                            \
+        CLANG_DIAG_IGNORE(-Wthread-safety)                                  \
+        if (LIKELY(counter <= 0)) {                                         \
+            UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,      \
+                                "%s: %d: locking " name "; lock depth=1\n", \
+                                __FILE__, __LINE__));                       \
+            )                                                               \
+            MUTEX_LOCK(mutex);                                         \
+            counter = 1;                                                    \
+            UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,      \
+                                "%s: %d: " name " locked; lock depth=1\n",  \
+                                __FILE__, __LINE__));                       \
+            )                                                               \
+        }                                                                   \
+        else {                                                              \
+            counter++;                                                      \
+            UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,      \
+                            "%s: %d: avoided locking " name "; new lock"    \
+                            " depth=%d, but will panic if '%s' is true\n",  \
+                            __FILE__, __LINE__, counter,                    \
+                            STRINGIFY(cond_to_panic_if_already_locked)));   \
+            )                                                               \
+            if (cond_to_panic_if_already_locked) {                          \
+                Perl_croak_nocontext("panic: %s: %d: attempting to lock"    \
+                                name " incompatibly: %s\n",                 \
+                                __FILE__, __LINE__,                         \
+                                STRINGIFY(cond_to_panic_if_already_locked));\
+            }                                                               \
+        }                                                                   \
+        CLANG_DIAG_RESTORE                                                  \
+    } STMT_END
+
+#  define PERL_REENTRANT_UNLOCK(name, mutex, counter)                       \
+    STMT_START {                                                            \
+        if (LIKELY(counter == 1)) {                                         \
+            UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,      \
+                          "%s: %d: unlocking " name "; new lock depth=0\n", \
+                          __FILE__, __LINE__));                             \
+            )                                                               \
+            counter = 0;                                                    \
+            MUTEX_UNLOCK(mutex);                                       \
+        }                                                                   \
+        else if (counter <= 0) {                                            \
+            Perl_croak_nocontext("panic: %s: %d: attempting to unlock"      \
+                                 " already unlocked " name "; depth was"    \
+                                 " %d\n", __FILE__, __LINE__,               \
+                                 counter);                                  \
+        }                                                                   \
+        else {                                                              \
+            counter--;                                                      \
+            UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,      \
+                "%s: %d: avoided unlocking " name "; new lock depth=%d\n",  \
+                __FILE__, __LINE__, counter));                              \
+            )                                                               \
+        }                                                                   \
+    } STMT_END
+
+#endif
+
 #ifndef EBCDIC
 
 /* The tables below are adapted from
@@ -7067,84 +7154,15 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
 #else   /* Below: Threaded, and locales are supported */
 
     /* A locale mutex is required on all such threaded builds. */
-#  ifdef WIN32
+#  define LOCALE_LOCK_(cond_to_panic_if_already_locked)                     \
+       PERL_REENTRANT_LOCK("locale",                                        \
+                           &PL_locale_mutex, PL_locale_mutex_depth,         \
+                           cond_to_panic_if_already_locked)
+#  define LOCALE_UNLOCK_                                                    \
+       PERL_REENTRANT_UNLOCK("locale",                                      \
+                             &PL_locale_mutex, PL_locale_mutex_depth)
 
-    /* Windows mutexes are all general semaphores */
-#    define LOCALE_LOCK_(dummy) MUTEX_LOCK(&PL_locale_mutex)
-#    define LOCALE_UNLOCK_      MUTEX_UNLOCK(&PL_locale_mutex)
-#  else
-
-    /* This mutex simulates a general (or recursive) semaphore.  The current
-     * thread will lock the mutex if the per-thread variable is zero, and then
-     * increments that variable.  Each corresponding UNLOCK decrements the
-     * variable until it is 0, at which point it actually unlocks the mutex.
-     * Since the variable is per-thread, initialized to 0, there is no race
-     * with other threads.
-     *
-     * The single argument is a condition to test for, and if true, to panic.
-     * Call it with the constant 0 to suppress the check.
-     *
-     * Clang improperly gives warnings for this, if not silenced:
-     * https://clang.llvm.org/docs/ThreadSafetyAnalysis.html#conditional-locks
-     */
-#    define LOCALE_LOCK_(cond_to_panic_if_already_locked)                   \
-        STMT_START {                                                        \
-            CLANG_DIAG_IGNORE(-Wthread-safety)                              \
-            if (LIKELY(PL_locale_mutex_depth <= 0)) {                       \
-                UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,  \
-                         "%s: %d: locking locale; lock depth=1\n",          \
-                         __FILE__, __LINE__));                              \
-                )                                                           \
-                MUTEX_LOCK(&PL_locale_mutex);                               \
-                PL_locale_mutex_depth = 1;                                  \
-                UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,  \
-                         "%s: %d: locale locked; lock depth=1\n",           \
-                         __FILE__, __LINE__));                              \
-                )                                                           \
-            }                                                               \
-            else {                                                          \
-                PL_locale_mutex_depth++;                                    \
-                UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,  \
-                        "%s: %d: avoided locking locale; new lock"          \
-                        " depth=%d, but will panic if '%s' is true\n",      \
-                        __FILE__, __LINE__, PL_locale_mutex_depth,          \
-                        STRINGIFY(cond_to_panic_if_already_locked)));       \
-                )                                                           \
-                if (cond_to_panic_if_already_locked) {                      \
-                    locale_panic_("Trying to lock locale incompatibly: "    \
-                         STRINGIFY(cond_to_panic_if_already_locked));       \
-                }                                                           \
-            }                                                               \
-            CLANG_DIAG_RESTORE                                              \
-        } STMT_END
-
-#    define LOCALE_UNLOCK_                                                  \
-        STMT_START {                                                        \
-            if (LIKELY(PL_locale_mutex_depth == 1)) {                       \
-                UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,  \
-                         "%s: %d: unlocking locale; new lock depth=0\n",    \
-                         __FILE__, __LINE__));                              \
-                )                                                           \
-                PL_locale_mutex_depth = 0;                                  \
-                MUTEX_UNLOCK(&PL_locale_mutex);                             \
-            }                                                               \
-            else if (PL_locale_mutex_depth <= 0) {                          \
-                Perl_croak_nocontext("panic: %s: %d: attempting to unlock"  \
-                                     " already unlocked locale; depth was"  \
-                                     " %d\n", __FILE__, __LINE__,           \
-                                     PL_locale_mutex_depth);                \
-            }                                                               \
-            else {                                                          \
-                PL_locale_mutex_depth--;                                    \
-                UNLESS_PERL_MEM_LOG(DEBUG_Lv(PerlIO_printf(Perl_debug_log,  \
-                    "%s: %d: avoided unlocking locale; new lock depth=%d\n",\
-                    __FILE__, __LINE__, PL_locale_mutex_depth));            \
-                )                                                           \
-            }                                                               \
-        } STMT_END
-
-#  endif
-#  if defined(USE_THREADS) && ! defined(USE_THREAD_SAFE_LOCALE)
+#  ifndef USE_THREAD_SAFE_LOCALE
 
      /* By definition, a thread-unsafe locale means we need a critical
       * section. */
@@ -7298,8 +7316,164 @@ the plain locale pragma without a parameter (S<C<use locale>>) is in effect.
 #  define LC_COLLATE_LOCK               LOCALE_LOCK
 #  define LC_COLLATE_UNLOCK             LOCALE_UNLOCK
 
-#  define STRFTIME_LOCK                 ENV_LOCK
-#  define STRFTIME_UNLOCK               ENV_UNLOCK
+/* Some critical sections need to lock both the locale and the environment from
+ * changing, while allowing for any number of readers.  To avoid deadlock, this
+ * is always done in the same order.  These should always be invoked, like all
+ * locks really, at such a low level that its just a libc call that is wrapped,
+ * so as to prevent recursive calls which could deadlock. */
+#define ENVr_LOCALEr_LOCK                                               \
+            STMT_START { LOCALE_READ_LOCK; ENV_READ_LOCK; } STMT_END
+#define ENVr_LOCALEr_UNLOCK                                             \
+        STMT_START { ENV_READ_UNLOCK; LOCALE_READ_UNLOCK; } STMT_END
+
+#define STRFTIME_LOCK                   ENVr_LOCALEr_LOCK
+#define STRFTIME_UNLOCK                 ENVr_LOCALEr_UNLOCK
+
+/* These time-related functions all requre that the environment and locale
+ * don't change while they are executing (at least in glibc; this appears to be
+ * contrary to the POSIX standard).  tzset() writes global variables, so
+ * always needs to have write locking.  ctime, localtime, mktime, and strftime
+ * effectively call it, so they too need exclusive access.  The rest need to
+ * have exclusive locking as well so that they can copy the contents of the
+ * returned static buffer before releasing the lock.  That leaves asctime and
+ * gmtime.  There may be reentrant versions of these available on the platform
+ * which don't require write locking.
+ */
+#ifdef PERL_REENTR_USING_ASCTIME_R
+#  define ASCTIME_LOCK     ENVr_LOCALEr_LOCK
+#  define ASCTIME_UNLOCK   ENVr_LOCALEr_UNLOCK
+#else
+#  define ASCTIME_LOCK     gwENVr_LOCALEr_LOCK
+#  define ASCTIME_UNLOCK   gwENVr_LOCALEr_UNLOCK
+#endif
+
+#define CTIME_LOCK         gwENVr_LOCALEr_LOCK
+#define CTIME_UNLOCK       gwENVr_LOCALEr_UNLOCK
+
+#ifdef PERL_REENTR_USING_GMTIME_R
+#  define GMTIME_LOCK      ENVr_LOCALEr_LOCK
+#  define GMTIME_UNLOCK    ENVr_LOCALEr_UNLOCK
+#else
+#  define GMTIME_LOCK      gwENVr_LOCALEr_LOCK
+#  define GMTIME_UNLOCK    gwENVr_LOCALEr_UNLOCK
+#endif
+
+#define LOCALTIME_LOCK     gwENVr_LOCALEr_LOCK
+#define LOCALTIME_UNLOCK   gwENVr_LOCALEr_UNLOCK
+#define MKTIME_LOCK        gwENVr_LOCALEr_LOCK
+#define MKTIME_UNLOCK      gwENVr_LOCALEr_UNLOCK
+#define TZSET_LOCK         gwENVr_LOCALEr_LOCK
+#define TZSET_UNLOCK       gwENVr_LOCALEr_UNLOCK
+
+/* Similiarly, these functions need a constant environment and/or locale.  And
+ * some have a buffer that is shared with another thread executing the same or
+ * a related call.  A mutex could be created for each class, but for now, share
+ * the ENV mutex with everything, as none probably gets called so much that
+ * performance would suffer by a thread being locked out by another thread that
+ * could have used a different mutex.
+ *
+ * But, create a different macro name just to indicate the ones that don't
+ * actually depend on the environment, but are using its mutex for want of a
+ * better one */
+#define gwLOCALEr_LOCK              gwENVr_LOCALEr_LOCK
+#define gwLOCALEr_UNLOCK            gwENVr_LOCALEr_UNLOCK
+
+#ifdef PERL_REENTR_USING_GETHOSTBYADDR_R
+#  define GETHOSTBYADDR_LOCK        ENVr_LOCALEr_LOCK
+#  define GETHOSTBYADDR_UNLOCK      ENVr_LOCALEr_UNLOCK
+#else
+#  define GETHOSTBYADDR_LOCK        gwENVr_LOCALEr_LOCK
+#  define GETHOSTBYADDR_UNLOCK      gwENVr_LOCALEr_UNLOCK
+#endif
+#ifdef PERL_REENTR_USING_GETHOSTBYNAME_R
+#  define GETHOSTBYNAME_LOCK        ENVr_LOCALEr_LOCK
+#  define GETHOSTBYNAME_UNLOCK      ENVr_LOCALEr_UNLOCK
+#else
+#  define GETHOSTBYNAME_LOCK        gwENVr_LOCALEr_LOCK
+#  define GETHOSTBYNAME_UNLOCK      gwENVr_LOCALEr_UNLOCK
+#endif
+#ifdef PERL_REENTR_USING_GETNETBYADDR_R
+#  define GETNETBYADDR_LOCK         LOCALE_READ_LOCK
+#  define GETNETBYADDR_UNLOCK       LOCALE_READ_UNLOCK
+#else
+#  define GETNETBYADDR_LOCK         gwLOCALEr_LOCK
+#  define GETNETBYADDR_UNLOCK       gwLOCALEr_UNLOCK
+#endif
+#ifdef PERL_REENTR_USING_GETNETBYNAME_R
+#  define GETNETBYNAME_LOCK         LOCALE_READ_LOCK
+#  define GETNETBYNAME_UNLOCK       LOCALE_READ_UNLOCK
+#else
+#  define GETNETBYNAME_LOCK         gwLOCALEr_LOCK
+#  define GETNETBYNAME_UNLOCK       gwLOCALEr_UNLOCK
+#endif
+#ifdef PERL_REENTR_USING_GETPROTOBYNAME_R
+#  define GETPROTOBYNAME_LOCK       LOCALE_READ_LOCK
+#  define GETPROTOBYNAME_UNLOCK     LOCALE_READ_UNLOCK
+#else
+#  define GETPROTOBYNAME_LOCK       gwLOCALEr_LOCK
+#  define GETPROTOBYNAME_UNLOCK     gwLOCALEr_UNLOCK
+#endif
+#ifdef PERL_REENTR_USING_GETPROTOBYNUMBER_R
+#  define GETPROTOBYNUMBER_LOCK     LOCALE_READ_LOCK
+#  define GETPROTOBYNUMBER_UNLOCK   LOCALE_READ_UNLOCK
+#else
+#  define GETPROTOBYNUMBER_LOCK     gwLOCALEr_LOCK
+#  define GETPROTOBYNUMBER_UNLOCK   gwLOCALEr_UNLOCK
+#endif
+#ifdef PERL_REENTR_USING_GETPROTOENT_R
+#  define GETPROTOENT_LOCK          LOCALE_READ_LOCK
+#  define GETPROTOENT_UNLOCK        LOCALE_READ_UNLOCK
+#else
+#  define GETPROTOENT_LOCK          gwLOCALEr_LOCK
+#  define GETPROTOENT_UNLOCK        gwLOCALEr_UNLOCK
+#endif
+#ifdef PERL_REENTR_USING_GETPWNAM_R
+#  define GETPWNAM_LOCK             LOCALE_READ_LOCK
+#  define GETPWNAM_UNLOCK           LOCALE_READ_UNLOCK
+#else
+#  define GETPWNAM_LOCK             gwLOCALEr_LOCK
+#  define GETPWNAM_UNLOCK           gwLOCALEr_UNLOCK
+#endif
+#ifdef PERL_REENTR_USING_GETPWUID_R
+#  define GETPWUID_LOCK             LOCALE_READ_LOCK
+#  define GETPWUID_UNLOCK           LOCALE_READ_UNLOCK
+#else
+#  define GETPWUID_LOCK             gwLOCALEr_LOCK
+#  define GETPWUID_UNLOCK           gwLOCALEr_UNLOCK
+#endif
+#ifdef PERL_REENTR_USING_GETSERVBYNAME_R
+#  define GETSERVBYNAME_LOCK        LOCALE_READ_LOCK
+#  define GETSERVBYNAME_UNLOCK      LOCALE_READ_UNLOCK
+#else
+#  define GETSERVBYNAME_LOCK        gwLOCALEr_LOCK
+#  define GETSERVBYNAME_UNLOCK      gwLOCALEr_UNLOCK
+#endif
+#ifdef PERL_REENTR_USING_GETSERVBYPORT_R
+#  define GETSERVBYPORT_LOCK        LOCALE_READ_LOCK
+#  define GETSERVBYPORT_UNLOCK      LOCALE_READ_UNLOCK
+#else
+#  define GETSERVBYPORT_LOCK        gwLOCALEr_LOCK
+#  define GETSERVBYPORT_UNLOCK      gwLOCALEr_UNLOCK
+#endif
+#ifdef PERL_REENTR_USING_GETSERVENT_R
+#  define GETSERVENT_LOCK           LOCALE_READ_LOCK
+#  define GETSERVENT_UNLOCK         LOCALE_READ_UNLOCK
+#else
+#  define GETSERVENT_LOCK           gwLOCALEr_LOCK
+#  define GETSERVENT_UNLOCK         gwLOCALEr_UNLOCK
+#endif
+#ifdef PERL_REENTR_USING_GETSPNAM_R
+#  define GETSPNAM_LOCK             LOCALE_READ_LOCK
+#  define GETSPNAM_UNLOCK           LOCALE_READ_UNLOCK
+#else
+#  define GETSPNAM_LOCK             gwLOCALEr_LOCK
+#  define GETSPNAM_UNLOCK           gwLOCALEr_UNLOCK
+#endif
+
+#define STRFMON_LOCK        LC_MONETARY_LOCK
+#define STRFMON_UNLOCK      LC_MONETARY_UNLOCK
+
+/* End of locale/env synchronization */
 
 #ifdef USE_LOCALE_NUMERIC
 
@@ -7626,7 +7800,7 @@ cannot have changed since the precalculation.
 
 #endif /* !USE_LOCALE_NUMERIC */
 
-#ifdef USE_LOCALE_THREADS
+#ifdef USE_THREADS
 #  define ENV_LOCK            PERL_WRITE_LOCK(&PL_env_mutex)
 #  define ENV_UNLOCK          PERL_WRITE_UNLOCK(&PL_env_mutex)
 #  define ENV_READ_LOCK       PERL_READ_LOCK(&PL_env_mutex)
@@ -7658,162 +7832,6 @@ cannot have changed since the precalculation.
 #  define GETENV_LOCK     NOOP
 #  define GETENV_UNLOCK   NOOP
 #endif
-
-/* Some critical sections need to lock both the locale and the environment from
- * changing, while allowing for any number of readers.  To avoid deadlock, this
- * is always done in the same order.  These should always be invoked, like all
- * locks really, at such a low level that its just a libc call that is wrapped,
- * so as to prevent recursive calls which could deadlock. */
-#define ENVr_LOCALEr_LOCK                                               \
-            STMT_START { LOCALE_READ_LOCK; ENV_READ_LOCK; } STMT_END
-#define ENVr_LOCALEr_UNLOCK                                             \
-        STMT_START { ENV_READ_UNLOCK; LOCALE_READ_UNLOCK; } STMT_END
-
-/* These time-related functions all requre that the environment and locale
- * don't change while they are executing (at least in glibc; this appears to be
- * contrary to the POSIX standard).  tzset() writes global variables, so
- * always needs to have write locking.  ctime, localtime, mktime, and strftime
- * effectively call it, so they too need exclusive access.  The rest need to
- * have exclusive locking as well so that they can copy the contents of the
- * returned static buffer before releasing the lock.  That leaves asctime and
- * gmtime.  There may be reentrant versions of these available on the platform
- * which don't require write locking.
- */
-#ifdef PERL_REENTR_USING_ASCTIME_R
-#  define ASCTIME_LOCK     ENVr_LOCALEr_LOCK
-#  define ASCTIME_UNLOCK   ENVr_LOCALEr_UNLOCK
-#else
-#  define ASCTIME_LOCK     gwENVr_LOCALEr_LOCK
-#  define ASCTIME_UNLOCK   gwENVr_LOCALEr_UNLOCK
-#endif
-
-#define CTIME_LOCK         gwENVr_LOCALEr_LOCK
-#define CTIME_UNLOCK       gwENVr_LOCALEr_UNLOCK
-
-#ifdef PERL_REENTR_USING_GMTIME_R
-#  define GMTIME_LOCK      ENVr_LOCALEr_LOCK
-#  define GMTIME_UNLOCK    ENVr_LOCALEr_UNLOCK
-#else
-#  define GMTIME_LOCK      gwENVr_LOCALEr_LOCK
-#  define GMTIME_UNLOCK    gwENVr_LOCALEr_UNLOCK
-#endif
-
-#define LOCALTIME_LOCK     gwENVr_LOCALEr_LOCK
-#define LOCALTIME_UNLOCK   gwENVr_LOCALEr_UNLOCK
-#define MKTIME_LOCK        gwENVr_LOCALEr_LOCK
-#define MKTIME_UNLOCK      gwENVr_LOCALEr_UNLOCK
-#define TZSET_LOCK         gwENVr_LOCALEr_LOCK
-#define TZSET_UNLOCK       gwENVr_LOCALEr_UNLOCK
-
-/* Similiarly, these functions need a constant environment and/or locale.  And
- * some have a buffer that is shared with another thread executing the same or
- * a related call.  A mutex could be created for each class, but for now, share
- * the ENV mutex with everything, as none probably gets called so much that
- * performance would suffer by a thread being locked out by another thread that
- * could have used a different mutex.
- *
- * But, create a different macro name just to indicate the ones that don't
- * actually depend on the environment, but are using its mutex for want of a
- * better one */
-#define gwLOCALEr_LOCK              gwENVr_LOCALEr_LOCK
-#define gwLOCALEr_UNLOCK            gwENVr_LOCALEr_UNLOCK
-
-#ifdef PERL_REENTR_USING_GETHOSTBYADDR_R
-#  define GETHOSTBYADDR_LOCK        ENVr_LOCALEr_LOCK
-#  define GETHOSTBYADDR_UNLOCK      ENVr_LOCALEr_UNLOCK
-#else
-#  define GETHOSTBYADDR_LOCK        gwENVr_LOCALEr_LOCK
-#  define GETHOSTBYADDR_UNLOCK      gwENVr_LOCALEr_UNLOCK
-#endif
-#ifdef PERL_REENTR_USING_GETHOSTBYNAME_R
-#  define GETHOSTBYNAME_LOCK        ENVr_LOCALEr_LOCK
-#  define GETHOSTBYNAME_UNLOCK      ENVr_LOCALEr_UNLOCK
-#else
-#  define GETHOSTBYNAME_LOCK        gwENVr_LOCALEr_LOCK
-#  define GETHOSTBYNAME_UNLOCK      gwENVr_LOCALEr_UNLOCK
-#endif
-#ifdef PERL_REENTR_USING_GETNETBYADDR_R
-#  define GETNETBYADDR_LOCK         LOCALE_READ_LOCK
-#  define GETNETBYADDR_UNLOCK       LOCALE_READ_UNLOCK
-#else
-#  define GETNETBYADDR_LOCK         gwLOCALEr_LOCK
-#  define GETNETBYADDR_UNLOCK       gwLOCALEr_UNLOCK
-#endif
-#ifdef PERL_REENTR_USING_GETNETBYNAME_R
-#  define GETNETBYNAME_LOCK         LOCALE_READ_LOCK
-#  define GETNETBYNAME_UNLOCK       LOCALE_READ_UNLOCK
-#else
-#  define GETNETBYNAME_LOCK         gwLOCALEr_LOCK
-#  define GETNETBYNAME_UNLOCK       gwLOCALEr_UNLOCK
-#endif
-#ifdef PERL_REENTR_USING_GETPROTOBYNAME_R
-#  define GETPROTOBYNAME_LOCK       LOCALE_READ_LOCK
-#  define GETPROTOBYNAME_UNLOCK     LOCALE_READ_UNLOCK
-#else
-#  define GETPROTOBYNAME_LOCK       gwLOCALEr_LOCK
-#  define GETPROTOBYNAME_UNLOCK     gwLOCALEr_UNLOCK
-#endif
-#ifdef PERL_REENTR_USING_GETPROTOBYNUMBER_R
-#  define GETPROTOBYNUMBER_LOCK     LOCALE_READ_LOCK
-#  define GETPROTOBYNUMBER_UNLOCK   LOCALE_READ_UNLOCK
-#else
-#  define GETPROTOBYNUMBER_LOCK     gwLOCALEr_LOCK
-#  define GETPROTOBYNUMBER_UNLOCK   gwLOCALEr_UNLOCK
-#endif
-#ifdef PERL_REENTR_USING_GETPROTOENT_R
-#  define GETPROTOENT_LOCK          LOCALE_READ_LOCK
-#  define GETPROTOENT_UNLOCK        LOCALE_READ_UNLOCK
-#else
-#  define GETPROTOENT_LOCK          gwLOCALEr_LOCK
-#  define GETPROTOENT_UNLOCK        gwLOCALEr_UNLOCK
-#endif
-#ifdef PERL_REENTR_USING_GETPWNAM_R
-#  define GETPWNAM_LOCK             LOCALE_READ_LOCK
-#  define GETPWNAM_UNLOCK           LOCALE_READ_UNLOCK
-#else
-#  define GETPWNAM_LOCK             gwLOCALEr_LOCK
-#  define GETPWNAM_UNLOCK           gwLOCALEr_UNLOCK
-#endif
-#ifdef PERL_REENTR_USING_GETPWUID_R
-#  define GETPWUID_LOCK             LOCALE_READ_LOCK
-#  define GETPWUID_UNLOCK           LOCALE_READ_UNLOCK
-#else
-#  define GETPWUID_LOCK             gwLOCALEr_LOCK
-#  define GETPWUID_UNLOCK           gwLOCALEr_UNLOCK
-#endif
-#ifdef PERL_REENTR_USING_GETSERVBYNAME_R
-#  define GETSERVBYNAME_LOCK        LOCALE_READ_LOCK
-#  define GETSERVBYNAME_UNLOCK      LOCALE_READ_UNLOCK
-#else
-#  define GETSERVBYNAME_LOCK        gwLOCALEr_LOCK
-#  define GETSERVBYNAME_UNLOCK      gwLOCALEr_UNLOCK
-#endif
-#ifdef PERL_REENTR_USING_GETSERVBYPORT_R
-#  define GETSERVBYPORT_LOCK        LOCALE_READ_LOCK
-#  define GETSERVBYPORT_UNLOCK      LOCALE_READ_UNLOCK
-#else
-#  define GETSERVBYPORT_LOCK        gwLOCALEr_LOCK
-#  define GETSERVBYPORT_UNLOCK      gwLOCALEr_UNLOCK
-#endif
-#ifdef PERL_REENTR_USING_GETSERVENT_R
-#  define GETSERVENT_LOCK           LOCALE_READ_LOCK
-#  define GETSERVENT_UNLOCK         LOCALE_READ_UNLOCK
-#else
-#  define GETSERVENT_LOCK           gwLOCALEr_LOCK
-#  define GETSERVENT_UNLOCK         gwLOCALEr_UNLOCK
-#endif
-#ifdef PERL_REENTR_USING_GETSPNAM_R
-#  define GETSPNAM_LOCK             LOCALE_READ_LOCK
-#  define GETSPNAM_UNLOCK           LOCALE_READ_UNLOCK
-#else
-#  define GETSPNAM_LOCK             gwLOCALEr_LOCK
-#  define GETSPNAM_UNLOCK           gwLOCALEr_UNLOCK
-#endif
-
-#define STRFMON_LOCK        LC_MONETARY_LOCK
-#define STRFMON_UNLOCK      LC_MONETARY_UNLOCK
-
-/* End of locale/env synchronization */
 
 #ifndef PERL_NO_INLINE_FUNCTIONS
 /* Static inline funcs that depend on includes and declarations above.

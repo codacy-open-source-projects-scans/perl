@@ -4755,8 +4755,8 @@ S_get_locale_string_utf8ness_i(pTHX_ const char * string,
     }
 
     /* Can't be UTF-8 if invalid */
-    if (! is_utf8_string((U8 *) first_variant,
-                         len - ((char *) first_variant - string)))
+    if (! is_strict_utf8_string((U8 *) first_variant,
+                                len - ((char *) first_variant - string)))
     {
         return UTF8NESS_NO;
     }
@@ -5039,7 +5039,7 @@ S_save_to_buffer(pTHX_ const char * string, char **buf, Size_t *buf_size)
 
     DEBUG_Lv(PerlIO_printf(Perl_debug_log,
                          "Copying '%s' to %p\n",
-                         ((is_utf8_string((U8 *) string, 0))
+                         ((is_strict_utf8_string((U8 *) string, 0))
                           ? string
                           :_byte_dump_string((U8 *) string, strlen(string), 0)),
                           *buf));
@@ -7985,8 +7985,8 @@ S_maybe_override_codeset(pTHX_ const char * codeset,
         }
 
         /* Here, has non-ASCII.  If not legal UTF-8, isn't a UTF-8 locale */
-        if (! is_utf8_string(first_variant,
-                                        len - (first_variant - (U8 *) result)))
+        if (! is_strict_utf8_string(first_variant,
+                                    len - (first_variant - (U8 *) result)))
         {
             strings_utf8ness = UTF8NESS_NO;
             break;
@@ -8529,7 +8529,7 @@ S_strftime8(pTHX_ const char * fmt,
     DEBUG_Lv(PerlIO_printf(Perl_debug_log,
                           "fmt=%s, retval=%s; utf8ness=%d",
                           fmt,
-                          ((is_utf8_string((U8 *) SvPVX(sv), 0))
+                          ((is_strict_utf8_string((U8 *) SvPVX(sv), 0))
                            ? SvPVX(sv)
                            :_byte_dump_string((U8 *) SvPVX(sv), SvCUR(sv) ,0)),
                           *result_utf8ness));
@@ -10228,11 +10228,13 @@ Perl_my_strerror(pTHX_ const int errnum, utf8ness_t * utf8ness)
                matches */
         locale_t cur = duplocale(use_curlocale_scratch());
 
-        cur = newlocale(LC_CTYPE_MASK, querylocale_c(LC_MESSAGES), cur);
+        const char * locale = querylocale_c(LC_MESSAGES);
+        cur = newlocale(LC_CTYPE_MASK, locale, cur);
         errstr = savepv(strerror_l(errnum, cur));
         *utf8ness = get_locale_string_utf8ness_i(errstr,
                                                  LOCALE_UTF8NESS_UNKNOWN,
-                                                 NULL, LC_MESSAGES_INDEX_);
+                                                 locale,
+                                                 LC_MESSAGES_INDEX_);
         freelocale(cur);
     }
 
@@ -10339,7 +10341,8 @@ Perl_my_strerror(pTHX_ const int errnum, utf8ness_t * utf8ness)
     LOCALE_UNLOCK;
 
     *utf8ness = get_locale_string_utf8ness_i(errstr, LOCALE_UTF8NESS_UNKNOWN,
-                                             NULL, LC_MESSAGES_INDEX_);
+                                             desired_locale,
+                                             LC_MESSAGES_INDEX_);
     DEBUG_STRERROR_RETURN(errstr, utf8ness);
 
     SAVEFREEPV(errstr);
