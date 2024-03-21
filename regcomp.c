@@ -389,17 +389,9 @@ Perl_reginitcolors(pTHX)
 #define CHECK_RESTUDY_GOTO_butfirst
 #endif
 
-/*
- * pregcomp - compile a regular expression into internal code
- *
- * Decides which engine's compiler to call based on the hint currently in
- * scope
- */
-
 #ifndef PERL_IN_XSUB_RE
 
 /* return the currently in-scope regex engine (or the default if none)  */
-
 regexp_engine const *
 Perl_current_re_engine(pTHX)
 {
@@ -425,6 +417,13 @@ Perl_current_re_engine(pTHX)
     }
 }
 
+
+/*
+ * pregcomp - compile a regular expression into internal code
+ *
+ * Decides which engine's compiler to call based on the hint currently in
+ * scope
+ */
 
 REGEXP *
 Perl_pregcomp(pTHX_ SV * const pattern, const U32 flags)
@@ -1213,6 +1212,102 @@ S_set_regex_pv(pTHX_ RExC_state_t *pRExC_state, REGEXP *Rx)
     SvCUR_set(Rx, p - RX_WRAPPED(Rx));
 }
 
+STATIC void
+S_ssc_finalize(pTHX_ RExC_state_t *pRExC_state, regnode_ssc *ssc)
+{
+    /* The inversion list in the SSC is marked mortal; now we need a more
+     * permanent copy, which is stored the same way that is done in a regular
+     * ANYOF node, with the first NUM_ANYOF_CODE_POINTS code points in a bit
+     * map */
+
+    SV* invlist = invlist_clone(ssc->invlist, NULL);
+
+    PERL_ARGS_ASSERT_SSC_FINALIZE;
+
+    assert(is_ANYOF_SYNTHETIC(ssc));
+
+    /* The code in this file assumes that all but these flags aren't relevant
+     * to the SSC, except SSC_MATCHES_EMPTY_STRING, which should be cleared
+     * by the time we reach here */
+    assert(! (ANYOF_FLAGS(ssc)
+        & ~( ANYOF_COMMON_FLAGS
+            |ANYOFD_NON_UTF8_MATCHES_ALL_NON_ASCII__shared
+            |ANYOF_HAS_EXTRA_RUNTIME_MATCHES)));
+
+    populate_anyof_bitmap_from_invlist( (regnode *) ssc, &invlist);
+
+    set_ANYOF_arg(pRExC_state, (regnode *) ssc, invlist, NULL, NULL);
+    SvREFCNT_dec(invlist);
+
+    /* Make sure is clone-safe */
+    ssc->invlist = NULL;
+
+    if (ANYOF_POSIXL_SSC_TEST_ANY_SET(ssc)) {
+        ANYOF_FLAGS(ssc) |= ANYOF_MATCHES_POSIXL;
+        OP(ssc) = ANYOFPOSIXL;
+    }
+    else if (RExC_contains_locale) {
+        OP(ssc) = ANYOFL;
+    }
+
+    assert(! (ANYOF_FLAGS(ssc) & ANYOF_LOCALE_FLAGS) || RExC_contains_locale);
+}
+
+STATIC bool
+S_is_ssc_worth_it(const RExC_state_t * pRExC_state, const regnode_ssc * ssc)
+{
+    /* The synthetic start class is used to hopefully quickly winnow down
+     * places where a pattern could start a match in the target string.  If it
+     * doesn't really narrow things down that much, there isn't much point to
+     * having the overhead of using it.  This function uses some very crude
+     * heuristics to decide if to use the ssc or not.
+     *
+     * It returns TRUE if 'ssc' rules out more than half what it considers to
+     * be the "likely" possible matches, but of course it doesn't know what the
+     * actual things being matched are going to be; these are only guesses
+     *
+     * For /l matches, it assumes that the only likely matches are going to be
+     *      in the 0-255 range, uniformly distributed, so half of that is 127
+     * For /a and /d matches, it assumes that the likely matches will be just
+     *      the ASCII range, so half of that is 63
+     * For /u and there isn't anything matching above the Latin1 range, it
+     *      assumes that that is the only range likely to be matched, and uses
+     *      half that as the cut-off: 127.  If anything matches above Latin1,
+     *      it assumes that all of Unicode could match (uniformly), except for
+     *      non-Unicode code points and things in the General Category "Other"
+     *      (unassigned, private use, surrogates, controls and formats).  This
+     *      is a much large number. */
+
+    U32 count = 0;      /* Running total of number of code points matched by
+                           'ssc' */
+    UV start, end;      /* Start and end points of current range in inversion
+                           XXX outdated.  UTF-8 locales are common, what about invert? list */
+    const U32 max_code_points = (LOC)
+                                ?  256
+                                : ((  ! UNI_SEMANTICS
+                                    ||  invlist_highest(ssc->invlist) < 256)
+                                  ? 128
+                                  : NON_OTHER_COUNT);
+    const U32 max_match = max_code_points / 2;
+
+    PERL_ARGS_ASSERT_IS_SSC_WORTH_IT;
+
+    invlist_iterinit(ssc->invlist);
+    while (invlist_iternext(ssc->invlist, &start, &end)) {
+        if (start >= max_code_points) {
+            break;
+        }
+        end = MIN(end, max_code_points - 1);
+        count += end - start + 1;
+        if (count >= max_match) {
+            invlist_iterfinish(ssc->invlist);
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
 /*
  * Perl_re_op_compile - the perl internal RE engine's function to compile a
  * regular expression into internal code.
@@ -1296,6 +1391,7 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
     scan_data_t data;
     RExC_state_t RExC_state;
     RExC_state_t * const pRExC_state = &RExC_state;
+
 #ifdef TRIE_STUDY_OPT
     /* search for "restudy" in this file for a detailed explanation */
     int restudied = 0;
@@ -1305,12 +1401,24 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
 
     PERL_ARGS_ASSERT_RE_OP_COMPILE;
 
+    /* Ensure that all members of the pRExC_state is initialized to 0
+     * at the start of regex compilation. Historically we have had issues
+     * with people remembering to zero specific members or zeroing them
+     * too late, etc. Doing it in one place is saner and avoid oversight
+     * or error. */
+    Zero(pRExC_state,1,RExC_state_t);
+    DEBUG_r({
+        /* and then initialize RExC_mysv1 and RExC_mysv2 early so if
+         * something calls regprop we don't have issues. These variables
+         * not being set up properly motivated the use of Zero() to initalize
+         * the pRExC_state structure, as there were codepaths under -Uusedl
+         * that left these unitialized, and non-null as well. */
+        RExC_mysv1 = sv_newmortal();
+        RExC_mysv2 = sv_newmortal();
+    });
+
     DEBUG_r(if (!PL_colorset) reginitcolors());
 
-
-    pRExC_state->warn_text = NULL;
-    pRExC_state->unlexed_names = NULL;
-    pRExC_state->code_blocks = NULL;
 
     if (is_bare_re)
         *is_bare_re = FALSE;
@@ -1416,40 +1524,11 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
 
     /* ignore the utf8ness if the pattern is 0 length */
     RExC_utf8 = RExC_orig_utf8 = (plen == 0 || IN_BYTES) ? 0 : SvUTF8(pat);
-    RExC_uni_semantics = 0;
-    RExC_contains_locale = 0;
     RExC_strict = cBOOL(pm_flags & RXf_PMf_STRICT);
-    RExC_in_script_run = 0;
-    RExC_study_started = 0;
-    pRExC_state->runtime_code_qr = NULL;
-    RExC_frame_head= NULL;
-    RExC_frame_last= NULL;
-    RExC_frame_count= 0;
-    RExC_latest_warn_offset = 0;
-    RExC_use_BRANCHJ = 0;
-    RExC_warned_WARN_EXPERIMENTAL__VLB = 0;
-    RExC_warned_WARN_EXPERIMENTAL__REGEX_SETS = 0;
-    RExC_logical_total_parens = 0;
-    RExC_total_parens = 0;
-    RExC_logical_to_parno = NULL;
-    RExC_parno_to_logical = NULL;
-    RExC_open_parens = NULL;
-    RExC_close_parens = NULL;
-    RExC_paren_names = NULL;
-    RExC_size = 0;
-    RExC_seen_d_op = FALSE;
-#ifdef DEBUGGING
-    RExC_paren_name_list = NULL;
-#endif
 
-    DEBUG_r({
-        RExC_mysv1= sv_newmortal();
-        RExC_mysv2= sv_newmortal();
-    });
 
     DEBUG_COMPILE_r({
-            SV *dsv= sv_newmortal();
-            RE_PV_QUOTED_DECL(s, RExC_utf8, dsv, exp, plen, PL_dump_re_max_len);
+            RE_PV_QUOTED_DECL(s, RExC_utf8, RExC_mysv, exp, plen, PL_dump_re_max_len);
             Perl_re_printf( aTHX_  "%sCompiling REx%s %s\n",
                           PL_colors[4], PL_colors[5], s);
         });
@@ -1470,7 +1549,12 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
      * pattern.
      *
      * Things get a touch tricky as we have to compare the utf8 flag
-     * independently from the compile flags.  */
+     * independently from the compile flags.
+     *
+     * ALSO NOTE: After this point we may need to zero members of pRExC_state
+     * explicitly. Prior to this point they should all be zeroed as part of
+     * a struct wide Zero instruction.
+     */
 
     if (   old_re
         && !recompile
@@ -1481,8 +1565,7 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
         && !runtime_code /* with runtime code, always recompile */ )
     {
         DEBUG_COMPILE_r({
-            SV *dsv= sv_newmortal();
-            RE_PV_QUOTED_DECL(s, RExC_utf8, dsv, exp, plen, PL_dump_re_max_len);
+            RE_PV_QUOTED_DECL(s, RExC_utf8, RExC_mysv, exp, plen, PL_dump_re_max_len);
             Perl_re_printf( aTHX_  "%sSkipping recompilation of unchanged REx%s %s\n",
                           PL_colors[4], PL_colors[5], s);
         });
@@ -1496,6 +1579,8 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
         FAIL("Regexp out of space");
 
     rx_flags = orig_rx_flags;
+    if (rx_flags & RXf_SPLIT)
+        rx_flags &= ~(RXf_PMf_EXTENDED|RXf_PMf_EXTENDED_MORE);
 
     if (   toUSE_UNI_CHARSET_NOT_DEPENDS
         && initial_charset == REGEX_DEPENDS_CHARSET)
@@ -1736,7 +1821,7 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
     SetProgLen(RExC_rxi,RExC_size);
 
     DEBUG_DUMP_PRE_OPTIMIZE_r({
-        SV * const sv = sv_newmortal();
+        SV * const sv = sv_newmortal(); /* can this use RExC_mysv? */
         RXi_GET_DECL(RExC_rx, ri);
         DEBUG_RExC_seen();
         Perl_re_printf( aTHX_ "Program before optimization:\n");
