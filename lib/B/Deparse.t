@@ -887,7 +887,6 @@ my $f = sub {
 } ;
 ####
 # anonconst
-# CONTEXT no warnings 'experimental::const_attr';
 my $f = sub : const {
     123;
 }
@@ -2659,13 +2658,11 @@ foreach \&a (sub { 9; } , sub { 10; } ) {
     die;
 }
 ####
-# CONTEXT no warnings 'experimental::for_list';
 my %hash;
 foreach my ($key, $value) (%hash) {
     study $_;
 }
 ####
-# CONTEXT no warnings 'experimental::for_list';
 my @ducks;
 foreach my ($tick, $trick, $track) (@ducks) {
     study $_;
@@ -3321,7 +3318,7 @@ $a = $b == ($c == $d != $e);
 $a = $b & $c == $d != $e;
 ####
 # try/catch
-# CONTEXT use feature 'try'; no warnings 'experimental::try';
+# CONTEXT use feature 'try';
 try {
     FIRST();
 }
@@ -3329,7 +3326,7 @@ catch($var) {
     SECOND();
 }
 ####
-# CONTEXT use feature 'try'; no warnings 'experimental::try';
+# CONTEXT use feature 'try';
 try {
     FIRST();
 }

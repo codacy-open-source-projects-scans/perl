@@ -2041,13 +2041,6 @@ to define an overloaded constant, or when trying to find the
 character name specified in the C<\N{...}> escape.  Perhaps you
 forgot to load the corresponding L<overload> pragma?
 
-=item :const is experimental
-
-(S experimental::const_attr) The "const" attribute is experimental.
-If you want to use the feature, disable the warning with C<no warnings
-'experimental::const_attr'>, but know that in doing so you are taking
-the risk that your code may break in a future Perl version.
-
 =item :const is not permitted on named subroutines
 
 (F) The "const" attribute causes an anonymous subroutine to be run and
@@ -6755,12 +6748,6 @@ disallowed.  See L<Safe>.
 (F) Your machine doesn't implement a file truncation mechanism that
 Configure knows about.
 
-=item try/catch is experimental
-
-(S experimental::try) This warning is emitted if you use the C<try> and
-C<catch> syntax. This syntax is currently experimental and its behaviour may
-change in future releases of Perl.
-
 =item try/catch/finally is experimental
 
 (S experimental::try) This warning is emitted if you use the C<try> and
@@ -7744,15 +7731,6 @@ will no longer compile in a future version of Perl.  Or you can turn on
 S<C<use feature 'extra_paired_delimiters'>> and use the character that
 is the mirror image of this one for the closing string delimiter.
 
-=item Use of '%s' is experimental as a string delimiter
-
-(S experimental::extra_paired_delimiters)   This warning is emitted if
-you use as a string delimiter one of the non-ASCII mirror image ones
-enabled by S<C<use feature 'extra_paired_delimiters'>>.  Simply suppress
-the warning if you want to use the feature, but know that in doing so
-you are taking the risk of using an experimental feature which may
-change or be removed in a future Perl version:
-
 =item Use of %s is not allowed in Unicode property wildcard
 subpatterns in regex; marked by S<<-- HERE> in m/%s/
 
@@ -8277,11 +8255,19 @@ set-id, your best bet is to put a set-id C wrapper around your script.
 
 =item You need to quote "%s"
 
-(W syntax) You assigned a bareword as a signal handler name.
-Unfortunately, you already have a subroutine of that name declared,
-which means that Perl 5 will try to call the subroutine when the
-assignment is executed, which is probably not what you want.  (If it IS
-what you want, put an & in front.)
+(W syntax) You assigned a bareword as a signal handler name:
+
+    $SIG{...} = foo;
+
+However, this will not make C<sub foo> the signal handler. Instead, Perl
+will call the subroutine when the assignment is executed and use the
+returned value as the signal handler, which is probably not what you want.
+(If it I<is> what you want, put C<()> after the subroutine name to avoid
+the warning.)
+
+To register the subroutine as the signal handler, take a reference to it:
+
+    $SIG{...} = \&foo;
 
 =item Your random numbers are not that random
 

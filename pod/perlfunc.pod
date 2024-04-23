@@ -1283,8 +1283,9 @@ the group to any of your secondary groups.  On insecure systems, these
 restrictions may be relaxed, but this is not a portable assumption.
 On POSIX systems, you can detect this condition this way:
 
-    use POSIX qw(sysconf _PC_CHOWN_RESTRICTED);
-    my $can_chown_giveaway = ! sysconf(_PC_CHOWN_RESTRICTED);
+    use POSIX qw(pathconf _PC_CHOWN_RESTRICTED);
+    my $can_chown_giveaway =
+        ! pathconf($path_of_interest, _PC_CHOWN_RESTRICTED);
 
 Portability issues: L<perlport/chown>.
 
@@ -8334,10 +8335,10 @@ the LIMIT value C<1> means that EXPR may be split a maximum of zero
 times, producing a maximum of one field (namely, the entire value of
 EXPR).  For instance:
 
-    my @x = split(//, "abc", 1); # ("abc")
-    my @x = split(//, "abc", 2); # ("a", "bc")
-    my @x = split(//, "abc", 3); # ("a", "b", "c")
-    my @x = split(//, "abc", 4); # ("a", "b", "c")
+    my @x = split(/,/, "a,b,c", 1); # ("a,b,c")
+    my @x = split(/,/, "a,b,c", 2); # ("a", "b,c")
+    my @x = split(/,/, "a,b,c", 3); # ("a", "b", "c")
+    my @x = split(/,/, "a,b,c", 4); # ("a", "b", "c")
 
 If LIMIT is negative, it is treated as if it were instead arbitrarily
 large; as many fields as possible are produced.

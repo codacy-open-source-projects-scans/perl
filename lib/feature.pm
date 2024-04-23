@@ -39,6 +39,7 @@ our %feature_bundle = (
     "5.27"    => [qw(bareword_filehandles bitwise current_sub evalbytes fc indirect multidimensional postderef_qq say state switch unicode_eval unicode_strings)],
     "5.35"    => [qw(bareword_filehandles bitwise current_sub evalbytes fc isa postderef_qq say signatures state unicode_eval unicode_strings)],
     "5.37"    => [qw(bitwise current_sub evalbytes fc isa module_true postderef_qq say signatures state unicode_eval unicode_strings)],
+    "5.39"    => [qw(bitwise current_sub evalbytes extra_paired_delimiters fc isa module_true postderef_qq say signatures state try unicode_eval unicode_strings)],
     "all"     => [qw(bareword_filehandles bitwise class current_sub declared_refs defer evalbytes extra_paired_delimiters fc indirect isa module_true multidimensional postderef_qq refaliasing say signatures state switch try unicode_eval unicode_strings)],
     "default" => [qw(bareword_filehandles indirect multidimensional)],
 );
@@ -65,8 +66,7 @@ $feature_bundle{"5.33"} = $feature_bundle{"5.27"};
 $feature_bundle{"5.34"} = $feature_bundle{"5.27"};
 $feature_bundle{"5.36"} = $feature_bundle{"5.35"};
 $feature_bundle{"5.38"} = $feature_bundle{"5.37"};
-$feature_bundle{"5.39"} = $feature_bundle{"5.37"};
-$feature_bundle{"5.40"} = $feature_bundle{"5.37"};
+$feature_bundle{"5.40"} = $feature_bundle{"5.39"};
 $feature_bundle{"5.9.5"} = $feature_bundle{"5.10"};
 my %noops = (
     postderef => 1,
@@ -78,7 +78,7 @@ my %removed = (
 
 our $hint_shift   = 26;
 our $hint_mask    = 0x3c000000;
-our @hint_bundles = qw( default 5.10 5.11 5.15 5.23 5.27 5.35 5.37 );
+our @hint_bundles = qw( default 5.10 5.11 5.15 5.23 5.27 5.35 5.37 5.39 );
 
 # This gets set (for now) in $^H as well as in %^H,
 # for runtime speed of the uc/lc/ucfirst/lcfirst functions.
@@ -442,17 +442,22 @@ bareword filehandles for older versions of perl.
 
 =head2 The 'try' feature
 
-B<WARNING>: This feature is still experimental and the implementation may
-change or be removed in future versions of Perl.  For this reason, Perl will
-warn when you use the feature, unless you have explicitly disabled the warning:
-
-    no warnings "experimental::try";
+B<WARNING>: This feature is still partly experimental, and the implementation
+may change or be removed in future versions of Perl.
 
 This feature enables the C<try> and C<catch> syntax, which allows exception
 handling, where exceptions thrown from the body of the block introduced with
 C<try> are caught by executing the body of the C<catch> block.
 
-This feature is available starting in Perl 5.34.
+This feature is available starting in Perl 5.34. Before Perl 5.40 it was
+classed as experimental, and Perl emitted a warning for its usage, except when
+explicitly disabled:
+
+    no warnings "experimental::try";
+
+As of Perl 5.40, use of this feature without a C<finally> block no longer
+triggers a warning.  The optional C<finally> block is still considered
+experimental and emits a warning, except when explicitly disabled as above.
 
 For more information, see L<perlsyn/"Try Catch Exception Handling">.
 
@@ -472,12 +477,6 @@ This feature is available starting in Perl 5.36.
 
 =head2 The 'extra_paired_delimiters' feature
 
-B<WARNING>: This feature is still experimental and the implementation may
-change or be removed in future versions of Perl.  For this reason, Perl will
-warn when you use the feature, unless you have explicitly disabled the warning:
-
-    no warnings "experimental::extra_paired_delimiters";
-
 This feature enables the use of more paired string delimiters than the
 traditional four, S<C<< <  > >>>, S<C<( )>>, S<C<{ }>>, and S<C<[ ]>>.  When
 this feature is on, for example, you can say S<C<qrE<171>patE<187>>>.
@@ -486,7 +485,16 @@ As with any usage of non-ASCII delimiters in a UTF-8-encoded source file, you
 will want to ensure the parser will decode the source code from UTF-8 bytes
 with a declaration such as C<use utf8>.
 
-This feature is available starting in Perl 5.36.
+This feature is available starting in Perl 5.36.  From Perl 5.36 to 5.38,
+it was classed as experimental, and Perl emitted a warning for its usage,
+except when explicitly disabled:
+
+    no warnings "experimental::extra_paired_delimiters";
+
+As of Perl 5.40, use of this feature no longer triggers a warning (though the
+C<experimental::extra_paired_delimiters> warning category still exists for
+compatibility with code that disables it). This feature is now considered
+stable.
 
 The complete list of accepted paired delimiters as of Unicode 14.0 is:
 
@@ -977,9 +985,10 @@ The following feature bundles are available:
             module_true postderef_qq say signatures
             state unicode_eval unicode_strings
 
-  :5.40     bitwise current_sub evalbytes fc isa
-            module_true postderef_qq say signatures
-            state unicode_eval unicode_strings
+  :5.40     bitwise current_sub evalbytes
+            extra_paired_delimiters fc isa module_true
+            postderef_qq say signatures state try
+            unicode_eval unicode_strings
 
 The C<:default> bundle represents the feature set that is enabled before
 any C<use feature> or C<no feature> declaration.

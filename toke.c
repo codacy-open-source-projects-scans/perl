@@ -5455,8 +5455,7 @@ yyl_dollar(pTHX_ char *s)
                     } while (isSPACE(*t));
                     if (isIDFIRST_lazy_if_safe(t, PL_bufend, UTF)) {
                         STRLEN len;
-                        t = scan_word6(t, tmpbuf, sizeof tmpbuf, TRUE,
-                                      &len, TRUE);
+                        t = scan_word(t, tmpbuf, sizeof tmpbuf, TRUE, &len);
                         while (isSPACE(*t))
                             t++;
                         if (  *t == ';'
@@ -7189,9 +7188,7 @@ yyl_foreach(pTHX_ char *s)
         }
 
         if (UNLIKELY(paren_is_valid && *p == '(')) {
-            Perl_ck_warner_d(aTHX_
-                             packWARN(WARN_EXPERIMENTAL__FOR_LIST),
-                             "for my (...) is experimental");
+            ; /* fine - this is foreach my (list) */
         }
         else if (UNLIKELY(*p != '$' && *p != '\\')) {
             /* "for myfoo (" will end up here, but with p pointing at the 'f' */
@@ -8033,8 +8030,6 @@ yyl_word_or_keyword(pTHX_ char *s, STRLEN len, I32 key, I32 orig_keyword, struct
         FUN0(OP_BREAK);
 
     case KEY_catch:
-        Perl_ck_warner_d(aTHX_
-            packWARN(WARN_EXPERIMENTAL__TRY), "try/catch is experimental");
         PREBLOCK(KW_CATCH);
 
     case KEY_chop:
@@ -8806,8 +8801,6 @@ yyl_word_or_keyword(pTHX_ char *s, STRLEN len, I32 key, I32 orig_keyword, struct
 
     case KEY_try:
         pl_yylval.ival = CopLINE(PL_curcop);
-        Perl_ck_warner_d(aTHX_
-            packWARN(WARN_EXPERIMENTAL__TRY), "try/catch is experimental");
         PREBLOCK(KW_TRY);
 
     case KEY_uc:
@@ -11803,16 +11796,6 @@ Perl_scan_str(pTHX_ char *start, int keep_bracketed_quoted, int keep_delims, int
         close_delim_str = legal_paired_closing_delims
                         + (tmps - legal_paired_opening_delims);
 
-        /* The list of paired delimiters contains all the ASCII ones that have
-         * always been legal, and no other ASCIIs.  Don't raise a message if
-         * using one of these */
-        if (! isASCII(open_delim_code)) {
-            Perl_ck_warner_d(aTHX_
-                             packWARN(WARN_EXPERIMENTAL__EXTRA_PAIRED_DELIMITERS),
-                             "Use of '%" UTF8f "' is experimental as a string delimiter",
-                             UTF8fARG(UTF, delim_byte_len, open_delim_str));
-        }
-
         close_delim_code = (UTF)
                            ? valid_utf8_to_uvchr((U8 *) close_delim_str, NULL)
                            : * (U8 *) close_delim_str;
@@ -12861,10 +12844,6 @@ S_apply_builtin_cv_attribute(pTHX_ CV *cv, OP *o)
     else if(memEQs(SvPVX(sv), len, "method"))
         CvNOWARN_AMBIGUOUS_on(cv);
     else if(memEQs(SvPVX(sv), len, "const")) {
-        Perl_ck_warner_d(aTHX_
-            packWARN(WARN_EXPERIMENTAL__CONST_ATTR),
-           ":const is experimental"
-        );
         CvANONCONST_on(cv);
         if (!CvANON(cv))
             yyerror(":const is not permitted on named subroutines");
