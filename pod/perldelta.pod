@@ -5,15 +5,15 @@
 [ this is a template for a new perldelta file.  Any text flagged as XXX needs
 to be processed before release. ]
 
-perldelta - what is new for perl v5.39.10
+perldelta - what is new for perl v5.39.11
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.39.9 release and the 5.39.10
+This document describes differences between the 5.39.10 release and the 5.39.11
 release.
 
-If you are upgrading from an earlier release such as 5.39.8, first read
-L<perl5399delta>, which describes differences between 5.39.8 and 5.39.9.
+If you are upgrading from an earlier release such as 5.39.9, first read
+L<perl53910delta>, which describes differences between 5.39.9 and 5.39.10.
 
 =head1 Notice
 
@@ -26,12 +26,6 @@ enhancements.  Particularly prominent performance optimisations could go
 here, but most should go in the L</Performance Enhancements> section.
 
 [ List each enhancement as a =head2 entry ]
-
-=head2 The C<:5.40> feature bundle adds C<try> and C<extra_paired_delimiters>
-
-The latest version feature bundle now contains the recently-stablised features
-C<try> and C<extra_paired_delimiters>. As this feature bundle is used by the
-C<-E> commandline switch, these are immediately available in C<-E> scripts.
 
 =head1 Security
 
@@ -172,14 +166,29 @@ section.
 
 Additionally, the following selected changes have been made:
 
-=head3 L<perlhacktips>
+=head3 L<XXX>
 
 =over 4
 
 =item *
 
-Added brief documentation for some tools useful when developing perl
-itself on Windows or Cygwin.
+XXX Description of the change here
+
+=back
+
+=head3 L<perlapi/form>
+
+=over 4
+
+=item *
+
+Corrected the documentation for C<Perl_form>, C<form_nocontext>, and
+C<vform>, which claimed that any later call to one of them will destroy
+the previous returns from any.  This hasn't been true since 5.6.0,
+except it does remain true if these are called during global
+destruction.  With that caveat, the return of each of these is a fresh
+string in a temporary that will automatically be freed by a call to
+L<perlapi/C<FREETMPS>> or at at places such as statement boundaries.
 
 =back
 
@@ -225,12 +234,7 @@ XXX Changes (i.e. rewording) of diagnostic messages go here
 
 =item *
 
-L<Old package separator "'" deprecated|perldiag/"Old package separator "'" deprecated">
-
-Prevent this warning appearing spuriously when checking the heuristic for the
-L<You need to quote "%s"|perldiag/"You need to quote "%s""> warning.
-
-[github #22145]
+XXX Describe change here
 
 =back
 
@@ -266,10 +270,7 @@ L</Platform Support> section, instead.
 
 =item *
 
-You can now separately enable high water mark checks for non-DEBUGGING
-or disable them for DEBUGGING builds with C<-Accflags=-DPERL_USE_HWM>
-or C<-Accflags=-DPERL_NO_HWM> respectively.  The default remains the
-same.  [github #16607]
+XXX
 
 =back
 
@@ -381,10 +382,7 @@ manager will later use a regex to expand these into links.
 
 =item *
 
-prepare_export_lexical() was separately saving C<PL_comppad> and
-C<PL_curpad>, this could result in C<PL_curpad> being restored to a no
-longer valid value, resulting in a panic when importing lexicals in
-some cases.  [github #21981]
+XXX
 
 =back
 
@@ -400,31 +398,7 @@ platform specific bugs also go here.
 
 =item *
 
-fork() failures on cygwin with C<-DDEBUGGING> builds.
-
-Perl uses the C<--enable-auto-image-base> option to set the base
-images for DLLs for C<cygperl5_39_10.dll> and the DLLs needed for
-dynamically loaded modules on cygwin.
-
-With 5.39.10 if perl is built with C<-DDEBUGGING> or possibly other
-options that increase the address space used by F<cygperl5_39_10.dll>,
-the address space for F<cygperl5_39_10.dll> overlaps with the address
-space allocated for F<mro.dll>.
-
-The C<mro> module will still load, but if perl attempts to fork you
-will likely see an error like:
-
- 0 [main] perl 34054 child_info_fork::abort: address space needed by \
-    'mro.dll' (0x400000) is already occupied
-
-You can workaround this by building without the C<-DDEBUGGING> option,
-or by making C<mro> a static extension:
-
-  ./Configure ... -Astatic_ext=mro
-
-We expect the name change of the F<cygperl5_39_10.dll> to
-F<cygperl5_39_11.dll> in 5.39.11 will fix this problem for the next
-release.  [github #22104]
+XXX
 
 =back
 
@@ -448,7 +422,7 @@ died, add a short obituary here.
 
 XXX Generate this with:
 
-  perl Porting/acknowledgements.pl v5.39.9..HEAD
+  perl Porting/acknowledgements.pl v5.39.10..HEAD
 
 =head1 Reporting Bugs
 

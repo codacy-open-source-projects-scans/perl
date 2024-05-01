@@ -984,9 +984,9 @@ cpan/Encode/ucm/viscii.ucm				Unicode Character Map
 cpan/Encode/Unicode/Makefile.PL				Encode extension
 cpan/Encode/Unicode/Unicode.pm				Encode extension
 cpan/Encode/Unicode/Unicode.xs				Encode extension
-cpan/experimental/lib/experimental.pm
-cpan/experimental/lib/stable.pm
-cpan/experimental/t/basic.t
+cpan/experimental/lib/experimental.pm	Module related to experimental
+cpan/experimental/lib/stable.pm		Module related to experimental
+cpan/experimental/t/basic.t		Test file related to experimental
 cpan/ExtUtils-Constant/lib/ExtUtils/Constant.pm			generate XS code to import C header constants
 cpan/ExtUtils-Constant/lib/ExtUtils/Constant/Base.pm		generate XS code to import C header constants
 cpan/ExtUtils-Constant/lib/ExtUtils/Constant/ProxySubs.pm	generate XS code for proxy constants
@@ -2254,10 +2254,10 @@ cpan/Socket/t/getaddrinfo.t		See if Socket::getaddrinfo works
 cpan/Socket/t/getnameinfo.t		See if Socket::getnameinfo works
 cpan/Socket/t/ip_mreq.t			See if (un)pack_ip_mreq work
 cpan/Socket/t/ipv6_mreq.t		See if (un)pack_ipv6_mreq work
-cpan/Socket/t/sockaddr.t
+cpan/Socket/t/sockaddr.t		Test file related to Socket
 cpan/Socket/t/Socket.t			See if Socket works
 cpan/Socket/t/socketpair.t		See if socketpair works
-cpan/Socket/typemap
+cpan/Socket/typemap			Socket
 cpan/Sys-Syslog/fallback/const-c.inc	Sys::Syslog constants fallback file
 cpan/Sys-Syslog/fallback/const-xs.inc	Sys::Syslog constants fallback file
 cpan/Sys-Syslog/fallback/syslog.h	Sys::Syslog header fallback file
@@ -2919,11 +2919,15 @@ cpan/Test2-Suite/lib/Test2/Plugin/Times.pm				Test2-Suite
 cpan/Test2-Suite/lib/Test2/Plugin/UTF8.pm				Test2-Suite
 cpan/Test2-Suite/lib/Test2/Require.pm					Test2-Suite
 cpan/Test2-Suite/lib/Test2/Require/AuthorTesting.pm			Test2-Suite
+cpan/Test2-Suite/lib/Test2/Require/AutomatedTesting.pm			Test2-Suite
 cpan/Test2-Suite/lib/Test2/Require/EnvVar.pm				Test2-Suite
+cpan/Test2-Suite/lib/Test2/Require/ExtendedTesting.pm			Test2-Suite
 cpan/Test2-Suite/lib/Test2/Require/Fork.pm				Test2-Suite
 cpan/Test2-Suite/lib/Test2/Require/Module.pm				Test2-Suite
+cpan/Test2-Suite/lib/Test2/Require/NonInteractiveTesting.pm		Test2-Suite
 cpan/Test2-Suite/lib/Test2/Require/Perl.pm				Test2-Suite
 cpan/Test2-Suite/lib/Test2/Require/RealFork.pm				Test2-Suite
+cpan/Test2-Suite/lib/Test2/Require/ReleaseTesting.pm			Test2-Suite
 cpan/Test2-Suite/lib/Test2/Require/Threads.pm				Test2-Suite
 cpan/Test2-Suite/lib/Test2/Suite.pm					Test2-Suite
 cpan/Test2-Suite/lib/Test2/Todo.pm					Test2-Suite
@@ -3028,11 +3032,15 @@ cpan/Test2-Suite/t/modules/Plugin/Times.t				Test2-Suite
 cpan/Test2-Suite/t/modules/Plugin/UTF8.t				Test2-Suite
 cpan/Test2-Suite/t/modules/Require.t					Test2-Suite
 cpan/Test2-Suite/t/modules/Require/AuthorTesting.t			Test2-Suite
+cpan/Test2-Suite/t/modules/Require/AutomatedTesting.t			Test2-Suite
 cpan/Test2-Suite/t/modules/Require/EnvVar.t				Test2-Suite
+cpan/Test2-Suite/t/modules/Require/ExtendedTesting.t			Test2-Suite
 cpan/Test2-Suite/t/modules/Require/Fork.t				Test2-Suite
 cpan/Test2-Suite/t/modules/Require/Module.t				Test2-Suite
+cpan/Test2-Suite/t/modules/Require/NonInteractiveTesting.t		Test2-Suite
 cpan/Test2-Suite/t/modules/Require/Perl.t				Test2-Suite
 cpan/Test2-Suite/t/modules/Require/RealFork.t				Test2-Suite
+cpan/Test2-Suite/t/modules/Require/ReleaseTesting.t			Test2-Suite
 cpan/Test2-Suite/t/modules/Require/Threads.t				Test2-Suite
 cpan/Test2-Suite/t/modules/Suite.t					Test2-Suite
 cpan/Test2-Suite/t/modules/Todo.t					Test2-Suite
@@ -3083,6 +3091,9 @@ cpan/Test2-Suite/t/regression/247_check_ref_bool.t			Test2-Suite
 cpan/Test2-Suite/t/regression/27-1-Test2-Bundle-More.t			Test2-Suite
 cpan/Test2-Suite/t/regression/27-2-Test2-Tools-Compare.t		Test2-Suite
 cpan/Test2-Suite/t/regression/27-3-Test2-Tools-ClassicCompare.t		Test2-Suite
+cpan/Test2-Suite/t/regression/285-wrap-nonexisting.t			Test2-Suite
+cpan/Test2-Suite/t/regression/289-compare-array-bounds.t		Test2-Suite
+cpan/Test2-Suite/t/regression/291-async-subtest-done-testing.t		Test2-Suite
 cpan/Test2-Suite/t/regression/43-bag-on-empty.t				Test2-Suite
 cpan/Test2-Suite/t/regression/async_subtest_missing_parent.t		Test2-Suite
 cpan/Test2-Suite/t/regression/Test2-Mock.t				Test2-Suite
@@ -5707,6 +5718,7 @@ pod/perl5380delta.pod			Perl changes in version 5.38.0
 pod/perl5381delta.pod			Perl changes in version 5.38.1
 pod/perl5382delta.pod			Perl changes in version 5.38.2
 pod/perl5390delta.pod			Perl changes in version 5.39.0
+pod/perl53910delta.pod			Perl changes in version 5.39.10
 pod/perl5391delta.pod			Perl changes in version 5.39.1
 pod/perl5392delta.pod			Perl changes in version 5.39.2
 pod/perl5393delta.pod			Perl changes in version 5.39.3
@@ -6109,6 +6121,7 @@ t/lib/strict/refs			Tests of "use strict 'refs'" for strict.t
 t/lib/strict/subs			Tests of "use strict 'subs'" for strict.t
 t/lib/strict/vars			Tests of "use strict 'vars'" for strict.t
 t/lib/subs/subs				Tests of "use subs"
+t/lib/test_22121.pm			A test file for t/lib/warnings/op
 t/lib/test_require.pm			A test file for t/op/inccode.t
 t/lib/test_use.pm			A test pragma for t/comp/use.t
 t/lib/test_use_14937.pm			A test pragma for t/comp/use.t

@@ -211,9 +211,8 @@ our %Modules = (
     },
 
     'Compress::Raw::Bzip2' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.210.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Mon Feb 26 09:07:43 2024',
-        'SYNCINFO'     => 'yorton on Tue Jul 25 20:45:42 2023',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.212.tar.gz',
+        'SYNCINFO'     => 'LeoNerd on Sat Apr 27 14:06:26 2024',
         'FILES'        => q[cpan/Compress-Raw-Bzip2],
         'EXCLUDED'     => [
             qr{^t/Test/},
@@ -225,10 +224,8 @@ our %Modules = (
     },
 
     'Compress::Raw::Zlib' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.209.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Mon Feb 26 13:48:59 2024',
-        'SYNCINFO'     => 'jkeenan on Sun Feb 25 20:07:03 2024',
-        'SYNCINFO'     => 'yorton on Tue Jul 25 20:37:04 2023',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.212.tar.gz',
+        'SYNCINFO'     => 'LeoNerd on Sat Apr 27 14:15:07 2024',
         'FILES'    => q[cpan/Compress-Raw-Zlib],
         'EXCLUDED' => [
             qr{^examples/},
@@ -429,7 +426,8 @@ our %Modules = (
     },
 
     'experimental' => {
-        'DISTRIBUTION' => 'LEONT/experimental-0.031.tar.gz',
+        'DISTRIBUTION' => 'LEONT/experimental-0.032.tar.gz',
+        'SYNCINFO'     => 'LeoNerd on Sat Apr 27 09:43:20 2024',
         'FILES'        => q[cpan/experimental],
         'EXCLUDED'     => [qr{^xt/}],
     },
@@ -661,9 +659,8 @@ our %Modules = (
     },
 
     'IO-Compress' => {
-        'DISTRIBUTION' => 'PMQS/IO-Compress-2.207.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Mon Feb 26 09:17:18 2024',
-        'SYNCINFO'     => 'yorton on Tue Jul 25 20:51:33 2023',
+        'DISTRIBUTION' => 'PMQS/IO-Compress-2.212.tar.gz',
+        'SYNCINFO'     => 'LeoNerd on Sat Apr 27 14:31:39 2024',
         'MAIN_MODULE'  => 'IO::Compress::Base',
         'FILES'        => q[cpan/IO-Compress],
         'EXCLUDED'     => [
@@ -830,7 +827,7 @@ our %Modules = (
     },
 
     'Module::CoreList' => {
-        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20240320.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20240420.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
     },
 
@@ -989,7 +986,15 @@ our %Modules = (
             qr{^\.github/dependabot\.yml},
             qr{^\.github/workflows/build\.yaml},
         ],
-
+        'CUSTOMIZED'   => [
+            # https://github.com/rra/podlators/pull/28
+            'lib/Pod/Man.pm',
+            'lib/Pod/ParseLink.pm',
+            'lib/Pod/Text.pm',
+            'lib/Pod/Text/Color.pm',
+            'lib/Pod/Text/Overstrike.pm',
+            'lib/Pod/Text/Termcap.pm'
+        ],
         'MAP' => {
             ''                 => 'cpan/podlators/',
             # this file lives outside the cpan/ directory
@@ -1023,7 +1028,8 @@ our %Modules = (
     },
 
     'Socket' => {
-        'DISTRIBUTION' => 'PEVANS/Socket-2.037.tar.gz',
+        'DISTRIBUTION' => 'PEVANS/Socket-2.038.tar.gz',
+        'SYNCINFO'     => 'LeoNerd on Sat Apr 27 09:57:02 2024',
         'FILES'        => q[cpan/Socket],
         'EXCLUDED'     => ['.editorconfig'],
     },
@@ -1115,7 +1121,8 @@ our %Modules = (
     },
 
     'Test::Simple' => {
-        'DISTRIBUTION' => 'EXODIST/Test-Simple-1.302198.tar.gz',
+        'DISTRIBUTION' => 'EXODIST/Test-Simple-1.302199.tar.gz',
+        'SYNCINFO'     => 'LeoNerd on Sat Apr 27 10:20:58 2024',
         'SYNCINFO'     => 'jkeenan on Fri Dec  1 07:01:54 2023',
         'FILES'        => q[cpan/Test-Simple],
         'EXCLUDED'     => [
@@ -1130,7 +1137,8 @@ our %Modules = (
     },
 
     'Test2::Suite' => {
-        'DISTRIBUTION' => 'EXODIST/Test2-Suite-0.000159.tar.gz',
+        'DISTRIBUTION' => 'EXODIST/Test2-Suite-0.000162.tar.gz',
+        'SYNCINFO'     => 'LeoNerd on Sat Apr 27 10:12:36 2024',
         'SYNCINFO'     => 'jkeenan on Wed Nov  1 20:18:33 2023',
         'FILES'        => q[cpan/Test2-Suite],
         'EXCLUDED'     => [

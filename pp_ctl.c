@@ -4062,6 +4062,7 @@ S_doeval_compile(pTHX_ U8 gimme, CV* outside, U32 seq, HV *hh)
     else {
         PL_hints = saveop->op_private & OPpEVAL_COPHH
                      ? oldcurcop->cop_hints : (U32)saveop->op_targ;
+        PL_prevailing_version = 0; /* we might change this below */
 
         /* making 'use re eval' not be in scope when compiling the
          * qr/mabye_has_runtime_code_block/ ensures that we don't get
@@ -4076,6 +4077,18 @@ S_doeval_compile(pTHX_ U8 gimme, CV* outside, U32 seq, HV *hh)
             SvREFCNT_dec(GvHV(PL_hintgv));
             GvHV(PL_hintgv) = hh;
             FETCHFEATUREBITSHH(hh);
+            /* temporarily turn magical flags off so we can delete without it getting in the way */
+            const U32 wasflags = SvFLAGS(hh);
+            SvMAGICAL_off(hh);
+
+            SV *versv;
+            /* hh is a new copy for us to use; we are permitted to delete keys */
+            if((versv = hv_deletes(hh, "CORE/prevailing_version", 0)) && SvOK(versv)) {
+                SAVEI16(PL_prevailing_version);
+                PL_prevailing_version = SvUV(versv);
+            }
+
+            SvFLAGS(hh) = wasflags;
         }
     }
     SAVECOMPILEWARNINGS();
