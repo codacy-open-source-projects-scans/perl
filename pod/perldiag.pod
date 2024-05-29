@@ -6796,7 +6796,7 @@ use it to restrict permissions for yourself (EXPR & 0700).
 =item UNIVERSAL does not export anything
 
 (F) You asked UNIVERSAL to export something, but UNIVERSAL is the
-base class for all classes and contains not exportable symbols.
+base class for all classes and contains no exportable symbols.
 
 =item Unbalanced context: %d more PUSHes than POPs
 
@@ -7755,6 +7755,15 @@ For now, you may live with this warning, or turn it off, but this code
 will no longer compile in a future version of Perl.  Or you can turn on
 S<C<use feature 'extra_paired_delimiters'>> and use the character that
 is the mirror image of this one for the closing string delimiter.
+
+=item Use of '%s' is experimental as a string delimiter
+
+(S experimental::extra_paired_delimiters)   This warning is emitted if
+you use as a string delimiter one of the non-ASCII mirror image ones
+enabled by S<C<use feature 'extra_paired_delimiters'>>.  Simply suppress
+the warning if you want to use the feature, but know that in doing so
+you are taking the risk of using an experimental feature which may
+change or be removed in a future Perl version:
 
 =item Use of %s is not allowed in Unicode property wildcard
 subpatterns in regex; marked by S<<-- HERE> in m/%s/
