@@ -64,7 +64,7 @@ L<builtin>.  A deprecation warning has also been added for any other
 subsequent C<use VERSION> declaration below version 5.39, to warn that it
 will no longer be permitted in Perl version 5.44.
 
-=head2 New C<builtin::inf> and C<builtin::nan> functions
+=head2 New C<builtin::inf> and C<builtin::nan> functions (experimental)
 
 Two new functions, C<inf> and C<nan>, have been added to the C<builtin>
 namespace.  These act like constants that yield the floating-point infinity
@@ -80,11 +80,39 @@ of Perl adds the final C<^^> operator, completing the set.
 
     $x ^^ $y and say "One of x or y is true, but not both";
 
+=head2 C<try>/C<catch> feature is no longer experimental
+
+Prior to this release, the C<try>/C<catch> feature for handling errors was
+considered experimental. Introduced in Perl version 5.34.0, this is now
+considered a stable language feature and its use no longer prints a warning.
+It still must be enabled with L<the 'try' feature|feature/The 'try' feature>.
+
+See L<perlsyn/Try Catch Exception Handling>.
+
+=head2 C<for> iterating over multiple values at a time is no longer experimental
+
+Prior to this release, iterating over multiple values at a time with C<for> was
+considered experimental. Introduced in Perl version 5.36.0, this is now
+considered a stable language feature and its use no longer prints a warning.
+See L<perlsyn/Compound Statements>.
+
+=head2 C<builtin> module is no longer experimental
+
+Prior to this release, the L<builtin> module and all of its functions were
+considered experimental. Introduced in Perl version 5.36.0, this module is now
+considered stable its use no longer prints a warning. However, several of its
+functions are still considered experimental.
+
 =head2 The C<:5.40> feature bundle adds C<try>
 
 The latest version feature bundle now contains the recently-stablized feature
 C<try>. As this feature bundle is used by the C<-E> commandline switch, these
 are immediately available in C<-E> scripts.
+
+=head2 C<use v5.40;> imports builtin functions
+
+In addition to importing a feature bundle, C<use v5.40;> (or later versions)
+imports the corresponding L<builtin version bundle|builtin/Version Bundles>.
 
 =head1 Security
 
@@ -175,20 +203,20 @@ The C<return> operator syntax now rejects indirect objects.  In most
 cases this would compile and even run, but wasn't documented and could
 produce confusing results, for example:
 
-  # note that sum hasn't been defined
-  sub sum_positive {
-    return sum grep $_ > 0, @_;
-    # unexpectedly parsed as:
-    #   return *sum, grep $_ > 0, @_;
-    # ... with the bareword acting like an extra (typeglob) argument
-  }
-  say for sum_positive(-1, 2, 3)
+    # note that sum hasn't been defined
+    sub sum_positive {
+        return sum grep $_ > 0, @_;
+        # unexpectedly parsed as:
+        #   return *sum, grep $_ > 0, @_;
+        # ... with the bareword acting like an extra (typeglob) argument
+    }
+    say for sum_positive(-1, 2, 3)
 
 produced:
 
-  *main::sum
-  2
-  3
+    *main::sum
+    2
+    3
 
 [L<GH #21716|https://github.com/Perl/perl5/issues/21716>]
 
@@ -501,7 +529,7 @@ L<Math::BigInt::FastCalc> has been upgraded from version 0.5013 to 0.5018.
 
 =item *
 
-L<Module::CoreList> has been upgraded from version 5.20230520 to 5.20240524.
+L<Module::CoreList> has been upgraded from version 5.20230520 to 5.20240604.
 
 =item *
 
@@ -709,6 +737,16 @@ functions, C<newANONLIST()>, C<newANONHASH()>, C<newSVREF()> and similar.
 
 =back
 
+=head3 L<perlclass>
+
+=over 4
+
+=item *
+
+Added a list of known bugs in the experimental C<class> feature.
+
+=back
+
 =head3 L<perlfunc>
 
 =over 4
@@ -728,11 +766,20 @@ and descriptions of their effects within a statement.
 
 =item *
 
-Documented new functions supporting the C<PERL_RC_STACK> build option:
-C<rpp_replace_at_norc()>, C<rpp_popfree_1_NN()>, C<rpp_popfree_2_NN()>,
-C<rpp_popfree_to_NN(svp)>, C<rpp_replace_1_1_NN(sv)>,
-C<rpp_replace_2_1_NN(sv)>, C<rpp_replace_at_NN(sp, sv)>,
-C<rpp_replace_at_norc_NN(sp, sv)>
+A new section has been added which describes the experimental
+reference-counted argument stack build option (C<PERL_RC_STACK>).
+
+=back
+
+=head3 L<perlclib>
+
+=over 4
+
+=item *
+
+Extensive guidance has been added for interfacing with the standard C
+library, including many more functions to avoid, and how to cope with
+locales and threads.
 
 =back
 
@@ -1572,7 +1619,7 @@ the same time as the removal of C<$[>.
 
 Perl 5.40.0 represents approximately 11 months of development since Perl
 5.38.0 and contains approximately 160,000 lines of changes across 1,500
-files from 74 authors.
+files from 75 authors.
 
 Excluding auto-generated files, documentation and release tools, there were
 approximately 110,000 lines of changes to 1,200 .pm, .t, .c and .h files.
@@ -1581,22 +1628,22 @@ Perl continues to flourish into its fourth decade thanks to a vibrant
 community of users and developers. The following people are known to have
 contributed the improvements that became Perl 5.40.0:
 
-Abe Timmerman, Alexander Kanavin, Amory Meltzer, Aristotle Pagaltzis,
-Beckett Normington, Bernard Quatermass, Bernd, Bruno Meneguele, Chad Granum,
-Chris 'BinGOs' Williams, Christoph Lamprecht, Craig A. Berry, Dagfinn Ilmari
-Mannsåker, Dan Book, Dan Church, Daniel Böhmer, Dan Jacobson, Dan Kogai,
-David Golden, David Mitchell, E. Choroba, Elvin Aslanov, Erik Huelsmann,
-Eugen Konkov, Gianni Ceccarelli, Graham Knop, Greg Kennedy, guoguangwu,
-Hauke D, H.Merijn Brand, Hugo van der Sanden, iabyn, Jake Hamby, Jakub Wilk,
-James E Keenan, James Raspass, Joe McMahon, Johan Vromans, John Karr, Karen
-Etheridge, Karl Williamson, Leon Timmermans, Lukas Mai, Marco Fontani, Marek
-Rouchal, Martijn Lievaart, Mathias Kende, Matthew Horsfall, Max Maischein,
-Nicolas Mendoza, Nicolas R, OpossumPetya, Paul Evans, Paul Marquess, Peter
-John Acklam, Philippe Bruhat (BooK), Raul E Rangel, Renee Baecker, Ricardo
-Signes, Richard Leach, Scott Baker, Sevan Janiyan, Sisyphus, Steve Hay,
-TAKAI Kousuke, Todd Rinaldo, Tomasz Konojacki, Tom Hughes, Tony Cook,
-William Lyu, x-yuri, Yves Orton, Zakariyya Mughal, Дилян
-Палаузов.
+Abe Timmerman, Alexander Kanavin, Amory Meltzer, Aristotle Pagaltzis, Arne
+Johannessen, Beckett Normington, Bernard Quatermass, Bernd, Bruno Meneguele,
+Chad Granum, Chris 'BinGOs' Williams, Christoph Lamprecht, Craig A. Berry,
+Dagfinn Ilmari Mannsåker, Dan Book, Dan Church, Daniel Böhmer, Dan
+Jacobson, Dan Kogai, David Golden, David Mitchell, E. Choroba, Elvin
+Aslanov, Erik Huelsmann, Eugen Konkov, Gianni Ceccarelli, Graham Knop, Greg
+Kennedy, guoguangwu, Hauke D, H.Merijn Brand, Hugo van der Sanden, iabyn,
+Jake Hamby, Jakub Wilk, James E Keenan, James Raspass, Joe McMahon, Johan
+Vromans, John Karr, Karen Etheridge, Karl Williamson, Leon Timmermans, Lukas
+Mai, Marco Fontani, Marek Rouchal, Martijn Lievaart, Mathias Kende, Matthew
+Horsfall, Max Maischein, Nicolas Mendoza, Nicolas R, OpossumPetya, Paul
+Evans, Paul Marquess, Peter John Acklam, Philippe Bruhat (BooK), Raul E
+Rangel, Renee Baecker, Ricardo Signes, Richard Leach, Scott Baker, Sevan
+Janiyan, Sisyphus, Steve Hay, TAKAI Kousuke, Todd Rinaldo, Tomasz Konojacki,
+Tom Hughes, Tony Cook, William Lyu, x-yuri, Yves Orton, Zakariyya Mughal,
+Дилян Палаузов.
 
 The list above is almost certainly incomplete as it is automatically
 generated from version control history. In particular, it does not include
