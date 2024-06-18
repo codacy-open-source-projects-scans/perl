@@ -4702,6 +4702,7 @@ Perl_newPROG(pTHX_ OP *o)
         SAVEFREEOP(o);
         ENTER;
         S_process_optree(aTHX_ NULL, PL_eval_root, start);
+        CvEVAL_COMPILED_on(PL_compcv); /* this eval is now fully compiled */
         LEAVE;
         PL_savestack_ix = i;
     }
@@ -5081,7 +5082,9 @@ S_fold_constants(pTHX_ OP *const o)
         SvPADTMP_off(sv);
     else if (!SvIMMORTAL(sv)) {
         SvPADTMP_on(sv);
-        SvREADONLY_on(sv);
+        /* Do not set SvREADONLY(sv) here. newSVOP will call
+         * Perl_ck_svconst, which will do it. Setting it early
+         * here prevents Perl_ck_svconst from setting SvIsCOW(sv).*/
     }
     newop = newSVOP(OP_CONST, 0, MUTABLE_SV(sv));
     if (!is_stringify) newop->op_folded = 1;
@@ -5530,6 +5533,16 @@ Perl_op_convert_list(pTHX_ I32 type, I32 flags, OP *o)
     if (type == OP_RETURN) {
         if (FEATURE_MODULE_TRUE_IS_ENABLED)
             flags |= OPf_SPECIAL;
+    }
+    if (type == OP_STRINGIFY && OP_TYPE_IS(o, OP_CONST) &&
+        !(flags & OPf_FOLDED) ) {
+        assert(!OpSIBLING(o));
+        /* Don't wrap a single CONST in a list, process that list,
+         * then constant fold the list back to the starting OP.
+         * Note: Folded CONSTs do not seem to occur frequently
+         * enough for it to be worth the code bloat of also
+         * providing a fast path for them. */
+        return o;
     }
     if (!o || o->op_type != OP_LIST)
         o = force_list(o, FALSE);

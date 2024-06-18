@@ -337,14 +337,6 @@ Perl_av_store(pTHX_ AV *av, SSize_t key, SV *val);
 #define PERL_ARGS_ASSERT_AV_STORE               \
         assert(av)
 
-/* PERL_CALLCONV SSize_t
-av_tindex(pTHX_ AV *av)
-        __attribute__warn_unused_result__; */
-
-/* PERL_CALLCONV SSize_t
-av_top_index(pTHX_ AV *av)
-        __attribute__warn_unused_result__; */
-
 PERL_CALLCONV void
 Perl_av_undef(pTHX_ AV *av);
 #define PERL_ARGS_ASSERT_AV_UNDEF               \
@@ -9850,6 +9842,11 @@ Perl_newSV_type_mortal(pTHX_ const svtype type)
         __attribute__warn_unused_result__
         __attribute__always_inline__;
 # define PERL_ARGS_ASSERT_NEWSV_TYPE_MORTAL
+
+PERL_STATIC_INLINE SV *
+Perl_new_sv(pTHX_ const char *file, int line, const char *func);
+# define PERL_ARGS_ASSERT_NEW_SV                \
+        assert(file); assert(func)
 
 PERL_STATIC_INLINE void
 Perl_pop_stackinfo(pTHX);

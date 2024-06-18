@@ -610,7 +610,8 @@ our %Modules = (
     },
 
     'Getopt::Long' => {
-        'DISTRIBUTION' => 'JV/Getopt-Long-2.57.tar.gz',
+        'DISTRIBUTION' => 'JV/Getopt-Long-2.58.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Jun 12 08:25:08 2024',
         'SYNCINFO'     => 'jkeenan on Sat Nov 11 13:09:21 2023',
         'FILES'        => q[cpan/Getopt-Long],
         'EXCLUDED'     => [
@@ -758,7 +759,8 @@ our %Modules = (
     },
 
     'Math::BigInt' => {
-        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-2.003002.tar.gz',
+        'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-2.003003.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Jun 12 08:50:03 2024',
         'SYNCINFO'     => 'corion on Thu Jan 11 20:23:12 2024',
         'SYNCINFO'     => 'book on Tue Dec 26 22:44:58 2023',
         'FILES'        => q[cpan/Math-BigInt],
@@ -827,7 +829,7 @@ our %Modules = (
     },
 
     'Module::CoreList' => {
-        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20240420.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20240609.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
     },
 
@@ -1137,7 +1139,8 @@ our %Modules = (
     },
 
     'Test2::Suite' => {
-        'DISTRIBUTION' => 'EXODIST/Test2-Suite-0.000162.tar.gz',
+        'DISTRIBUTION' => 'EXODIST/Test2-Suite-0.000163.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Jun 12 09:17:44 2024',
         'SYNCINFO'     => 'LeoNerd on Sat Apr 27 10:12:36 2024',
         'SYNCINFO'     => 'jkeenan on Wed Nov  1 20:18:33 2023',
         'FILES'        => q[cpan/Test2-Suite],

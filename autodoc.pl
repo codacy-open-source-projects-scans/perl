@@ -100,6 +100,8 @@ my %described_elsewhere;
 my %docs;
 my %seen;
 my %funcflags;
+my %deferreds;  # Elements whose usage hasn't been found by the time they are
+                # parsed
 my %missing;
 my %missing_macros;
 
@@ -379,7 +381,7 @@ my $apidoc_re = qr/ ^ (\s*)            # $1
                       (=?)             # $2
                       (\s*)            # $3
                       for (\s*)        # $4
-                      apidoc (_item)?  # $5
+                      apidoc (_item | _defn )?  # $5
                       (\s*)            # $6
                       (.*?)            # $7
                       \s* \n /x;
@@ -391,7 +393,7 @@ sub check_api_doc_line ($$) {
 
     return unless $in =~ $apidoc_re;
 
-    my $is_item = defined $5;
+    my $is_item = defined $5 && $5 eq "_item";
     my $is_in_proper_form = length $1 == 0
                          && length $2 > 0
                          && length $3 == 0
@@ -411,7 +413,7 @@ Expected:
   =for apidoc flags|returntype|name|arg|arg|...
   =for apidoc flags|returntype|name
   =for apidoc name
-(or 'apidoc_item')
+(or 'apidoc_item' or any of the above instead with 'apidoc_defn')
 EOS
 
     die "Only [$display_flags] allowed in apidoc_item:\n$in"
@@ -478,6 +480,11 @@ my %initial_file_section = (
                             'vutil.c' => $versioning_scn,
                            );
 
+sub output_file ($) {
+    my $flags = shift;
+    return $flags =~ /A/ ? 'api' : 'intern';
+}
+
 sub autodoc ($$) { # parse a file and extract documentation info
     my($fh,$file) = @_;
     my($in, $line_num, $header, $section);
@@ -502,32 +509,50 @@ sub autodoc ($$) { # parse a file and extract documentation info
         # Either it is for an API element, or heading text which we expect
         # will be used for elements later in the file
 
-        my ($text, $element_name, $flags, $ret_type, $is_item, $proto_in_file);
+        my ($text, $element_name, $ret_type, $is_item, $proto_in_file);
         my (@args, @items);
+        my $group_is_deferred = 0;
+        my $flags = "";
 
         # If the line starts a new section ...
         if ($in=~ /^ = (?: for [ ]+ apidoc_section | head1 ) [ ]+ (.*) /x) {
 
             $section = $1;
             if ($section =~ / ^ \$ /x) {
-                $section .= '_scn' unless $section =~ / _scn $ /;
+                $section .= '_scn' unless $section =~ / _scn $ /x;
                 $section = eval "$section";
                 die "Unknown \$section variable '$section' in $file: $@" if $@;
             }
             die "Unknown section name '$section' in $file near line $.\n"
                                     unless defined $valid_sections{$section};
-
         }
-        elsif ($in=~ /^ =for [ ]+ apidoc \B /x) {   # Otherwise better be a
-                                                    # plain apidoc line
-            die "Unknown apidoc-type line '$in'" unless $in=~ /^=for apidoc_item/;
+        elsif ($in !~ /^ =for [ ]+ ( apidoc (?: _defn)? ) \b /x) {
+            die "Unknown apidoc-type line '$in'"
+                                               unless $in=~ /^=for apidoc_item/;
             die "apidoc_item doesn't immediately follow an apidoc entry: '$in'";
         }
-        else {  # Plain apidoc
-
+        else {
+            my $line_type = $1;
             ($element_name, $flags, $ret_type, $is_item, $proto_in_file, @args)
-                                                = check_api_doc_line($file, $in);
-            # Override this line with any info in embed.fnc
+                                               = check_api_doc_line($file, $in);
+
+            # Handle apidoc_defn line
+            if ($line_type eq "apidoc_defn") {
+                if (defined $funcflags{$element_name}) {
+                    warn "Using embed.fnc entry for $element_name";
+                }
+                else {
+                    # We expect this line to furnish the information to a
+                    # corresponding apidoc line elsewhere in the source.
+                    # Hence, we can say that this macro is documented.  (A
+                    # warning will be raised if the mate line is missing.)
+                    add_defn($element_name, $flags . "d", $ret_type, \@args);
+                }
+                next;
+            }
+
+            # Here, is plain apidoc.  Override this line with any info in
+            # embed.fnc
             my ($embed_flags, $embed_ret_type, @embed_args)
                                                 = embed_override($element_name);
             if ($embed_ret_type) {
@@ -538,19 +563,32 @@ sub autodoc ($$) { # parse a file and extract documentation info
                 $ret_type = $embed_ret_type;
                 @args = @embed_args;
             }
-            elsif ($flags !~ /[my]/)  { # Not in embed.fnc, is missing if not
-                                        # a macro or typedef
+            elsif ($flags =~ /[my]/)  {
+
+                # Macros and typedefs are allowed to not be in embed.fnc.
+            }
+            elsif ($flags eq "")  {
+
+                # No flags at all here means this item's definition isn't yet
+                # known.  Defer it to later.
+                $group_is_deferred = 1;
+            }
+            else {
+
+                # Not in embed.fnc, and is not a macro nor typedef, so the
+                # actual definition is missing.
                 $missing{$element_name} = $file;
             }
 
-            die "flag '$1' is not legal (for function $element_name (from $file))"
-                        if $flags =~ / ( [^AabCDdEeFfGhiIMmNnTOoPpRrSsUuvWXxy;#] ) /x;
+            die "flag '$1' is not legal (for function $element_name"
+              . " (from $file))"
+                  if $flags =~ / ( [^AabCDdEeFfGhiIMmNnTOoPpRrSsUuvWXxy;#] ) /x;
 
             die "'u' flag must also have 'm' or 'y' flags' for $element_name"
-                                            if $flags =~ /u/ && $flags !~ /[my]/;
+                                           if $flags =~ /u/ && $flags !~ /[my]/;
             warn ("'$element_name' not \\w+ in '$proto_in_file' in $file")
-                        if $flags !~ /N/ &&
-                           $element_name !~ / ^ (?:struct\s+)? [_[:alpha:]] \w* $ /x;
+                   if $flags !~ /N/
+                   && $element_name !~ / ^ (?:struct\s+)? [_[:alpha:]] \w* $ /x;
 
             if ($flags =~ /#/) {
                 die "Return type must be empty for '$element_name'"
@@ -559,17 +597,33 @@ sub autodoc ($$) { # parse a file and extract documentation info
             }
 
             if (exists $seen{$element_name} && $flags !~ /h/) {
-                die ("'$element_name' in $file was already documented in $seen{$element_name}");
+                die ("'$element_name' in $file was already documented in"
+                   . " $seen{$element_name}");
             }
             else {
                 $seen{$element_name} = $file;
             }
+
+            # For uniformity of handling, this element is set to be
+            # just the first of any remaining ones in the group.  Setting the
+            # flags for this item are deferred because further processing may
+            # modify them
+            push @items, { name     => $element_name,
+                           ret_type => $ret_type,
+                           args     => [ @args ],
+                         };
         }
 
         # Here we have processed the initial line in the heading text or API
-        # element, and have saved the important information from it into the
-        # corresponding variables.  Now accumulate the text that applies to it
-        # up to a terminating line, which is one of:
+        # element, and in the latter case, have saved the important
+        # information from it into $items[0].
+        #
+        # Defer placing the group if no information found for it so far;
+        # otherwise calculate the output pod.
+        my $where = ($group_is_deferred) ? 'unknown' : output_file($flags);
+
+        # Now accumulate the text that applies to it up to a terminating line,
+        # which is one of:
         # 1) =cut
         # 2) =head (in a C file only =head1)
         # 3) an end comment line in a C file: m:^\s*\*/:
@@ -640,6 +694,20 @@ sub autodoc ($$) { # parse a file and extract documentation info
                            args     => [ @item_args ],
                          };
 
+            # If we have no information about this item, it is because its
+            # definition has yet to be encountered.  Add it to the list of
+            # such, with a bread crumb trail so that later we can easily find
+            # where it all fits
+            if ("$item_ret_type$item_flags@item_args" eq "") {
+                push $deferreds{$element_name}->@*,
+                     {
+                        name => $item_name,
+                        section => $section,
+                        pod     => $where,
+                        file    => $file,   # Just for any error message
+                     };
+            }
+
             # This line shows that this element is documented.
             delete $funcflags{$item_name};
         }
@@ -655,12 +723,13 @@ sub autodoc ($$) { # parse a file and extract documentation info
         if ($element_name) {
 
             # Here, we have accumulated into $text, the pod for $element_name
-            my $where = $flags =~ /A/ ? 'api' : 'intern';
 
-            die "No =for apidoc_section nor =head1 in $file for '$element_name'\n"
-                                                    unless defined $section;
+            die "No =for apidoc_section nor =head1 in $file for"
+              . "'$element_name'\n" unless defined $section;
             my $is_link_only = ($flags =~ /h/);
-            if (! $is_link_only && exists $docs{$where}{$section}{$element_name}) {
+            if (   ! $is_link_only
+                && exists $docs{$where}{$section}{$element_name})
+            {
                 warn "$0: duplicate API entry for '$element_name' in"
                     . " $where/$section\n";
                 next;
@@ -670,17 +739,18 @@ sub autodoc ($$) { # parse a file and extract documentation info
             if ($is_link_only) {
                 if ($file_is_C) {
                     die "Can't currently handle link with items to it:\n$in"
-                                                                       if @items;
+                                                                if @items > 1;
                     $docs{$where}{$section}{X_tags}{$element_name} = $file;
                     redo;    # Don't put anything if C source
                 }
 
-                # Here, is an 'h' flag in pod.  We add a reference to the pod (and
-                # nothing else) to perlapi/intern.  (It would be better to add a
-                # reference to the correct =item,=header, but something that makes
-                # it harder is that it that might be a duplicate, like '=item *';
-                # so that is a future enhancement XXX.  Another complication is
-                # there might be more than one deserving candidates.)
+                # Here, is an 'h' flag in pod.  We add a reference to the pod
+                # (and nothing else) to perlapi/intern.  (It would be better
+                # to add a reference to the correct =item,=header, but
+                # something that makes it harder is that it that might be a
+                # duplicate, like '=item *'; so that is a future enhancement
+                # XXX.  Another complication is there might be more than one
+                # deserving candidates.)
                 my $podname = $file =~ s!.*/!!r;    # Rmv directory name(s)
                 $podname =~ s/\.pod//;
                 $text = "Described in L<$podname>.\n";
@@ -694,11 +764,9 @@ sub autodoc ($$) { # parse a file and extract documentation info
                 push $described_elsewhere{$podname}->@*, $podname;
             }
 
-            $docs{$where}{$section}{$element_name}{flags} = $flags;
             $docs{$where}{$section}{$element_name}{pod} = $text;
             $docs{$where}{$section}{$element_name}{file} = $file;
-            $docs{$where}{$section}{$element_name}{ret_type} = $ret_type;
-            push $docs{$where}{$section}{$element_name}{args}->@*, @args;
+            $items[0]{flags} = $flags;
             push $docs{$where}{$section}{$element_name}{items}->@*, @items;
         }
         elsif ($text) {
@@ -805,8 +873,8 @@ sub parse_config_h {
                 else {
                     $configs{$name}{verbatim} = 1;
 
-                    # The first verbatim line in a run of them is separated by an
-                    # empty line from the flowing lines above it
+                    # The first verbatim line in a run of them is separated by
+                    # an empty line from the flowing lines above it
                     push @description, "\n" if $description[-1] =~ /^\S/;
 
                     $_ = Text::Tabs::expand($_);
@@ -827,7 +895,8 @@ sub parse_config_h {
                       \# \s* define \s+ ( \w+ ) # $1 is the name
                   (   \s* )                     # $2 indicates if args or not
                   (   .*? )                     # $3 is any definition
-                  (?: / \s* \* \* / )?          # Optional trailing /**/ or / **/
+                  (?: / \s* \* \* / )?          # Optional trailing /**/
+                                                # or / **/
                   $
                 !x)
         {
@@ -1144,9 +1213,11 @@ sub parse_config_h {
                 $configs{$name}{'section'} = $site_scn;
             }
             elsif (   $pod =~ / \b floating $dash_or_spaces point \b /ix
-                   || $pod =~ / \b (double | single) $dash_or_spaces precision \b /ix
+                   || $pod =~ / \b (double | single) $dash_or_spaces
+                                precision \b /ix
                    || $pod =~ / \b doubles \b /ix
-                   || $pod =~ / \b (?: a | the | long ) \s+ (?: double | NV ) \b /ix)
+                   || $pod =~ / \b (?: a | the | long ) \s+
+                                (?: double | NV ) \b /ix)
             {
                 $configs{$name}{'section'} =
                                     $floating_scn;
@@ -1203,14 +1274,14 @@ sub parse_config_h {
             $flags .= 'U' unless defined $configs{$name}{usage};
 
             # All the information has been gathered; save it
-            $docs{'api'}{$section}{$name}{flags} = $flags;
+            $docs{'api'}{$section}{$name}{items}[0]->{flags} = $flags;
+            $docs{'api'}{$section}{$name}{items}[0]->{name} = $name;
             $docs{'api'}{$section}{$name}{pod} = $configs{$name}{pod};
-            $docs{'api'}{$section}{$name}{ret_type} = "";
+            $docs{'api'}{$section}{$name}{items}[0]{ret_type} = "";
             $docs{'api'}{$section}{$name}{file} = 'config.h';
             $docs{'api'}{$section}{$name}{usage}
                 = $configs{$name}{usage} if defined $configs{$name}{usage};
-            push $docs{'api'}{$section}{$name}{args}->@*, ();
-            push $docs{'api'}{$section}{$name}{items}->@*, ();
+            push $docs{'api'}{$section}{$name}{items}[0]{args}->@*, ();
         }
     }
 }
@@ -1248,19 +1319,11 @@ sub docout ($$$) { # output the docs for one function group
     # Trim trailing space
     $element_name =~ s/\s*$//;
 
-    my $flags = $docref->{flags};
     my $pod = $docref->{pod} // "";
     my $file = $docref->{file};
 
     my @items = $docref->{items}->@*;
-
-    # Make the main element the first of the items.  This allows uniform
-    # treatment below
-    unshift @items, {   name => $element_name,
-                        flags => $flags,
-                        ret_type => $docref->{ret_type},
-                        args => [ $docref->{args}->@* ],
-                    };
+    my $flags = $items[0]{flags};
 
     warn("Empty pod for $element_name (from $file)") unless $pod =~ /\S/;
 
@@ -1653,7 +1716,7 @@ sub output {
 
         if ($podname eq 'perlapi') {
             print $fh "\n", $valid_sections{$section_name}{header}, "\n"
-                                if defined $valid_sections{$section_name}{header};
+                 if defined $valid_sections{$section_name}{header};
 
             # Output any heading-level documentation and delete so won't get in
             # the way later
@@ -1702,22 +1765,31 @@ sub output {
     read_only_bottom_close_and_rename($fh);
 }
 
-foreach (@{(setup_embed())[0]}) {
-    my $embed= $_->{embed}
-        or next;
-    my ($flags, $ret_type, $func, $args) = @{$embed}{qw(flags return_type name args)};
-    my @munged_args= @$args;
+sub add_defn  {
+    my ($func, $flags, $ret_type, $args_ref) = @_;
+
+    my @munged_args= $args_ref->@*;
     s/\b(?:NN|NULLOK)\b\s+//g for @munged_args;
 
     $funcflags{$func} = {
-                         flags => $flags,
-                         ret_type => $ret_type,
-                         args => \@munged_args,
+                          flags => $flags,
+                          ret_type => $ret_type,
+                          args => \@munged_args,
                         };
+}
+
+foreach (@{(setup_embed())[0]}) {
+    my $embed= $_->{embed}
+        or next;
+    my ($flags, $ret_type, $func, $args) =
+                                 @{$embed}{qw(flags return_type name args)};
+    add_defn($func, $flags, $ret_type, $args);
 }
 
 # glob() picks up docs from extra .c or .h files that may be in unclean
 # development trees.
+my @headers;
+my @non_headers;
 open my $fh, '<', 'MANIFEST'
     or die "Can't open MANIFEST: $!";
 while (my $line = <$fh>) {
@@ -1727,13 +1799,101 @@ while (my $line = <$fh>) {
     next if $file =~ m! ^ ( cpan | dist | ext ) / !x
          && ! defined $extra_input_pods{$file};
 
-    open F, '<', $file or die "Cannot open $file for docs: $!\n";
-    autodoc(\*F,$file);
-    close F or die "Error closing $file: $!\n";
+    if ($file =~ /\.h/) {
+        push @headers, $file;
+    }
+    else {
+        push @non_headers, $file;
+    }
 }
 close $fh or die "Error whilst reading MANIFEST: $!";
 
+for my $file (@headers, @non_headers) {
+    open my $fh, '<', $file or die "Cannot open $file for docs: $!\n";
+    autodoc($fh, $file);
+    close $fh or die "Error closing $file: $!\n";
+}
+
 parse_config_h();
+
+# Any apidoc group whose leader element's documentation wasn't known by the
+# time it was parsed has been placed in 'unknown' member of %docs.  We should
+# now be able to figure out which real pod file to place it in, and its usage.
+my $unknown = $docs{unknown};
+foreach my $section_name (keys $unknown->%*) {
+    foreach my $group_name (keys $unknown->{$section_name}->%*) {
+
+        # The leader is always the 0th element in the 'items' array.
+        my $item_name = $unknown->{$section_name}{$group_name}{items}[0]{name};
+
+        # We should have a usage definition by now.
+        my $corrected = delete $funcflags{$item_name};
+        if (! defined $corrected) {
+            die "=for apidoc line without any usage definition $item_name in"
+              . " $unknown->{$section_name}{$group_name}{file}";
+        }
+
+        my $where = output_file($corrected->{flags});
+
+        # $where now gives the correct pod for this group.  Prepare to move it
+        # to there
+        die "$where unexpectedly has an entry in $section_name for $group_name"
+                          if defined $docs{$where}{$section_name}{$group_name};
+        $docs{$where}{$section_name}{$group_name} =
+                                 delete $unknown->{$section_name}{$group_name};
+
+        # And fill in the leader item with the saved values
+        my $new = $docs{$where}{$section_name}{$group_name}{items}[0];
+        $new->{name} = $item_name;
+        $new->{args} = $corrected->{args};
+        $new->{flags} = $corrected->{flags};
+        $new->{ret_type} = $corrected->{ret_type};
+    }
+}
+
+# Now that any leaders have been filled in, we can do the same for all the
+# deferred non-leaders
+for my $group_name (keys %deferreds) {
+    my $group = delete $deferreds{$group_name};
+    foreach my $item ($group->@*) {
+        my $item_name = $item->{name};
+
+        # We should have a usage definition by now.
+        my $corrected = delete $funcflags{$item_name};
+        if (! $corrected) {
+            die "=for apidoc line without any usage definition $item_name in"
+              . " $item->{file}";
+        }
+
+        my $section = $item->{section};
+        my $flags = $corrected->{flags};
+
+        my $where = output_file($flags);
+
+        # We know where this element is that needs to be updated.  It better
+        # exist, or something is badly wrong
+        my $dest = $docs{$where}{$section}{$group_name};
+        if (! defined $dest) {
+            die "Unexpectedly didn't find an entry for"
+              . " $where->$section->$group_name";
+        }
+
+        # Look through the item list for this one, and correct it.
+        my $found = 0;
+        for my $dest_item ($dest->{items}->@*) {
+            next unless $dest_item->{name} eq $item_name;
+            $dest_item->{args} = $corrected->{args};
+            $dest_item->{flags} = $corrected->{flags};
+            $dest_item->{ret_type} = $corrected->{ret_type};
+            $found = 1;
+        }
+
+        if (! $found) {
+            die "Unexpectedly didn't find an entry for"
+              . " $where->$section->$group_name->$item_name";
+        }
+    }
+}
 
 for (sort keys %funcflags) {
     next unless $funcflags{$_}{flags} =~ /d/;
@@ -1741,8 +1901,13 @@ for (sort keys %funcflags) {
     warn "no docs for $_\n";
 }
 
+for my $key (sort keys %deferreds) {
+    warn "no docs for $key\n";
+}
+
 foreach (sort keys %missing) {
-    warn "Function '$_', documented in $missing{$_}, not listed in embed.fnc";
+    warn "Function '$_', documented in $missing{$_}, not listed in embed.fnc"
+       . " nor in the source";
 }
 
 # List of funcs in the public API that aren't also marked as core-only,
@@ -1775,13 +1940,17 @@ my $places_other_than_api = join ", ",
             map { "L<$_>" } sort dictionary_order 'perlintern', @other_places;
 
 # The S< > makes things less densely packed, hence more readable
-my $has_defs_text .= join ",S< > ", map { "C<$_>" } sort dictionary_order @has_defs;
-my $has_r_defs_text .= join ",S< > ", map { "C<$_>" } sort dictionary_order @has_r_defs;
+my $has_defs_text .= join ",S< > ", map { "C<$_>" }
+                                             sort dictionary_order @has_defs;
+my $has_r_defs_text .= join ",S< > ", map { "C<$_>" }
+                                             sort dictionary_order @has_r_defs;
 $valid_sections{$genconfig_scn}{footer} =~ s/__HAS_LIST__/$has_defs_text/;
 $valid_sections{$genconfig_scn}{footer} =~ s/__HAS_R_LIST__/$has_r_defs_text/;
 
-my $include_defs_text .= join ",S< > ", map { "C<$_>" } sort dictionary_order @include_defs;
-$valid_sections{$genconfig_scn}{footer} =~ s/__INCLUDE_LIST__/$include_defs_text/;
+my $include_defs_text .= join ",S< > ", map { "C<$_>" }
+                                            sort dictionary_order @include_defs;
+$valid_sections{$genconfig_scn}{footer}
+                                      =~ s/__INCLUDE_LIST__/$include_defs_text/;
 
 my $section_list = join "\n\n", map { "=item L</$_>" }
                                 sort(dictionary_order keys %valid_sections),

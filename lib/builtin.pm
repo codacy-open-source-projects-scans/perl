@@ -1,13 +1,11 @@
-package builtin 0.014;
+package builtin 0.015;
 
-use strict;
-use warnings;
+use v5.40;
 
 # All code, including &import, is implemented by always-present
 # functions in the perl interpreter itself.
 # See also `builtin.c` in perl source
 
-1;
 __END__
 
 =head1 NAME
@@ -265,6 +263,8 @@ that are fundamentally stringlike versus numberlike in nature.
 =head2 stringify
 
     $str = stringify($val);
+
+This function is currently B<experimental>.
 
 Returns a new plain perl string that represents the given argument.
 

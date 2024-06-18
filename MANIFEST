@@ -5717,6 +5717,8 @@ pod/perl5363delta.pod			Perl changes in version 5.36.3
 pod/perl5380delta.pod			Perl changes in version 5.38.0
 pod/perl5381delta.pod			Perl changes in version 5.38.1
 pod/perl5382delta.pod			Perl changes in version 5.38.2
+pod/perl5400delta.pod			Perl changes in version 5.40.0
+pod/perl5410delta.pod			Perl changes in version 5.41.0
 pod/perl561delta.pod			Perl changes in version 5.6.1
 pod/perl56delta.pod			Perl changes in version 5.6
 pod/perl581delta.pod			Perl changes in version 5.8.1
@@ -6626,6 +6628,7 @@ t/run/switchx.aux			Data for switchx.t
 t/run/switchx.t				Test the -x switch
 t/run/switchx2.aux			Data for switchx.t
 t/run/switchx3.aux			Data for switchx.t
+t/run/todo.t				TODO tests
 t/TEST					The regression tester
 t/test.pl				Simple testing library
 t/test_pl/_num_to_alpha.t		Tests for the simple testing library

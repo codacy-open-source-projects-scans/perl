@@ -776,6 +776,9 @@ the strings?).
 
  Graham K  5.40.0-RC1   2024-May-24     The 5.40 maintenance track
  Graham K  5.40.0-RC2   2024-Jun-04
+ Graham K  5.40.0       2024-Jun-09
+
+ Graham K  5.41.0       2024-Jun-10     The 5.41 development track
 
 =head2 SELECTED RELEASE SIZES
 

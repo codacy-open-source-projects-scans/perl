@@ -2283,7 +2283,7 @@ Perl_is_utf8_string_loclen(const U8 *s, STRLEN len, const U8 **ep, STRLEN *el)
  * conditional, same as the calling code checking for invariance ahead of time.
  * And having the calling code remove that conditional speeds up by that
  * conditional, the case where it wasn't invariant.  So there's no reason to
- * check before caling this.
+ * check before calling this.
  *
  * But we don't know this for non-core calls, so have to retain the check for
  * them. */
@@ -4217,7 +4217,7 @@ implementation stolen from PostgreSQL.
 PERL_STATIC_INLINE Size_t
 Perl_my_strnlen(const char *str, Size_t maxlen)
 {
-    const char *end = (char *) memchr(str, '\0', maxlen);
+    const char *end = (const char *) memchr(str, '\0', maxlen);
 
     PERL_ARGS_ASSERT_MY_STRNLEN;
 
