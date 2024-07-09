@@ -407,34 +407,6 @@ string/length pair.
 Like C<sv_setref_pvn>, but takes a literal string instead of
 a string/length pair.
 
-=for apidoc_section $string
-
-=for apidoc Ama|char*|savepvs|"literal string"
-Like C<savepvn>, but takes a literal string instead of a
-string/length pair.
-
-=for apidoc Ama|char*|savesharedpvs|"literal string"
-A version of C<savepvs()> which allocates the duplicate string in memory
-which is shared between threads.
-
-=for apidoc_section $GV
-
-=for apidoc Am|HV*|gv_stashpvs|"name"|I32 create
-Like C<gv_stashpvn>, but takes a literal string instead of a
-string/length pair.
-
-=for apidoc_section $HV
-
-=for apidoc Am|SV**|hv_fetchs|HV* tb|"key"|I32 lval
-Like C<hv_fetch>, but takes a literal string instead of a
-string/length pair.
-=for apidoc_section $lexer
-
-=for apidoc Amx|void|lex_stuff_pvs|"pv"|U32 flags
-
-Like L</lex_stuff_pvn>, but takes a literal string instead of
-a string/length pair.
-
 =cut
 */
 
@@ -473,8 +445,19 @@ Perl_xxx(aTHX_ ...) form for any API calls where it's used.
 #define sv_setpvs_mg(sv, str) Perl_sv_setpvn_mg(aTHX_ sv, STR_WITH_LEN(str))
 #define sv_setref_pvs(rv, classname, str) \
     Perl_sv_setref_pvn(aTHX_ rv, classname, STR_WITH_LEN(str))
+
+/*
+=for apidoc_defn Ama|char*|savepvs|"literal string"
+=for apidoc_defn Ama|char*|savesharedpvs|"literal string"
+=cut
+*/
 #define savepvs(str) Perl_savepvn(aTHX_ STR_WITH_LEN(str))
 #define savesharedpvs(str) Perl_savesharedpvn(aTHX_ STR_WITH_LEN(str))
+
+/*
+=for apidoc_defn Am|HV*|gv_stashpvs|"name"|I32 create
+=cut
+*/
 #define gv_stashpvs(str, create) \
     Perl_gv_stashpvn(aTHX_ STR_WITH_LEN(str), create)
 
@@ -483,6 +466,11 @@ Perl_xxx(aTHX_ ...) form for any API calls where it's used.
 #define  gv_fetchpvn  gv_fetchpvn_flags
 
 
+/*
+=for apidoc_defn x|void|lex_stuff_pvs|"pv"|U32 flags
+
+=cut
+*/
 #define lex_stuff_pvs(pv,flags) Perl_lex_stuff_pvn(aTHX_ STR_WITH_LEN(pv), flags)
 
 #define get_cvs(str, flags)					\
@@ -2698,15 +2686,12 @@ again) that hopefully catches attempts to access uninitialized memory.
 
 =for apidoc Am|void|PoisonNew|void* dest|int nitems|type
 
-PoisonWith(0xAB) for catching access to allocated but uninitialized memory.
+C<PoisonWith(0xAB)> for catching access to allocated but uninitialized memory.
 
-=for apidoc Am|void|PoisonFree|void* dest|int nitems|type
+=for apidoc   Am|void|PoisonFree|void* dest|int nitems|type
+=for apidoc_item|void|Poison    |void* dest|int nitems|type
 
-PoisonWith(0xEF) for catching access to freed memory.
-
-=for apidoc Am|void|Poison|void* dest|int nitems|type
-
-PoisonWith(0xEF) for catching access to freed memory.
+These each call C<PoisonWith(0xEF)> for catching access to freed memory.
 
 =cut */
 

@@ -548,10 +548,19 @@ whether it is valid to call C<HvAUX()>.
 
 /* Provide 's' suffix subs for constant strings (and avoid needing to count
  * chars). See STR_WITH_LEN in handy.h - because these are macros we cant use
- * STR_WITH_LEN to do the work, we have to unroll it. */
+ * STR_WITH_LEN to do the work, we have to unroll it.
+ *
+ *
+=for apidoc_defn AR|bool|hv_existss|HV *hv|"key"
+=cut
+*/
 #define hv_existss(hv, key) \
     hv_exists((hv), ASSERT_IS_LITERAL(key), (sizeof(key)-1))
 
+/*
+=for apidoc_defn Am|SV**|hv_fetchs|HV* hv|"key"|I32 lval
+=cut
+*/
 #define hv_fetchs(hv, key, lval) \
     hv_fetch((hv), ASSERT_IS_LITERAL(key), (sizeof(key)-1), (lval))
 

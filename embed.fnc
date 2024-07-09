@@ -583,12 +583,12 @@
 :        should not be added to newly-added functions as they will have no such
 :        compatibility issues.
 :
-:   'W'  Add a comma_pDEPTH argument to function prototypes, and a comma_aDEPTH argument
-:        to the function calls. This means that under DEBUGGING a depth
-:        argument is added to the functions, which is used for example by the
-:        regex engine for debugging and trace output. A non DEBUGGING build
-:        will not pass the unused argument. Currently restricted to functions
-:        with at least one argument.
+:   'W'  Add a comma_pDEPTH argument to function prototypes, and a comma_aDEPTH
+:	 argument to the function calls. This means that under DEBUGGING a
+:	 depth argument is added to the functions, which is used for example by
+:	 the regex engine for debugging and trace output. A non DEBUGGING build
+:	 will not pass the unused argument. Currently restricted to functions
+:	 with at least one argument.
 :
 :   'X'  Explicitly exported:
 :
@@ -763,7 +763,7 @@ Adp	|int	|bytes_cmp_utf8 |NN const U8 *b 			\
 AMdp	|U8 *	|bytes_from_utf8|NN const U8 *s 			\
 				|NN STRLEN *lenp			\
 				|NN bool *is_utf8p
-CTdpx	|U8 *	|bytes_from_utf8_loc					\
+CTdp	|U8 *	|bytes_from_utf8_loc					\
 				|NN const U8 *s 			\
 				|NN STRLEN *lenp			\
 				|NN bool *is_utf8p			\
@@ -1614,8 +1614,6 @@ p	|bool	|io_close	|NN IO *io				\
 				|NULLOK GV *gv				\
 				|bool is_explicit			\
 				|bool warn_on_fail
-APRTdm	|bool	|is_ascii_string|NN const U8 * const s			\
-				|STRLEN len
 ARTdip	|Size_t |isC9_STRICT_UTF8_CHAR					\
 				|NN const U8 * const s0 		\
 				|NN const U8 * const e
@@ -1634,12 +1632,9 @@ ATdip	|bool	|is_c9strict_utf8_string_loclen 			\
 
 APTdp	|bool	|isinfnan	|NV nv
 dp	|bool	|isinfnansv	|NN SV *sv
-Cp	|bool	|_is_in_locale_category 				\
+Cp	|bool	|is_in_locale_category_ 				\
 				|const bool compiling			\
 				|const int category
-APRTdm	|bool	|is_invariant_string					\
-				|NN const U8 * const s			\
-				|STRLEN len
 ARdp	|I32	|is_lvalue_sub
 : used to check for NULs in pathnames and other names
 ARdip	|bool	|is_safe_syscall|NN const char *pv			\
@@ -1702,9 +1697,6 @@ ATdip	|bool	|is_utf8_fixed_width_buf_loclen_flags			\
 CRp	|bool	|_is_utf8_FOO	|const U8 classnum			\
 				|NN const U8 *p 			\
 				|NN const U8 * const e
-ARTdmo	|bool	|is_utf8_invariant_string				\
-				|NN const U8 * const s			\
-				|STRLEN len
 ARTdip	|bool	|is_utf8_invariant_string_loc				\
 				|NN const U8 * const s			\
 				|STRLEN len				\
@@ -2289,7 +2281,7 @@ ARdp	|SV *	|newSVpv	|NULLOK const char * const s		\
 				|const STRLEN len
 ARdfpv	|SV *	|newSVpvf	|NN const char * const pat		\
 				|...
-ARdp	|SV *	|newSVpvn	|NULLOK const char * const buffer	\
+ARdp	|SV *	|newSVpvn	|NULLOK const char * const s		\
 				|const STRLEN len
 ARdp	|SV *	|newSVpvn_flags |NULLOK const char * const s		\
 				|const STRLEN len			\
@@ -2367,7 +2359,7 @@ p	|void	|no_bareword_filehandle 				\
 Tefprv	|void	|noperl_die	|NN const char *pat			\
 				|...
 Adp	|int	|nothreadhook
-p	|void	|notify_parser_that_changed_to_utf8
+p	|void	|notify_parser_that_encoding_changed
 : Used in perly.y
 Rp	|OP *	|oopsAV 	|NN OP *o
 : Used in perly.y
@@ -3434,7 +3426,7 @@ Adm	|bool	|sv_streq	|NULLOK SV *sv1 			\
 Adp	|bool	|sv_streq_flags |NULLOK SV *sv1 			\
 				|NULLOK SV *sv2 			\
 				|const U32 flags
-EXpx	|SV *	|sv_strftime_ints					\
+Adp	|SV *	|sv_strftime_ints					\
 				|NN SV *fmt				\
 				|int sec				\
 				|int min				\
@@ -3442,8 +3434,6 @@ EXpx	|SV *	|sv_strftime_ints					\
 				|int mday				\
 				|int mon				\
 				|int year				\
-				|int wday				\
-				|int yday				\
 				|int isdst
 Adp	|SV *	|sv_strftime_tm |NN SV *fmt				\
 				|NN const struct tm *mytm
@@ -4444,8 +4434,6 @@ S	|void	|ints_to_tm	|NN struct tm *my_tm			\
 				|int mday				\
 				|int mon				\
 				|int year				\
-				|int wday				\
-				|int yday				\
 				|int isdst
 S	|bool	|is_locale_utf8 |NN const char *locale
 S	|HV *	|my_localeconv	|const int item
@@ -5928,6 +5916,8 @@ S	|void	|update_debugger_info					\
 				|NULLOK SV *orig_sv			\
 				|NULLOK const char * const buf		\
 				|STRLEN len
+S	|void	|yyerror_non_ascii_message				\
+				|NN const U8 * const s
 S	|int	|yywarn 	|NN const char * const s		\
 				|U32 flags
 # if defined(DEBUGGING)

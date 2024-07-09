@@ -8103,6 +8103,15 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
             finish_export_lexical();
         }
 
+        /* source::encoding 'ascii' is also off by default for earlier versions
+         * */
+        if (shortver >= SHORTVER(5, 41)) {
+            PL_hints |= HINT_ASCII_ENCODING;
+        }
+        else {
+            PL_hints &= ~HINT_ASCII_ENCODING;
+        }
+
         PL_prevailing_version = shortver;
     }
 
@@ -14645,7 +14654,7 @@ Perl_ck_entersub_args_core(pTHX_ OP *entersubop, GV *namegv, SV *protosv)
             /* Usually, OPf_SPECIAL on an op with no args means that it had
              * parens, but these have their own meaning for that flag: */
             && opnum != OP_VALUES && opnum != OP_KEYS && opnum != OP_EACH
-            && opnum != OP_DELETE && opnum != OP_EXISTS)
+            && opnum != OP_DELETE && opnum != OP_EXISTS && opnum != OP_CHDIR)
                 flags |= OPf_SPECIAL;
         /* excise cvop from end of sibling chain */
         op_sibling_splice(parent, prev, 1, NULL);

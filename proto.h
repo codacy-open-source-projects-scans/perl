@@ -103,10 +103,6 @@ Perl__inverse_folds(pTHX_ const UV cp, U32 *first_folds_to, const U32 **remainin
         assert(first_folds_to); assert(remaining_folds_to)
 
 PERL_CALLCONV bool
-Perl__is_in_locale_category(pTHX_ const bool compiling, const int category);
-#define PERL_ARGS_ASSERT__IS_IN_LOCALE_CATEGORY
-
-PERL_CALLCONV bool
 Perl__is_uni_FOO(pTHX_ const U8 classnum, const UV c)
         __attribute__warn_unused_result__;
 #define PERL_ARGS_ASSERT__IS_UNI_FOO
@@ -1815,21 +1811,15 @@ Perl_io_close(pTHX_ IO *io, GV *gv, bool is_explicit, bool warn_on_fail)
         assert(io)
 
 /* PERL_CALLCONV bool
-is_ascii_string(const U8 * const s, STRLEN len)
-        __attribute__warn_unused_result__
-        __attribute__pure__; */
-
-/* PERL_CALLCONV bool
 is_c9strict_utf8_string(const U8 *s, STRLEN len)
         __attribute__warn_unused_result__; */
 
 /* PERL_CALLCONV bool
 is_c9strict_utf8_string_loc(const U8 *s, STRLEN len, const U8 **ep); */
 
-/* PERL_CALLCONV bool
-is_invariant_string(const U8 * const s, STRLEN len)
-        __attribute__warn_unused_result__
-        __attribute__pure__; */
+PERL_CALLCONV bool
+Perl_is_in_locale_category_(pTHX_ const bool compiling, const int category);
+#define PERL_ARGS_ASSERT_IS_IN_LOCALE_CATEGORY_
 
 PERL_CALLCONV I32
 Perl_is_lvalue_sub(pTHX)
@@ -1862,10 +1852,6 @@ is_utf8_fixed_width_buf_flags(const U8 * const s, STRLEN len, const U32 flags); 
 
 /* PERL_CALLCONV bool
 is_utf8_fixed_width_buf_loc_flags(const U8 * const s, STRLEN len, const U8 **ep, const U32 flags); */
-
-/* PERL_CALLCONV bool
-is_utf8_invariant_string(const U8 * const s, STRLEN len)
-        __attribute__warn_unused_result__; */
 
 /* PERL_CALLCONV bool
 is_utf8_string(const U8 *s, STRLEN len)
@@ -3037,7 +3023,7 @@ Perl_newSVpvf(pTHX_ const char * const pat, ...)
         assert(pat)
 
 PERL_CALLCONV SV *
-Perl_newSVpvn(pTHX_ const char * const buffer, const STRLEN len)
+Perl_newSVpvn(pTHX_ const char * const s, const STRLEN len)
         __attribute__warn_unused_result__;
 #define PERL_ARGS_ASSERT_NEWSVPVN
 
@@ -3170,9 +3156,9 @@ Perl_nothreadhook(pTHX);
 #define PERL_ARGS_ASSERT_NOTHREADHOOK
 
 PERL_CALLCONV void
-Perl_notify_parser_that_changed_to_utf8(pTHX)
+Perl_notify_parser_that_encoding_changed(pTHX)
         __attribute__visibility__("hidden");
-#define PERL_ARGS_ASSERT_NOTIFY_PARSER_THAT_CHANGED_TO_UTF8
+#define PERL_ARGS_ASSERT_NOTIFY_PARSER_THAT_ENCODING_CHANGED
 
 PERL_CALLCONV OP *
 Perl_oopsAV(pTHX_ OP *o)
@@ -4900,7 +4886,7 @@ Perl_sv_streq_flags(pTHX_ SV *sv1, SV *sv2, const U32 flags);
 #define PERL_ARGS_ASSERT_SV_STREQ_FLAGS
 
 PERL_CALLCONV SV *
-Perl_sv_strftime_ints(pTHX_ SV *fmt, int sec, int min, int hour, int mday, int mon, int year, int wday, int yday, int isdst);
+Perl_sv_strftime_ints(pTHX_ SV *fmt, int sec, int min, int hour, int mday, int mon, int year, int isdst);
 #define PERL_ARGS_ASSERT_SV_STRFTIME_INTS       \
         assert(fmt)
 
@@ -6999,7 +6985,7 @@ S_get_locale_string_utf8ness_i(pTHX_ const char *string, const locale_utf8ness_t
 # define PERL_ARGS_ASSERT_GET_LOCALE_STRING_UTF8NESS_I
 
 STATIC void
-S_ints_to_tm(pTHX_ struct tm *my_tm, const char *locale, int sec, int min, int hour, int mday, int mon, int year, int wday, int yday, int isdst);
+S_ints_to_tm(pTHX_ struct tm *my_tm, const char *locale, int sec, int min, int hour, int mday, int mon, int year, int isdst);
 # define PERL_ARGS_ASSERT_INTS_TO_TM            \
         assert(my_tm); assert(locale)
 
@@ -9351,6 +9337,11 @@ S_tokeq(pTHX_ SV *sv);
 STATIC void
 S_update_debugger_info(pTHX_ SV *orig_sv, const char * const buf, STRLEN len);
 # define PERL_ARGS_ASSERT_UPDATE_DEBUGGER_INFO
+
+STATIC void
+S_yyerror_non_ascii_message(pTHX_ const U8 * const s);
+# define PERL_ARGS_ASSERT_YYERROR_NON_ASCII_MESSAGE \
+        assert(s)
 
 STATIC int
 S_yywarn(pTHX_ const char * const s, U32 flags);

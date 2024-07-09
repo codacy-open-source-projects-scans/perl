@@ -829,7 +829,7 @@ our %Modules = (
     },
 
     'Module::CoreList' => {
-        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20240609.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20240702.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
     },
 
@@ -1512,6 +1512,8 @@ our %Modules = (
                 lib/perlbug.t
                 lib/sigtrap.{pm,t}
                 lib/sort.{pm,t}
+                lib/source/encoding.pm
+                lib/source/source_encoding.t
                 lib/strict.{pm,t}
                 lib/subs.{pm,t}
                 lib/unicore/
