@@ -306,6 +306,9 @@ Perl_cv_undef_flags(pTHX_ CV *cv, U32 flags)
     CV cvbody;/*CV body will never be realloced inside this func,
                so don't read it more than once, use fake CV so existing macros
                will work, the indirection and CV head struct optimized away*/
+#ifdef DEBUGGING
+    SvFLAGS(&cvbody) = SVt_PVCV;
+#endif
     SvANY(&cvbody) = SvANY(cv);
 
     PERL_ARGS_ASSERT_CV_UNDEF_FLAGS;
@@ -558,8 +561,7 @@ S_pad_alloc_name(pTHX_ PADNAME *name, U32 flags, HV *typestash,
 
     if (typestash) {
         PadnameFLAGS(name) |= PADNAMEf_TYPED;
-        PadnameTYPE(name) =
-            MUTABLE_HV(SvREFCNT_inc_simple_NN(MUTABLE_SV(typestash)));
+        PadnameTYPE(name) = HvREFCNT_inc_simple_NN(typestash);
     }
     if (ourstash) {
         PadnameFLAGS(name) |= PADNAMEf_OUR;
@@ -1973,7 +1975,7 @@ S_cv_clone_pad(pTHX_ CV *proto, CV *cv, CV *outside, HV *cloned,
     PL_compcv = cv;
     if (newcv) SAVEFREESV(cv); /* in case of fatal warnings */
 
-    CvOUTSIDE(cv)	= MUTABLE_CV(SvREFCNT_inc_simple(outside));
+    CvOUTSIDE(cv) = CvREFCNT_inc_simple(outside);
 
     SAVESPTR(PL_comppad_name);
     PL_comppad_name = protopad_name;

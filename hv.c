@@ -1250,8 +1250,8 @@ Perl_hv_bucket_ratio(pTHX_ HV *hv)
 }
 
 /*
-=for apidoc hv_delete
-=for apidoc_item ||hv_deletes|HV *hv|"key"|U32 flags
+=for apidoc      hv_delete
+=for apidoc_item hv_deletes
 
 These delete a key/value pair in the hash.  The value's SV is removed from
 the hash, made mortal, and returned to the caller.
@@ -2609,8 +2609,8 @@ Perl_hv_eiter_set(pTHX_ HV *hv, HE *eiter) {
 }
 
 /*
-=for apidoc        hv_name_set
-=for apidoc_item ||hv_name_sets|HV *hv|"name"|U32 flags
+=for apidoc      hv_name_set
+=for apidoc_item hv_name_sets
 
 These each set the name of stash C<hv> to the specified name.
 

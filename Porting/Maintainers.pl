@@ -829,7 +829,7 @@ our %Modules = (
     },
 
     'Module::CoreList' => {
-        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20240702.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20240720.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
     },
 
@@ -981,21 +981,13 @@ our %Modules = (
     },
 
     'podlators' => {
-        'DISTRIBUTION' => 'RRA/podlators-5.01.tar.gz',
+        'DISTRIBUTION' => 'RRA/podlators-v6.0.2.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Sun Jul 14 20:06:07 2024',
         'MAIN_MODULE'  => 'Pod::Man',
         'FILES'        => q[cpan/podlators pod/perlpodstyle.pod],
         'EXCLUDED'     => [
             qr{^\.github/dependabot\.yml},
             qr{^\.github/workflows/build\.yaml},
-        ],
-        'CUSTOMIZED'   => [
-            # https://github.com/rra/podlators/pull/28
-            'lib/Pod/Man.pm',
-            'lib/Pod/ParseLink.pm',
-            'lib/Pod/Text.pm',
-            'lib/Pod/Text/Color.pm',
-            'lib/Pod/Text/Overstrike.pm',
-            'lib/Pod/Text/Termcap.pm'
         ],
         'MAP' => {
             ''                 => 'cpan/podlators/',

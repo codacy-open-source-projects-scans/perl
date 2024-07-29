@@ -1248,7 +1248,7 @@ Perl_sv_upgrade(pTHX_ SV *const sv, svtype new_type)
             DEBUG_o(Perl_deb(aTHX_ "sv_upgrade clearing PL_stashcache\n"));
             hv_clear(PL_stashcache);
 
-            SvSTASH_set(io, MUTABLE_HV(SvREFCNT_inc(GvHV(iogv))));
+            SvSTASH_set(io, HvREFCNT_inc(GvHV(iogv)));
             IoPAGE_LEN(sv) = 60;
         }
         if (old_type < SVt_PV) {
@@ -5009,13 +5009,13 @@ Perl_sv_setpv_bufsize(pTHX_ SV *const sv, const STRLEN cur, const STRLEN len)
 }
 
 /*
-=for apidoc            sv_setpv
-=for apidoc_item       sv_setpv_mg
-=for apidoc_item       sv_setpvn
-=for apidoc_item       sv_setpvn_fresh
-=for apidoc_item       sv_setpvn_mg
-=for apidoc_item |void|sv_setpvs|SV* sv|"literal string"
-=for apidoc_item |void|sv_setpvs_mg|SV* sv|"literal string"
+=for apidoc      sv_setpv
+=for apidoc_item sv_setpv_mg
+=for apidoc_item sv_setpvn
+=for apidoc_item sv_setpvn_fresh
+=for apidoc_item sv_setpvn_mg
+=for apidoc_item sv_setpvs
+=for apidoc_item sv_setpvs_mg
 
 These copy a string into the SV C<sv>, making sure it is C<L</SvPOK_only>>.
 
@@ -5605,35 +5605,52 @@ Perl_sv_chop(pTHX_ SV *const sv, const char *const ptr)
 }
 
 /*
-=for apidoc sv_catpvn
+=for apidoc      sv_catpv
+=for apidoc_item sv_catpv_flags
+=for apidoc_item sv_catpv_mg
+=for apidoc_item sv_catpv_nomg
+=for apidoc_item sv_catpvn
 =for apidoc_item sv_catpvn_flags
 =for apidoc_item sv_catpvn_mg
 =for apidoc_item sv_catpvn_nomg
+=for apidoc_item sv_catpvn_nomg_maybeutf8
+=for apidoc_item sv_catpvs
+=for apidoc_item sv_catpvs_flags
+=for apidoc_item sv_catpvs_mg
+=for apidoc_item sv_catpvs_nomg
 
-These concatenate the C<len> bytes of the string beginning at C<ptr> onto the
-end of the string which is in C<dsv>.  The caller must make sure C<ptr>
-contains at least C<len> bytes.
+These each concatenate a string onto the end of the string which is in C<dsv>.
+They differ in how the catenated string is specified and in the handling of
+magic and UTF-8ness.
 
-For all but C<sv_catpvn_flags>, the string appended is assumed to be valid
-UTF-8 if the SV has the UTF-8 status set, and a string of bytes otherwise.
+In the C<pvs> forms, the catenated string is a C language string literal,
+enclosed in double quotes.
 
-They differ in that:
+In the C<pvn> forms, C<sstr> points to the first byte of the string to
+concatenate, and an additional parameter, C<len>, specifies the number of
+bytes to copy.  Hence, C<sstr> may contain embedded-NUL characters.
+The caller must make sure C<sstr> contains at least C<len> bytes.
 
-C<sv_catpvn_mg> performs both 'get' and 'set' magic on C<dsv>.
+In the plain C<pv> forms, the catenated string is a C language NUL-terminated
+string.
 
-C<sv_catpvn> performs only 'get' magic.
+The C<_mg> forms perform both 'get' and 'set' magic on C<dsv>.
 
-C<sv_catpvn_nomg> skips all magic.
+The C<_nomg> forms skip all magic.
 
-C<sv_catpvn_flags> has an extra C<flags> parameter which allows you to specify
-any combination of magic handling (using C<SV_GMAGIC> and/or C<SV_SMAGIC>) and
-to also override the UTF-8 handling.  By supplying the C<SV_CATBYTES> flag, the
+The other forms perform only 'get' magic.
+
+The C<_flags> forms have an extra parameter, C<flags>, which allows you to also
+override the UTF-8 handling.  By supplying the C<SV_CATBYTES> flag, the
 appended string is interpreted as plain bytes; by supplying instead the
-C<SV_CATUTF8> flag, it will be interpreted as UTF-8, and the C<dsv> will be
+C<SV_CATUTF8> flag, it will be interpreted as UTF-8, and C<dsv> will be
 upgraded to UTF-8 if necessary.
 
-C<sv_catpvn>, C<sv_catpvn_mg>, and C<sv_catpvn_nomg> are implemented
-in terms of C<sv_catpvn_flags>.
+C<sv_catpvn_nomg_maybeutf8> has an extra boolean parameter, C<is_utf8>, which
+if C<true> indicates that C<sstr> is encoded in UTF-8; otherwise not.
+
+For all other forms, the string appended is assumed to be valid UTF-8
+if and only if the C<dsv> has the UTF-8 status set.
 
 =for apidoc Amnh||SV_CATUTF8
 =for apidoc Amnh||SV_CATBYTES
@@ -5731,35 +5748,6 @@ Perl_sv_catsv_flags(pTHX_ SV *const dsv, SV *const sstr, const I32 flags)
                 SvSETMAGIC(dsv);
     }
 }
-
-/*
-=for apidoc sv_catpv
-=for apidoc_item sv_catpv_flags
-=for apidoc_item sv_catpv_mg
-=for apidoc_item sv_catpv_nomg
-
-These concatenate the C<NUL>-terminated string C<sstr> onto the end of the
-string which is in the SV.
-If the SV has the UTF-8 status set, then the bytes appended should be
-valid UTF-8.
-
-They differ only in how they handle magic:
-
-C<sv_catpv_mg> performs both 'get' and 'set' magic.
-
-C<sv_catpv> performs only 'get' magic.
-
-C<sv_catpv_nomg> skips all magic.
-
-C<sv_catpv_flags> has an extra C<flags> parameter which allows you to specify
-any combination of magic handling (using C<SV_GMAGIC> and/or C<SV_SMAGIC>), and
-to also override the UTF-8 handling.  By supplying the C<SV_CATUTF8> flag, the
-appended string is forced to be interpreted as UTF-8; by supplying instead the
-C<SV_CATBYTES> flag, it will be interpreted as just bytes.  Either the SV or
-the string appended will be upgraded to UTF-8 if necessary.
-
-=cut
-*/
 
 void
 Perl_sv_catpv(pTHX_ SV *const dsv, const char *sstr)
@@ -6687,7 +6675,7 @@ S_anonymise_cv_maybe(pTHX_ GV *gv, CV* cv)
 
     CvANON_on(cv);
     CvCVGV_RC_on(cv);
-    SvANY(cv)->xcv_gv_u.xcv_gv = MUTABLE_GV(SvREFCNT_inc(anongv));
+    SvANY(cv)->xcv_gv_u.xcv_gv = GvREFCNT_inc_simple(anongv);
 }
 
 
@@ -10923,7 +10911,7 @@ Perl_sv_bless(pTHX_ SV *const sv, HV *const stash)
     }
     SvOBJECT_on(tmpRef);
     SvUPGRADE(tmpRef, SVt_PVMG);
-    SvSTASH_set(tmpRef, MUTABLE_HV(SvREFCNT_inc_simple(stash)));
+    SvSTASH_set(tmpRef, HvREFCNT_inc_simple(stash));
     SvREFCNT_dec(oldstash);
 
     if(SvSMAGICAL(tmpRef))
@@ -13049,7 +13037,7 @@ Perl_sv_vcatpvfn_flags(pTHX_ SV *const sv, const char *const pat, const STRLEN p
                  * vectorize happen normally
                  */
                 if (sv_isobject(vecsv) && sv_derived_from(vecsv, "version")) {
-                    if ( hv_existss(MUTABLE_HV(SvRV(vecsv)), "alpha") ) {
+                    if ( hv_existss(HV_FROM_REF(vecsv), "alpha") ) {
                         Perl_ck_warner_d(aTHX_ packWARN(WARN_PRINTF),
                         "vector argument not supported with alpha versions");
                         vecsv = &PL_sv_no;
@@ -14623,9 +14611,9 @@ S_sv_dup_hvaux(pTHX_ const SV *const ssv, SV *dsv, CLONE_PARAMS *const param)
         ? NULL
         : saux->xhv_backreferences
             ? (SvTYPE(saux->xhv_backreferences) == SVt_PVAV)
-                ? MUTABLE_AV(SvREFCNT_inc(
+                ? AvREFCNT_inc(
                       sv_dup_inc((const SV *)
-                        saux->xhv_backreferences, param)))
+                        saux->xhv_backreferences, param))
                 : MUTABLE_AV(sv_dup((const SV *)
                         saux->xhv_backreferences, param))
             : 0;
@@ -16890,7 +16878,7 @@ Perl_varname(pTHX_ const GV *const gv, const char gvtype, PADOFFSET targ,
 
 
 /*
-=apidoc_section $warning
+=for apidoc_section $warning
 =for apidoc find_uninit_var
 
 Find the name of the undefined variable (if any) that caused the operator

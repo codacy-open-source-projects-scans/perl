@@ -3145,7 +3145,7 @@ Perl_op_lvalue_flags(pTHX_ OP *o, I32 type, U32 flags)
                 cv = isGV(gv)
                     ? GvCV(gv)
                     : SvROK(gv) && SvTYPE(SvRV(gv)) == SVt_PVCV
-                        ? MUTABLE_CV(SvRV(gv))
+                        ? CV_FROM_REF((SV *)gv)
                         : NULL;
                 if (!cv)
                     break;
@@ -3190,6 +3190,12 @@ Perl_op_lvalue_flags(pTHX_ OP *o, I32 type, U32 flags)
     case OP_BIT_AND:
     case OP_BIT_XOR:
     case OP_BIT_OR:
+    case OP_NBIT_AND:
+    case OP_NBIT_XOR:
+    case OP_NBIT_OR:
+    case OP_SBIT_AND:
+    case OP_SBIT_XOR:
+    case OP_SBIT_OR:
     case OP_I_MULTIPLY:
     case OP_I_DIVIDE:
     case OP_I_MODULO:
@@ -7934,7 +7940,7 @@ static U16 S_extract_shortver(pTHX_ SV *sv)
     if(!SvRV(sv) || !SvOBJECT(rv = SvRV(sv)) || !sv_derived_from(sv, "version"))
         return 0;
 
-    AV *av = MUTABLE_AV(SvRV(*hv_fetchs(MUTABLE_HV(rv), "version", 0)));
+    AV *av = AV_FROM_REF(*hv_fetchs(MUTABLE_HV(rv), "version", 0));
 
     U16 shortver = 0;
 
@@ -14221,7 +14227,7 @@ Perl_rv2cv_op_cv(pTHX_ OP *cvop, U32 flags)
             gv = cGVOPx_gv(rvop);
             if (!isGV(gv)) {
                 if (SvROK(gv) && SvTYPE(SvRV(gv)) == SVt_PVCV) {
-                    cv = MUTABLE_CV(SvRV(gv));
+                    cv = CV_FROM_REF((SV *)gv);
                     gv = NULL;
                     break;
                 }

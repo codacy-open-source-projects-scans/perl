@@ -4,7 +4,7 @@ use strict;
 our ( %released, %version, %families, %upstream, %bug_tracker, %deprecated, %delta );
 
 use version;
-our $VERSION = '5.20240720';
+our $VERSION = '5.20240820';
 
 sub PKG_PATTERN () { q#\A[a-zA-Z_][0-9a-zA-Z_]*(?:(::|')[0-9a-zA-Z_]+)*\z# }
 sub _looks_like_invocant ($) { local $@; !!eval { $_[0]->isa(__PACKAGE__) } }
@@ -426,6 +426,7 @@ sub changes_between {
     5.041000 => '2024-06-10',
     5.041001 => '2024-07-02',
     5.041002 => '2024-07-20',
+    5.041003 => '2024-08-20',
   );
 
 for my $version ( sort { $a <=> $b } keys %released ) {
@@ -21808,10 +21809,49 @@ for my $version ( sort { $a <=> $b } keys %released ) {
     5.041002 => {
         delta_from => 5.041001,
         changed => {
+            'B::Deparse'            => '1.77',
             'B::Op_private'         => '5.041002',
+            'Benchmark'             => '1.26',
             'Config'                => '5.041002',
-            'Module::CoreList'      => '5.20240720',
-            'Module::CoreList::Utils'=> '5.20240720',
+            'Cwd'                   => '3.92',
+            'Devel::PPPort'         => '3.73',
+            'File::Spec'            => '3.92',
+            'File::Spec::AmigaOS'   => '3.92',
+            'File::Spec::Cygwin'    => '3.92',
+            'File::Spec::Epoc'      => '3.92',
+            'File::Spec::Functions' => '3.92',
+            'File::Spec::Mac'       => '3.92',
+            'File::Spec::OS2'       => '3.92',
+            'File::Spec::Unix'      => '3.92',
+            'File::Spec::VMS'       => '3.92',
+            'File::Spec::Win32'     => '3.92',
+            'Module::CoreList'      => '5.20240820',
+            'Module::CoreList::Utils'=> '5.20240820',
+            'POSIX'                 => '2.22',
+            'Pod::Man'              => 'v6.0.2',
+            'Pod::ParseLink'        => 'v6.0.2',
+            'Pod::Text'             => 'v6.0.2',
+            'Pod::Text::Color'      => 'v6.0.2',
+            'Pod::Text::Overstrike' => 'v6.0.2',
+            'Pod::Text::Termcap'    => 'v6.0.2',
+            'Storable'              => '3.33',
+            'Win32'                 => '0.59_01',
+            'XS::APItest'           => '1.37',
+            'locale'                => '1.13',
+            'source::encoding'      => '0.01',
+            'threads'               => '2.41',
+            'utf8'                  => '1.27',
+        },
+        removed => {
+        }
+    },
+    5.041003 => {
+        delta_from => 5.041002,
+        changed => {
+            'B::Op_private'         => '5.041003',
+            'Config'                => '5.041003',
+            'Module::CoreList'      => '5.20240820',
+            'Module::CoreList::Utils'=> '5.20240820',
         },
         removed => {
         }
@@ -23345,6 +23385,13 @@ sub is_core
     },
     5.041002 => {
         delta_from => 5.041001,
+        changed => {
+        },
+        removed => {
+        }
+    },
+    5.041003 => {
+        delta_from => 5.041002,
         changed => {
         },
         removed => {

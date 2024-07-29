@@ -317,17 +317,17 @@ Perl_cvgv_from_hek(pTHX_ CV *cv)
 /* Assign CvSTASH(cv) = st, handling weak references. */
 
 void
-Perl_cvstash_set(pTHX_ CV *cv, HV *st)
+Perl_cvstash_set(pTHX_ CV *cv, HV *stash)
 {
-    HV *oldst = CvSTASH(cv);
+    HV *oldstash = CvSTASH(cv);
     PERL_ARGS_ASSERT_CVSTASH_SET;
-    if (oldst == st)
+    if (oldstash == stash)
         return;
-    if (oldst)
-        sv_del_backref(MUTABLE_SV(oldst), MUTABLE_SV(cv));
-    SvANY(cv)->xcv_stash = st;
-    if (st)
-        Perl_sv_add_backref(aTHX_ MUTABLE_SV(st), MUTABLE_SV(cv));
+    if (oldstash)
+        sv_del_backref(MUTABLE_SV(oldstash), MUTABLE_SV(cv));
+    SvANY(cv)->xcv_stash = stash;
+    if (stash)
+        Perl_sv_add_backref(aTHX_ MUTABLE_SV(stash), MUTABLE_SV(cv));
 }
 
 /*
@@ -1296,34 +1296,51 @@ Perl_gv_fetchmethod_pvn_flags(pTHX_ HV *stash, const char *name, const STRLEN le
     return gv;
 }
 
-
 /*
 =for apidoc      gv_autoload_pv
 =for apidoc_item gv_autoload_pvn
 =for apidoc_item gv_autoload_sv
+=for apidoc_item gv_autoload4
 
 These each search for an C<AUTOLOAD> method, returning NULL if not found, or
 else returning a pointer to its GV, while setting the package
-L<C<$AUTOLOAD>|perlobj/AUTOLOAD> variable to C<name> (fully qualified).  Also,
-if found and the GV's CV is an XSUB, the CV's PV will be set to C<name>, and
+L<C<$AUTOLOAD>|perlobj/AUTOLOAD> variable to the name (fully qualified).  Also,
+if found and the GV's CV is an XSUB, the CV's PV will be set to the name, and
 its stash will be set to the stash of the GV.
 
 Searching is done in L<C<MRO> order|perlmroapi>, as specified in
 L</C<gv_fetchmeth>>, beginning with C<stash> if it isn't NULL.
 
-The forms differ only in how C<name> is specified.
+C<gv_autoload4>) has a C<method> parameter; the others a C<flags> one  (both
+types explained below).  Otherwise, the forms differ only in how the name is
+specified.
 
 In C<gv_autoload_pv>, C<namepv> is a C language NUL-terminated string.
 
-In C<gv_autoload_pvn>, C<name> points to the first byte of the name, and an
-additional parameter, C<len>, specifies its length in bytes.  Hence, C<*name>
-may contain embedded-NUL characters.
+In C<gv_autoload_pvn> and C<gv_autoload4>), C<name> points to the first byte of
+the name, and an additional parameter, C<len>, specifies its length in bytes.
+Hence, C<*name> may contain embedded-NUL characters.
 
 In C<gv_autoload_sv>, C<*namesv> is an SV, and the name is the PV extracted
 from that using L</C<SvPV>>.  If the SV is marked as being in UTF-8, the
 extracted PV will also be.
 
+The other way to indicate that the name is encoded as UTF-8 is to set the 
+C<SVf_UTF8> bit in C<flags> for the forms that have that parameter.  
+The name is never considered to be UTF-8 in C<gv_autoload4>.
+
+The C<method> parameter in C<gv_autoload4> is used only to indicate that the
+name is for a method (non-zero), or not (zero).  The other forms use the
+C<GV_AUTOLOAD_ISMETHOD> bit in C<flags> to indicate this.
+
+The only other significant value in C<flags> currently is C<GV_SUPER>
+to indicate, if set, to skip searching for the name in C<stash>.
+
 =cut
+
+=for apidoc Amnh||GV_AUTOLOAD_ISMETHOD
+=for apidoc Amnh||SVf_UTF8
+=for apidoc Amnh||GV_SUPER
 */
 
 GV*
@@ -1871,8 +1888,7 @@ S_parse_gv_stash_name(pTHX_ HV **stash, GV **gv, const char **name,
                     if (SvTYPE(*gv) != SVt_PVGV) {
                         gv_init_pvn(*gv, PL_defstash, "main::", 6,
                                     GV_ADDMULTI);
-                        GvHV(*gv) =
-                            MUTABLE_HV(SvREFCNT_inc_simple(PL_defstash));
+                        GvHV(*gv) = HvREFCNT_inc_simple(PL_defstash);
                     }
                 }
                 goto ok;
@@ -2513,12 +2529,12 @@ S_maybe_multimagic_gv(pTHX_ GV *gv, const char *name, const svtype sv_type)
 }
 
 /*
-=for apidoc gv_fetchpv
-=for apidoc_item |GV *|gv_fetchpvn|const char * nambeg|STRLEN full_len|I32 flags|const svtype sv_type
-=for apidoc_item ||gv_fetchpvn_flags
-=for apidoc_item |GV *|gv_fetchpvs|"name"|I32 flags|const svtype sv_type
-=for apidoc_item ||gv_fetchsv
-=for apidoc_item |GV *|gv_fetchsv_nomg|SV *name|I32 flags|const svtype sv_type
+=for apidoc      gv_fetchpv
+=for apidoc_item gv_fetchpvn
+=for apidoc_item gv_fetchpvn_flags
+=for apidoc_item gv_fetchpvs
+=for apidoc_item gv_fetchsv
+=for apidoc_item gv_fetchsv_nomg
 
 These all return the GV of type C<sv_type> whose name is given by the inputs,
 or NULL if no GV of that name and type could be found.  See L<perlguts/Stashes
@@ -3277,7 +3293,7 @@ Perl_Gv_AMupdate(pTHX_ HV *stash, bool destructing)
             cv = MUTABLE_CV(gv);
             filled = 1;
         }
-        amt.table[i]=MUTABLE_CV(SvREFCNT_inc_simple(cv));
+        amt.table[i] = CvREFCNT_inc_simple(cv);
 
         if (gv) {
             switch (i) {
@@ -3861,7 +3877,7 @@ Perl_amagic_call(pTHX_ SV *left, SV *right, int method, int flags)
                 SvOBJECT_on(newref);
                 /* No need to do SvAMAGIC_on here, as SvAMAGIC macros
                    delegate to the stash. */
-                SvSTASH_set(newref, MUTABLE_HV(SvREFCNT_inc(SvSTASH(tmpRef))));
+                SvSTASH_set(newref, HvREFCNT_inc(SvSTASH(tmpRef)));
                 return newref;
              }
            }

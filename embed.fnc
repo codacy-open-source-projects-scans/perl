@@ -470,7 +470,7 @@
 :        characters, and a warning is raised otherwise. This flag suppresses
 :        that warning, so that weird things can be documented
 :
-:   'n'  Has no arguments (used only in =for apidoc entries)
+:   'n'  Has no argument list (used only in =for apidoc entries)
 :
 :        The macro (it can't be a function) is used without any parameters nor
 :        empty parentheses.
@@ -496,10 +496,6 @@
 :	 also use 'b'.
 :
 :          embed.h: suppress "#define foo Perl_foo"
-:
-:        autodoc.pl adds a note that this function must be explicitly called as
-:        Perl_$name, and with an aTHX_ parameter unless the 'T' flag is also
-:        specified.
 :
 :        mnemonic: 'omit' generated macro
 :
@@ -625,6 +621,13 @@
 : This has no effect on output yet.  It's a notation for the maintainers to
 : know "I have defined whether NULL is OK or not" rather than having neither
 : NULL or NULLOK, which is ambiguous.
+:
+: Pointer parameters that point to AVs, CVs or HVs will generate additional
+: checks in the arguments assertion macro, that check on entry to the
+: function that the SV being pointed to is of the intended type, by
+: inspecting its SvTYPE(). For some functions this check may be inappropriate
+: as in rare cases the arguments passed may not be of the correct type. To
+: skip checking on an argument type, prefix its type with NOCHECK.
 :
 : Numeric arguments may also be prefixed with NZ, which will cause the
 : appropriate asserts to be generated to validate that this is the case.
@@ -924,7 +927,7 @@ AMdip	|GV *	|CvGV		|NN CV *sv
 Xop	|GV *	|cvgv_from_hek	|NN CV *cv
 Xp	|void	|cvgv_set	|NN CV *cv				\
 				|NULLOK GV *gv
-Adp	|SV *	|cv_name	|NN CV *cv				\
+Adp	|SV *	|cv_name	|NN NOCHECK CV *cv			\
 				|NULLOK SV *sv				\
 				|U32 flags
 Adp	|void	|cv_set_call_checker					\
@@ -1291,18 +1294,14 @@ Adp	|GV *	|gv_add_by_type |NULLOK GV *gv				\
 				|svtype type
 Adp	|int	|Gv_AMupdate	|NN HV *stash				\
 				|bool destructing
-ARdm	|GV *	|gv_autoload4	|NULLOK HV *stash			\
-				|NN const char *name			\
-				|STRLEN len				\
-				|I32 method
-ARdp	|GV *	|gv_autoload_pv |NULLOK HV *stash			\
+ARdp	|GV *	|gv_autoload_pv |NULLOK NOCHECK HV *stash		\
 				|NN const char *namepv			\
 				|U32 flags
-ARdp	|GV *	|gv_autoload_pvn|NULLOK HV *stash			\
+ARdp	|GV *	|gv_autoload_pvn|NULLOK NOCHECK HV *stash		\
 				|NN const char *name			\
 				|STRLEN len				\
 				|U32 flags
-ARdp	|GV *	|gv_autoload_sv |NULLOK HV *stash			\
+ARdp	|GV *	|gv_autoload_sv |NULLOK NOCHECK HV *stash		\
 				|NN SV *namesv				\
 				|U32 flags
 AMbdp	|GV *	|gv_AVadd	|NULLOK GV *gv
@@ -1322,61 +1321,61 @@ Adp	|GV *	|gv_fetchfile_flags					\
 				|NN const char * const name		\
 				|const STRLEN len			\
 				|const U32 flags
-Adm	|GV *	|gv_fetchmeth	|NULLOK HV *stash			\
+Adm	|GV *	|gv_fetchmeth	|NULLOK NOCHECK HV *stash		\
 				|NN const char *name			\
 				|STRLEN len				\
 				|I32 level
 Adm	|GV *	|gv_fetchmeth_autoload					\
-				|NULLOK HV *stash			\
+				|NULLOK NOCHECK HV *stash		\
 				|NN const char *name			\
 				|STRLEN len				\
 				|I32 level
-AMbdp	|GV *	|gv_fetchmethod |NN HV *stash				\
+AMbdp	|GV *	|gv_fetchmethod |NN NOCHECK HV *stash			\
 				|NN const char *name
 Adp	|GV *	|gv_fetchmethod_autoload				\
-				|NN HV *stash				\
+				|NN NOCHECK HV *stash			\
 				|NN const char *name			\
 				|I32 autoload
 Apx	|GV *	|gv_fetchmethod_pv_flags				\
-				|NN HV *stash				\
+				|NN NOCHECK HV *stash			\
 				|NN const char *name			\
 				|U32 flags
 Apx	|GV *	|gv_fetchmethod_pvn_flags				\
-				|NN HV *stash				\
+				|NN NOCHECK HV *stash			\
 				|NN const char *name			\
 				|const STRLEN len			\
 				|U32 flags
 Apx	|GV *	|gv_fetchmethod_sv_flags				\
-				|NN HV *stash				\
+				|NN NOCHECK HV *stash			\
 				|NN SV *namesv				\
 				|U32 flags
-Adp	|GV *	|gv_fetchmeth_pv|NULLOK HV *stash			\
+Adp	|GV *	|gv_fetchmeth_pv|NULLOK NOCHECK HV *stash		\
 				|NN const char *name			\
 				|I32 level				\
 				|U32 flags
 Adp	|GV *	|gv_fetchmeth_pv_autoload				\
-				|NULLOK HV *stash			\
+				|NULLOK NOCHECK HV *stash		\
 				|NN const char *name			\
 				|I32 level				\
 				|U32 flags
 Adp	|GV *	|gv_fetchmeth_pvn					\
-				|NULLOK HV *stash			\
+				|NULLOK NOCHECK HV *stash		\
 				|NN const char *name			\
 				|STRLEN len				\
 				|I32 level				\
 				|U32 flags
 Adp	|GV *	|gv_fetchmeth_pvn_autoload				\
-				|NULLOK HV *stash			\
+				|NULLOK NOCHECK HV *stash		\
 				|NN const char *name			\
 				|STRLEN len				\
 				|I32 level				\
 				|U32 flags
-Adp	|GV *	|gv_fetchmeth_sv|NULLOK HV *stash			\
+Adp	|GV *	|gv_fetchmeth_sv|NULLOK NOCHECK HV *stash		\
 				|NN SV *namesv				\
 				|I32 level				\
 				|U32 flags
 Adp	|GV *	|gv_fetchmeth_sv_autoload				\
-				|NULLOK HV *stash			\
+				|NULLOK NOCHECK HV *stash		\
 				|NN SV *namesv				\
 				|I32 level				\
 				|U32 flags
@@ -3057,7 +3056,7 @@ ATdip	|void	|SvAMAGIC_off	|NN SV *sv
 ATdip	|void	|SvAMAGIC_on	|NN SV *sv
 ATdp	|void	|sv_backoff	|NN SV * const sv
 Adp	|SV *	|sv_bless	|NN SV * const sv			\
-				|NN HV * const stash
+				|NN NOCHECK HV * const stash
 CMbdp	|bool	|sv_2bool	|NN SV * const sv
 Cdp	|bool	|sv_2bool_flags |NN SV *sv				\
 				|I32 flags
@@ -4177,9 +4176,9 @@ RS	|Size_t |do_trans_count |NN SV * const sv			\
 				|NN const OPtrans_map * const tbl
 RS	|Size_t |do_trans_count_invmap					\
 				|NN SV * const sv			\
-				|NN AV * const map
+				|NN AV * const invmap
 RS	|Size_t |do_trans_invmap|NN SV * const sv			\
-				|NN AV * const map
+				|NN AV * const invmap
 RS	|Size_t |do_trans_simple|NN SV * const sv			\
 				|NN const OPtrans_map * const tbl
 #endif
@@ -4413,7 +4412,7 @@ RS	|HE *	|new_he
 : Used in hv.c and mg.c
 opx	|void	|sv_kill_backrefs					\
 				|NN SV * const sv			\
-				|NULLOK AV * const av
+				|NULLOK NOCHECK AV * const av
 #endif
 #if defined(PERL_IN_HV_C) || defined(PERL_IN_SV_C)
 op	|SV *	|hfree_next_entry					\
@@ -4833,7 +4832,7 @@ Rp	|SV *	|varname	|NULLOK const GV * const gv		\
 Sd	|PADOFFSET|pad_alloc_name					\
 				|NN PADNAME *name			\
 				|U32 flags				\
-				|NULLOK HV *typestash			\
+				|NULLOK NOCHECK HV *typestash		\
 				|NULLOK HV *ourstash
 Sd	|void	|pad_check_dup	|NN PADNAME *name			\
 				|U32 flags				\
@@ -5090,6 +5089,8 @@ S	|OP *	|doform 	|NN CV *cv				\
 				|NULLOK OP *retop
 S	|SV *	|space_join_names_mortal				\
 				|NULLOK char * const *array
+S	|void	|warn_not_dirhandle					\
+				|NN GV *gv
 # if !defined(HAS_MKDIR) || !defined(HAS_RMDIR)
 RS	|int	|dooneliner	|NN const char *cmd			\
 				|NN const char *filename
@@ -5865,7 +5866,7 @@ S	|void	|incline	|NN const char *s			\
 				|NN const char *end
 S	|int	|intuit_method	|NN char *s				\
 				|NULLOK SV *ioname			\
-				|NULLOK CV *cv
+				|NULLOK NOCHECK CV *cv
 S	|int	|intuit_more	|NN char *s				\
 				|NN char *e
 S	|I32	|lop		|I32 f					\
