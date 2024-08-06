@@ -6,6 +6,9 @@ use Text::Tabs;
 #
 #    pod/perlintern.pod
 #    pod/perlapi.pod
+
+my $api = "pod/perlapi.pod";
+my $intern = "pod/perlintern.pod";
 #
 # from information stored in
 #
@@ -150,7 +153,11 @@ my %docs;
 # the SEE ALSO section
 my %described_elsewhere;
 
-my $link_text = "Described in";
+# keys are the full 'Perl_FOO' names in proto.h.  values are currently
+# unlooked at
+my %protos;
+
+my $described_in = "Described in";
 
 my $description_indent = 4;
 my $usage_indent = 3;   # + initial verbatim block blank yields 4 total
@@ -801,8 +808,8 @@ sub destination_pod ($) {   # Into which pod should the element go whose flags
                             # are $1
     my $flags = shift;
     return "unknown" if $flags eq "";
-    return "api" if $flags =~ /A/;
-    return "intern";
+    return $api if $flags =~ /A/;
+    return $intern;
 }
 
 sub autodoc ($$) { # parse a file and extract documentation info
@@ -1048,14 +1055,13 @@ sub autodoc ($$) { # parse a file and extract documentation info
                 # deserving candidates.)
                 my $podname = $file =~ s!.*/!!r;    # Rmv directory name(s)
                 $podname =~ s/\.pod//;
-                $text = "Described in L<$podname>.\n";
+                $text = "$described_in L<$podname>.\n";
 
                 # Keep track of all the pod files that we refer to.
                 push $described_elsewhere{$podname}->@*, $podname;
             }
 
             $docs{$destpod}{$section}{$element_name}{pod} = $text;
-            $docs{$destpod}{$section}{$element_name}{file} = $file;
             $docs{$destpod}{$section}{$element_name}{items} = \@items;
         }
 
@@ -1341,20 +1347,20 @@ sub parse_config_h {
         # Check if any section already has an entry for this element.
         # If so, it better be a placeholder, in which case we replace it
         # with this entry.
-        foreach my $section (keys $docs{'api'}->%*) {
-            if (exists $docs{'api'}{$section}{$name}) {
-                my $was = $docs{'api'}{$section}{$name}->{pod};
+        foreach my $section (keys $docs{$api}->%*) {
+            if (exists $docs{$api}{$section}{$name}) {
+                my $was = $docs{$api}{$section}{$name}->{pod};
                 $was = "" unless $was;
                 chomp $was;
-                if ($was ne "" && $was !~ m/$link_text/) {
+                if ($was ne "" && $was !~ m/$described_in/) {
                     die "Multiple descriptions for $name\n"
                       . "The '$section' section contained\n'$was'";
                 }
-                $docs{'api'}{$section}{$name}->{pod} = $configs{$name}{pod};
+                $docs{$api}{$section}{$name}->{pod} = $configs{$name}{pod};
                 $configs{$name}{section} = $section;
                 last;
             }
-            elsif (exists $docs{'intern'}{$section}{$name}) {
+            elsif (exists $docs{$intern}{$section}{$name}) {
                 die "'$name' is in '$config_h' meaning it is part of the API,\n"
                   . " but it is also in 'perlintern', meaning it isn't API\n";
             }
@@ -1568,10 +1574,9 @@ sub parse_config_h {
                                     );
 
             # All the information has been gathered; save it
-            push $docs{'api'}{$section}{$name}{items}->@*, $data;
-            $docs{'api'}{$section}{$name}{pod} = $configs{$name}{pod};
-            $docs{'api'}{$section}{$name}{file} = $config_h;
-            $docs{'api'}{$section}{$name}{usage}
+            push $docs{$api}{$section}{$name}{items}->@*, $data;
+            $docs{$api}{$section}{$name}{pod} = $configs{$name}{pod};
+            $docs{$api}{$section}{$name}{usage}
                 = $configs{$name}{usage} if defined $configs{$name}{usage};
         }
     }
@@ -1612,8 +1617,6 @@ sub docout ($$$) { # output the docs for one function group
     $element_name =~ s/\s*$//;
 
     my $pod = $docref->{pod} // "";
-    my $file = $docref->{file};
-
     my @items = $docref->{items}->@*;
 
     my $item0 = ${$items[0]};
@@ -1788,9 +1791,19 @@ sub docout ($$$) { # output the docs for one function group
             my $name = $item->{name};
             my $flags = $item->{flags};
 
-            print $fh "\nNOTE: the C<perl_$name()> form is",
-                      " B<deprecated>.\n"
-                                 if $additional_long_form && $flags =~ /O/;
+            if (! $additional_long_form && $flags =~ /O/) {
+                my $real_proto = delete $protos{"perl_$name"};
+                if (! $real_proto) {
+                    warn "Unexpectedly there isn't a 'perl_$name' even though"
+                       . " there is an 'O' flag "
+                       . where_from_string($item->{file}, $item->{line_num})
+                       . "; omitting the deprecation warning";
+                }
+                else {
+                    print $fh "\nNOTE: the C<perl_$name()> form is",
+                              " B<deprecated>.\n"
+                }
+            }
 
             die "'u' flag must also have 'm' or 'y' flags' for $name "
               . where_from_string($item->{proto_defined}{file},
@@ -1875,11 +1888,22 @@ sub docout ($$$) { # output the docs for one function group
                 elsif ($flags =~ /p/ && $flags !~ /o/) {
 
                     # Here, has a long name and we didn't create one just
-                    # above.  Set up to redo the loop at the end.  This
-                    # iteration adds the short form; the redo causes its long
-                    # form equivalent to be added too.
-                    $additional_long_form = 1;
-                    $any_has_additional_long_form = 1;
+                    # above.  Check that there really is a long name entry.
+                    my $real_proto = delete $protos{"Perl_$name"};
+                    if ($real_proto) {
+
+                        # Set up to redo the loop at the end.  This iteration
+                        # adds the short form; the redo causes its long form
+                        # equivalent to be added too.
+                        $additional_long_form = 1;
+                        $any_has_additional_long_form = 1;
+                    }
+                    else {
+                        warn "$name unexpectedly doesn't have a long name;"
+                           . " only short name used\n("
+                           . where_from_string($item->{file}, $item->{line_num})
+                           . ')';
+                    }
 
                     # Will need to indent this item to vertically align
                     $may_need_extra_indent = 1;
@@ -2036,12 +2060,11 @@ sub docout ($$$) { # output the docs for one function group
                                      - $usage_max_width;
 
                     # Outdent if necessary
-                    if ($excess_width > 0) {
-                        $hanging_indent -= $excess_width;
-                    }
-                    elsif (     $any_has_pTHX_
-                           &&   $element->{args}->@*
-                           && ! $element->{has_pTHX}) {
+                    $hanging_indent -= $excess_width if $excess_width > 0;
+
+                    if (     $any_has_pTHX_
+                        &&   $element->{args}->@*
+                        && ! $element->{has_pTHX}) {
 
                         # If this item has arguments but not a pTHX, but
                         # others do, indent the args for this one so that
@@ -2052,8 +2075,21 @@ sub docout ($$$) { # output the docs for one function group
                         #
                         #  void  Perl_deb     (pTHX_ const char *pat, ...)
                         #  void  deb_nocontext(      const char *pat, ...)
-                        $running_length += 6;
-                        push @usage, " " x 6;
+                        #
+                        # But, don't indent the full amount if any next lines
+                        # would begin before that amount.  That leaves
+                        # all lines indented to the same amount.  -1 to
+                        # account for the left parenthesis
+                        if ($running_length + 6 - 1 <= $hanging_indent) {
+                            push @usage, " " x 6;
+                            $running_length += 6;
+                        }
+                        elsif ($running_length < $hanging_indent) {
+                            push @usage, (" " x (  1
+                                                 + $hanging_indent
+                                                 - $running_length));
+                            $running_length = $hanging_indent;
+                        }
                     }
 
                     # Go through the argument list.  Calculate how much space
@@ -2216,7 +2252,7 @@ sub output($) {     # Output a complete pod file
     # pod checkers.
     s/^\|//gm for $destpod->{hdr}, $destpod->{footer};
 
-    my $fh = open_new("pod/$podname.pod", undef,
+    my $fh = open_new($podname, undef,
                       {by => "$0 extracting documentation",
                        from => 'the C source files'}, 1);
 
@@ -2226,7 +2262,7 @@ sub output($) {     # Output a complete pod file
         my $section_info = $dochash->{$section_name};
 
         # We allow empty sections in perlintern.
-        if (! $section_info && $podname eq 'perlapi') {
+        if (! $section_info && $podname eq $api) {
             warn "Empty section '$section_name' for $podname; skipped";
             next;
         }
@@ -2239,7 +2275,7 @@ sub output($) {     # Output a complete pod file
             delete $section_info->{X_tags};
         }
 
-        if ($podname eq 'perlapi') {
+        if ($podname eq $api) {
             print $fh "\n", $valid_sections{$section_name}{header}, "\n"
                  if defined $valid_sections{$section_name}{header};
 
@@ -2278,13 +2314,13 @@ sub output($) {     # Output a complete pod file
             }
         }
         else {
-            my $pod_type = ($podname eq 'api') ? "public" : "internal";
+            my $pod_type = ($podname eq $api) ? "public" : "internal";
             print $fh "\nThere are currently no $pod_type API items in ",
                       $section_name, "\n";
         }
 
         print $fh "\n", $valid_sections{$section_name}{footer}, "\n"
-                            if $podname eq 'perlapi'
+                            if $podname eq $api
                             && defined $valid_sections{$section_name}{footer};
     }
 
@@ -2353,7 +2389,47 @@ while (my $input = <$fh>) {
     next if $file =~ m! ^ ( cpan | dist | ext ) / !x
          && ! defined $extra_input_pods{$file};
 
-    if ($file =~ /\.h/) {
+    # Process these two special files immediately.  Otherwise we add the file to
+    # the appropriate list.
+    if ($file eq "proto.h") {
+
+        # proto.h won't have any apidoc lines in it.  Instead look for real
+        # prototypes.  Then we can check later that a prototype actually
+        # exists when we add a line to the pod that claims there is.
+        open my $fh, '<', $file or die "Cannot open $file for docs: $!\n";
+        my $prev = "";
+        while (defined (my $input = <$fh>)) {
+
+            # Look for a prototype.  As an extra little nicety, make sure that
+            # the line previous to the prototype is one of the ones that
+            # declares the return type of the function.  This is to try to
+            # eliminate false positives.
+            if ($prev =~ / ^ \s*  PERL_ (?: CALLCONV
+                                          | STATIC (?: _FORCE)? _INLINE
+                                        )
+                         /x)
+            {
+                $protos{$1} = $2
+                            if $input =~ s/ ^ \s* ( [Pp]erl_\w* ) (.*) \n /$1/x;
+            }
+            $prev = $input;
+        }
+        close $fh or die "Error closing $file: $!\n";
+    }
+    elsif ($file eq "embed.h") {
+
+        # embed.h won't have any apidoc lines in it.  Instead look for lines
+        # that define the obsolete 'perl_' lines.  Then we can check later
+        # that such a definition actually exists when we encounter input that
+        # claims there is
+        open my $fh, '<', $file or die "Cannot open $file for docs: $!\n";
+        while (defined (my $input = <$fh>)) {
+            $protos{$1} = $2
+                if $input =~ / ^\# \s* define \s+ ( perl_\w+ ) ( [^)]* \) ) /x;
+        }
+        close $fh or die "Error closing $file: $!\n";
+    }
+    elsif ($file =~ /\.h/) {
         push @headers, $file;
     }
     else {
@@ -2461,8 +2537,8 @@ for my $which_pod (keys %docs) {
 
 # Here %docs is populated; and we're ready to output
 
-my %api    = ( podname => 'perlapi', docs => $docs{'api'} );
-my %intern = ( podname => 'perlintern', docs => $docs{'intern'} );
+my %api    = ( podname => $api, docs => $docs{$api} );
+my %intern = ( podname => $intern, docs => $docs{$intern} );
 
 # But first, look for inconsistencies and populate the lists of elements whose
 # documentation is missing

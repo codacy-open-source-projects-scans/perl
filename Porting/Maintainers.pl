@@ -1112,6 +1112,10 @@ our %Modules = (
                 t/lib/if.pm
                 ),
         ],
+        'CUSTOMIZED'   => [
+            # https://github.com/Perl-Toolchain-Gang/Test-Harness/pull/132
+            'cpan/Test-Harness/lib/TAP/Parser/SourceHandler/Perl.pm',
+        ],
     },
 
     'Test::Simple' => {
@@ -1143,6 +1147,14 @@ our %Modules = (
 
             # https://github.com/Test-More/Test2-Suite/issues/208
             't/acceptance/Workflow-Acceptance.t',
+        ],
+        'CUSTOMIZED'   => [
+            # https://github.com/Test-More/Test2-Suite/pull/296
+            't/modules/Require/AutomatedTesting.t',
+            't/modules/Require/ExtendedTesting.t',
+            't/modules/Require/NonInteractiveTesting.t',
+            't/modules/Require/ReleaseTesting.t',
+            't/regression/291-async-subtest-done-testing.t',
         ],
     },
 
