@@ -171,6 +171,9 @@ our %Modules = (
                 t/no-all.t
                 )
         ],
+        'CUSTOMIZED'   => [
+            qw( t/utime.t )
+        ],
     },
 
     'AutoLoader' => {
@@ -401,7 +404,6 @@ our %Modules = (
     'Encode' => {
         'DISTRIBUTION' => 'DANKOGAI/Encode-3.21.tar.gz',
         'SYNCINFO'     => 'jkeenan on Sun Feb 25 19:56:46 2024',
-        'SYNCINFO'     => 'jkeenan on Fri Nov 10 15:12:07 2023',
         'FILES'        => q[cpan/Encode],
         'EXCLUDED'     => [
             qw( t/whatwg-aliases.json
@@ -612,7 +614,6 @@ our %Modules = (
     'Getopt::Long' => {
         'DISTRIBUTION' => 'JV/Getopt-Long-2.58.tar.gz',
         'SYNCINFO'     => 'jkeenan on Wed Jun 12 08:25:08 2024',
-        'SYNCINFO'     => 'jkeenan on Sat Nov 11 13:09:21 2023',
         'FILES'        => q[cpan/Getopt-Long],
         'EXCLUDED'     => [
             qr{^examples/},
@@ -761,8 +762,6 @@ our %Modules = (
     'Math::BigInt' => {
         'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-2.003003.tar.gz',
         'SYNCINFO'     => 'jkeenan on Wed Jun 12 08:50:03 2024',
-        'SYNCINFO'     => 'corion on Thu Jan 11 20:23:12 2024',
-        'SYNCINFO'     => 'book on Tue Dec 26 22:44:58 2023',
         'FILES'        => q[cpan/Math-BigInt],
         'EXCLUDED'     => [
             qr{^xt/},
@@ -776,8 +775,6 @@ our %Modules = (
     'Math::BigInt::FastCalc' => {
         'DISTRIBUTION' => 'PJACKLAM/Math-BigInt-FastCalc-0.5018.tar.gz',
         'SYNCINFO'     => 'corion on Thu Jan 11 20:24:21 2024',
-        'SYNCINFO'     => 'jkeenan on Sat Dec 30 14:31:28 2023',
-        'SYNCINFO'     => 'jkeenan on Sun Sep 24 08:29:56 2023',
         'FILES'        => q[cpan/Math-BigInt-FastCalc],
         'EXCLUDED'     => [
             qr{^inc/},
@@ -888,7 +885,8 @@ our %Modules = (
     },
 
     'parent' => {
-        'DISTRIBUTION' => 'CORION/parent-0.241.tar.gz',
+        'DISTRIBUTION' => 'CORION/parent-0.242.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Aug 14 21:41:51 2024',
         'FILES'        => q[cpan/parent],
         'EXCLUDED'     => [
             qr{^xt}
@@ -925,7 +923,6 @@ our %Modules = (
     'Pod::Checker' => {
         'DISTRIBUTION' => 'MAREKR/Pod-Checker-1.77.tar.gz',
         'SYNCINFO'     => 'jkeenan on Mon Feb  5 16:37:53 2024',
-        'SYNCINFO'     => 'corion on Tue Jan  9 20:34:18 2024',
         'FILES'        => q[cpan/Pod-Checker],
     },
 
@@ -1002,12 +999,9 @@ our %Modules = (
     },
 
     'Scalar::Util' => {
-        'DISTRIBUTION' => 'PEVANS/Scalar-List-Utils-1.63.tar.gz',
+        'DISTRIBUTION' => 'PEVANS/Scalar-List-Utils-1.65.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Aug 14 21:09:49 2024',
         'FILES'        => q[cpan/Scalar-List-Utils],
-        'CUSTOMIZED'   => [
-            # https://github.com/Dual-Life/Scalar-List-Utils/pull/130
-            't/uniqnum.t'
-         ],
     },
 
     'Search::Dict' => {
@@ -1084,8 +1078,8 @@ our %Modules = (
     },
 
     'Term::Table' => {
-        'DISTRIBUTION' => 'EXODIST/Term-Table-0.018.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Wed Nov  1 19:16:24 2023',
+        'DISTRIBUTION' => 'EXODIST/Term-Table-0.022.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Aug 14 21:27:04 2024',
         'FILES'        => q[cpan/Term-Table],
         'EXCLUDED'     => [
             qw( appveyor.yml ),
@@ -1098,8 +1092,8 @@ our %Modules = (
     },
 
     'Test::Harness' => {
-        'DISTRIBUTION' => 'LEONT/Test-Harness-3.48.tar.gz',
-        'SYNCINFO'     => 'gknop on Sat Oct 21 15:01:02 2023',
+        'DISTRIBUTION' => 'LEONT/Test-Harness-3.50.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Aug 14 21:59:59 2024',
         'FILES'        => q[cpan/Test-Harness],
         'EXCLUDED'     => [
             qr{^examples/},
@@ -1112,16 +1106,11 @@ our %Modules = (
                 t/lib/if.pm
                 ),
         ],
-        'CUSTOMIZED'   => [
-            # https://github.com/Perl-Toolchain-Gang/Test-Harness/pull/132
-            'cpan/Test-Harness/lib/TAP/Parser/SourceHandler/Perl.pm',
-        ],
     },
 
     'Test::Simple' => {
-        'DISTRIBUTION' => 'EXODIST/Test-Simple-1.302199.tar.gz',
-        'SYNCINFO'     => 'LeoNerd on Sat Apr 27 10:20:58 2024',
-        'SYNCINFO'     => 'jkeenan on Fri Dec  1 07:01:54 2023',
+        'DISTRIBUTION' => 'EXODIST/Test-Simple-1.302201.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Aug 14 20:45:51 2024',
         'FILES'        => q[cpan/Test-Simple],
         'EXCLUDED'     => [
             qr{^examples/},
@@ -1131,30 +1120,6 @@ our %Modules = (
                 t/00-report.t
                 t/zzz-check-breaks.t
                 ),
-        ],
-    },
-
-    'Test2::Suite' => {
-        'DISTRIBUTION' => 'EXODIST/Test2-Suite-0.000163.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Wed Jun 12 09:17:44 2024',
-        'SYNCINFO'     => 'LeoNerd on Sat Apr 27 10:12:36 2024',
-        'SYNCINFO'     => 'jkeenan on Wed Nov  1 20:18:33 2023',
-        'FILES'        => q[cpan/Test2-Suite],
-        'EXCLUDED'     => [
-            qw( appveyor.yml
-                perltidyrc
-                t/00-report.t ),
-
-            # https://github.com/Test-More/Test2-Suite/issues/208
-            't/acceptance/Workflow-Acceptance.t',
-        ],
-        'CUSTOMIZED'   => [
-            # https://github.com/Test-More/Test2-Suite/pull/296
-            't/modules/Require/AutomatedTesting.t',
-            't/modules/Require/ExtendedTesting.t',
-            't/modules/Require/NonInteractiveTesting.t',
-            't/modules/Require/ReleaseTesting.t',
-            't/regression/291-async-subtest-done-testing.t',
         ],
     },
 

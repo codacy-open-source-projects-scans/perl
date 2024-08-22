@@ -45,6 +45,58 @@ XXX For a release on a stable branch, this section aspires to be:
 
 [ List each incompatible change as a =head2 entry ]
 
+=head2 Apostrophe is no longer recognized as a global name separator
+
+The apostrophe C<'> has been recognized as a separator between
+components of package names and package variables since Perl 3, acting
+exactly like C<::>, which was introduced in Perl 5.
+
+Use of C<'> as a package separator was deprecated in Perl 5.38 and has
+now been removed.
+
+[github #22303]
+
+=head2 Switch and Smart Match operator removed
+
+The "switch" feature and the smartmatch operator, C<~~>, were introduced in
+v5.10.  Their behavior was significantly changed in v5.10.1.  When the
+"experiment" system was added in v5.18.0, switch and smartmatch were
+retroactively declared experimental.  Over the years, proposals to fix or
+supplement the features have come and gone.
+
+They were deprecated in Perl v5.38.0 and scheduled for removal in Perl
+5.42.0
+
+These features have now been entirely removed.
+
+If you code currently uses C<given>/C<when> or smart match this can be
+replaced with an C<if>/C<else> chain, or there are several alternative
+"switch" or smart match implementations on CPAN.
+
+In no particular order:
+
+=over
+
+=item *
+
+L<Syntax::Infix::Smartmatch|https://metacpan.org/pod/Syntax::Infix::Smartmatch>
+
+=item *
+
+L<Switch::Back|https://metacpan.org/pod/Switch::Back>
+
+=item *
+
+L<Syntax::Operator::Matches|https://metacpan.org/pod/Syntax::Operator::Matches>
+
+=item *
+
+L<Syntax::Keyword::Match|https://metacpan.org/pod/Syntax::Keyword::Match>
+
+=back
+
+[github #22370]
+
 =head1 Deprecations
 
 XXX Any deprecated features, syntax, modules etc. should be listed here.
@@ -89,7 +141,11 @@ There may well be none in a stable release.
 
 =item *
 
-XXX
+C<tr///> now runs at the same speed regardless of the internal
+representation of its operand, as long as the only characters being
+translated are ASCII-range, for example C<tr/A-Z/a-z/>.  Previously, if
+the internal encoding was UTF-8, a slower, more general implementation
+was used.
 
 =back
 
@@ -129,6 +185,34 @@ L<perl5db.pl> has been upgraded from version 1.80 to 1.81.
 
 C<b subname>, C<c subname>, C<b postpone subname> will now break on
 the first line that is expected to execute in the sub. [github #799]
+
+=item *
+
+L<Test::Simple> has been upgraded from version 1.302199 to 1.302200 and
+subsequently to 1.302201.  Upstream on CPAN, the Test2-Suite distribution has
+been merged into the Test-Simple distribution.  Test2-Suite was formerly
+shipped with the Perl core distribution.  Test2-Suite's files are now found
+under F<cpan/Test-Simple> in the Perl 5 source tree (whether you access that
+source tree in a git checkout or in a released tarball).  However, this should
+have no impact whatsoever on any end-user of any modules formerly found under
+Test2-Suite.
+
+=item *
+
+L<Scalar::Util> (the Scalar-List-Utils distribution) has been upgraded from
+version 1.63 to 1.65.
+
+=item *
+
+L<Term::Table> has been upgraded from version 0.020 to 0.022.
+
+=item *
+
+L<parent> has been upgraded from version 0.241 to 0.242.
+
+=item *
+
+L<Test::Harness> has been upgraded from version 3.48 to 3.50.
 
 =back
 
@@ -215,6 +299,21 @@ use these functions to traverse the contents of a directory, you need
 to open the handle with opendir().
 
 [github #22394]
+
+=item *
+
+L<Possible precedence problem on isa operator|perldiag/"Possible precedence problem on isa operator">
+
+(W precedence) You wrote something like
+
+    !$obj isa Some::Class
+
+but because C<!> has higher precedence than C<isa>, this is interpreted as
+C<(!$obj) isa Some::Class>, which checks whether a boolean is an instance of
+C<Some::Class>. If you want to negate the result of C<isa> instead, use one of:
+
+    !($obj isa Some::Class)   # explicit parentheses
+    not $obj isa Some::Class  # low-precedence 'not' operator
 
 =back
 
@@ -422,6 +521,15 @@ did not do so:
     #  Can't modify numeric bitwise and (&) in addition (+) at ...
 
 This has been corrected. [GH #22412]
+
+=item *
+
+Starting in v5.39.8, L<POSIX/C<strftime>> would crash or produce odd errors
+(such as C<Out of memory in perl:util:safesysmalloc>) when given a format
+string that wasn't actually a string, but a number, C<undef>, or an object
+(even one with overloaded string conversion).
+
+Now C<strftime> stringifies its first argument, as before. [GH #22498]
 
 =item *
 

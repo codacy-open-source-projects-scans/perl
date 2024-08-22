@@ -17,8 +17,8 @@ our (@ISA, @EXPORT_OK);
   process_typemaps
   map_type
   standard_XS_defs
-  assign_func_args
-  analyze_preprocessor_statements
+  C_func_signature
+  analyze_preprocessor_statement
   set_cond
   Warn
   WarnHint
@@ -44,8 +44,8 @@ ExtUtils::ParseXS::Utilities - Subroutines used with ExtUtils::ParseXS
     process_typemaps
     map_type
     standard_XS_defs
-    assign_func_args
-    analyze_preprocessor_statements
+    C_func_signature
+    analyze_preprocessor_statement
     set_cond
     Warn
     blurt
@@ -300,10 +300,11 @@ pointer type. So C<...(*)...> becomes C<...(* foo)...>.
 =cut
 
 sub map_type {
-  my ($self, $type, $varname) = @_;
+  my ExtUtils::ParseXS $self = shift;
+  my ($type, $varname) = @_;
 
   # C++ has :: in types too so skip this
-  $type =~ tr/:/_/ unless $self->{RetainCplusplusHierarchicalTypes};
+  $type =~ tr/:/_/ unless $self->{config_RetainCplusplusHierarchicalTypes};
 
   # map the special return type 'array(type, n)' to 'type *'
   $type =~ s/^array\(([^,]*),(.*)\).*/$1 */s;
@@ -493,7 +494,7 @@ EOF
   return 1;
 }
 
-=head2 C<assign_func_args()>
+=head2 C<C_func_signature()>
 
 =over 4
 
@@ -506,7 +507,7 @@ args marked as C<*OUT*> are prefixed with '&'.
 
 =item * Arguments
 
-  $string = assign_func_args($self, $argsref, $class);
+  $sig_string = $self->C_func_signature($argsref, $class);
 
 C<$argref> is an array reference containing the xsub's parameters.
 
@@ -520,29 +521,31 @@ A string such as C<'foo, &bar, baz'>
 
 =cut
 
-sub assign_func_args {
-  my ($self, $argsref, $class) = @_;
+sub C_func_signature {
+  my ExtUtils::ParseXS $self = shift;
+  my ($argsref, $class) = @_;
   my @func_args = @{$argsref};
   shift @func_args if defined($class);
 
   for my $arg (@func_args) {
-    $arg =~ s/^/&/ if $self->{in_out}->{$arg};
+    $arg =~ s/^/&/ if $self->{xsub_map_argname_to_in_out}->{$arg};
   }
   return join(", ", @func_args);
 }
 
 
-=head2 C<analyze_preprocessor_statements()>
+=head2 C<analyze_preprocessor_statement()>
 
 =over 4
 
 =item * Purpose
 
 Process a CPP conditional line (C<#if> etc), to keep track of conditional
-nesting.  In particular, it updates C<< @{$self->{XSStack}} >> which
-contains the current list of nested conditions. So an C<#if> pushes, an
-C<#endif> pops, an C<#else> modifies etc. Each element is a hash of the
-form:
+nesting. In particular, it updates C<< @{$self->{XS_parse_stack}} >> which
+contains the current list of nested conditions, and
+C<< $self->{XS_parse_stack_top_if_idx} >> which indicates the most recent
+C<if> in that stack. So an C<#if> pushes, an C<#endif> pops, an C<#else>
+modifies etc. Each element is a hash of the form:
 
   {
     type      => 'if',
@@ -557,70 +560,63 @@ form:
                   # XS functions seen within any previous branch
     other_functions => {... }
 
+It also updates C<< $self->{bootcode_early} >> and
+C<< $self->{bootcode_late} >> with extra CPP directives.
+
 =item * Arguments
 
-      ( $self, $XSS_work_idx, $BootCode_ref ) =
-        analyze_preprocessor_statements(
-          $self, $statement, $XSS_work_idx, $BootCode_ref
-        );
-
-<$XSS_work_idx> is the current depth of #if nesting.
-
-<$BootCode_ref> is an array reference of lines to be output in the boot code.
-This function may add additional lines to it.
-
-=item * Return Value
-
-Returns a modified C<$XSS_work_idx>, Also (for no very good reason) it
-returns the original values of C<$self> and C<$BootCode_ref>.
+      $self->analyze_preprocessor_statement($statement);
 
 =back
 
 =cut
 
-sub analyze_preprocessor_statements {
-  my ($self, $statement, $XSS_work_idx, $BootCode_ref) = @_;
+sub analyze_preprocessor_statement {
+  my ExtUtils::ParseXS $self = shift;
+  my ($statement) = @_;
+
+  my $ix = $self->{XS_parse_stack_top_if_idx};
 
   if ($statement eq 'if') {
     # #if or #ifdef
-    $XSS_work_idx = @{ $self->{XSStack} };
-    push(@{ $self->{XSStack} }, {type => 'if'});
+    $ix = @{ $self->{XS_parse_stack} };
+    push(@{ $self->{XS_parse_stack} }, {type => 'if'});
   }
   else {
     # An #else/#elsif/#endif.
 
     $self->death("Error: '$statement' with no matching 'if'")
-      if $self->{XSStack}->[-1]{type} ne 'if';
+      if $self->{XS_parse_stack}->[-1]{type} ne 'if';
 
-    if ($self->{XSStack}->[-1]{varname}) {
+    if ($self->{XS_parse_stack}->[-1]{varname}) {
       # close any '#ifdef XSubPPtmpAAAA' inserted earlier into boot code.
-      push(@{ $self->{InitFileCode} }, "#endif\n");
-      push(@{ $BootCode_ref },         "#endif");
+      push(@{ $self->{bootcode_early} }, "#endif\n");
+      push(@{ $self->{bootcode_later} }, "#endif\n");
     }
 
-    my(@fns) = keys %{$self->{XSStack}->[-1]{functions}};
+    my(@fns) = keys %{$self->{XS_parse_stack}->[-1]{functions}};
 
     if ($statement ne 'endif') {
       # Add current functions to the hash of functions seen in previous
       # branch limbs, then reset for this next limb of the branch.
-      @{$self->{XSStack}->[-1]{other_functions}}{@fns} = (1) x @fns;
-      @{$self->{XSStack}->[-1]}{qw(varname functions)} = ('', {});
+      @{$self->{XS_parse_stack}->[-1]{other_functions}}{@fns} = (1) x @fns;
+      @{$self->{XS_parse_stack}->[-1]}{qw(varname functions)} = ('', {});
     }
     else {
       # #endif - pop stack and update new top entry
-      my($tmp) = pop(@{ $self->{XSStack} });
-      0 while (--$XSS_work_idx
-           && $self->{XSStack}->[$XSS_work_idx]{type} ne 'if');
+      my($tmp) = pop(@{ $self->{XS_parse_stack} });
+      0 while (--$ix
+           && $self->{XS_parse_stack}->[$ix]{type} ne 'if');
 
       # For all functions declared within any limb of the just-popped
       # if/endif, mark them as having appeared within this limb of the
       # outer nested branch.
       push(@fns, keys %{$tmp->{other_functions}});
-      @{$self->{XSStack}->[$XSS_work_idx]{functions}}{@fns} = (1) x @fns;
+      @{$self->{XS_parse_stack}->[$ix]{functions}}{@fns}  =  (1) x @fns;
     }
   }
 
-  return ($self, $XSS_work_idx, $BootCode_ref);
+  $self->{XS_parse_stack_top_if_idx} = $ix;
 }
 
 
@@ -686,7 +682,7 @@ The current line number.
 =cut
 
 sub current_line_number {
-  my $self = shift;
+  my ExtUtils::ParseXS $self = shift;
   my $line_number = $self->{line_no}->[@{ $self->{line_no} } - @{ $self->{line} } -1];
   return $line_number;
 }
@@ -750,7 +746,7 @@ each line wrapped in parentheses. For example:
 # see L</Error handling methods> above
 
 sub Warn {
-  my ($self)=shift;
+  my ExtUtils::ParseXS $self = shift;
   $self->WarnHint(@_,undef);
 }
 
@@ -765,10 +761,10 @@ sub WarnHint {
 # see L</Error handling methods> above
 
 sub _MsgHint {
-  my $self = shift;
+  my ExtUtils::ParseXS $self = shift;
   my $hint = pop;
   my $warn_line_number = $self->current_line_number();
-  my $ret = join("",@_) . " in $self->{filename}, line $warn_line_number\n";
+  my $ret = join("",@_) . " in $self->{in_filename}, line $warn_line_number\n";
   if ($hint) {
     $ret .= "    ($_)\n" for split /\n/, $hint;
   }
@@ -779,18 +775,18 @@ sub _MsgHint {
 # see L</Error handling methods> above
 
 sub blurt {
-  my $self = shift;
+  my ExtUtils::ParseXS $self = shift;
   $self->Warn(@_);
-  $self->{errors}++
+  $self->{error_count}++
 }
 
 
 # see L</Error handling methods> above
 
 sub death {
-  my ($self) = (@_);
+  my ExtUtils::ParseXS $self = $_[0];
   my $message = _MsgHint(@_,"");
-  if ($self->{die_on_error}) {
+  if ($self->{config_die_on_error}) {
     die $message;
   } else {
     warn $message;
@@ -821,7 +817,7 @@ None
 =cut
 
 sub check_conditional_preprocessor_statements {
-  my ($self) = @_;
+  my ExtUtils::ParseXS $self = $_[0];
   my @cpp = grep(/^\#\s*(?:if|e\w+)/, @{ $self->{line} });
   if (@cpp) {
     my $cpplevel;
@@ -832,7 +828,7 @@ sub check_conditional_preprocessor_statements {
       elsif (!$cpplevel) {
         $self->Warn("Warning: #else/elif/endif without #if in this function");
         print STDERR "    (precede it with a blank line if the matching #if is outside the function)\n"
-          if $self->{XSStack}->[-1]{type} eq 'if';
+          if $self->{XS_parse_stack}->[-1]{type} eq 'if';
         return;
       }
       elsif ($cpp =~ /^\#\s*endif/) {
@@ -901,7 +897,8 @@ fatal.
 =cut
 
 sub report_typemap_failure {
-  my ($self, $tm, $ctype, $error_method) = @_;
+  my ExtUtils::ParseXS $self = shift;
+  my ($tm, $ctype, $error_method) = @_;
   $error_method ||= 'blurt';
 
   my @avail_ctypes = $tm->list_mapped_ctypes;

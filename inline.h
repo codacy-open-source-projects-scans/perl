@@ -3623,52 +3623,6 @@ Perl_cx_poploop(pTHX_ PERL_CONTEXT *cx)
 }
 
 
-PERL_STATIC_INLINE void
-Perl_cx_pushwhen(pTHX_ PERL_CONTEXT *cx)
-{
-    PERL_ARGS_ASSERT_CX_PUSHWHEN;
-
-    cx->blk_givwhen.leave_op = cLOGOP->op_other;
-}
-
-
-PERL_STATIC_INLINE void
-Perl_cx_popwhen(pTHX_ PERL_CONTEXT *cx)
-{
-    PERL_ARGS_ASSERT_CX_POPWHEN;
-    assert(CxTYPE(cx) == CXt_WHEN);
-
-    PERL_UNUSED_ARG(cx);
-    PERL_UNUSED_CONTEXT;
-    /* currently NOOP */
-}
-
-
-PERL_STATIC_INLINE void
-Perl_cx_pushgiven(pTHX_ PERL_CONTEXT *cx, SV *orig_defsv)
-{
-    PERL_ARGS_ASSERT_CX_PUSHGIVEN;
-
-    cx->blk_givwhen.leave_op = cLOGOP->op_other;
-    cx->blk_givwhen.defsv_save = orig_defsv;
-}
-
-
-PERL_STATIC_INLINE void
-Perl_cx_popgiven(pTHX_ PERL_CONTEXT *cx)
-{
-    SV *sv;
-
-    PERL_ARGS_ASSERT_CX_POPGIVEN;
-    assert(CxTYPE(cx) == CXt_GIVEN);
-
-    sv = GvSV(PL_defgv);
-    GvSV(PL_defgv) = cx->blk_givwhen.defsv_save;
-    cx->blk_givwhen.defsv_save = NULL;
-    SvREFCNT_dec(sv);
-}
-
-
 /* Make @_ empty in-place in simple cases: a cheap av_clear().
  * See Perl_clear_defarray() for non-simple cases */
 
@@ -3938,9 +3892,9 @@ implementation stolen from PostgreSQL.
 PERL_STATIC_INLINE Size_t
 Perl_my_strnlen(const char *str, Size_t maxlen)
 {
-    const char *end = (const char *) memchr(str, '\0', maxlen);
-
     PERL_ARGS_ASSERT_MY_STRNLEN;
+
+    const char *end = (const char *) memchr(str, '\0', maxlen);
 
     if (end == NULL) return maxlen;
     return end - str;
