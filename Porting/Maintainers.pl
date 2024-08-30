@@ -214,8 +214,8 @@ our %Modules = (
     },
 
     'Compress::Raw::Bzip2' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.212.tar.gz',
-        'SYNCINFO'     => 'LeoNerd on Sat Apr 27 14:06:26 2024',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.213.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Aug 28 14:11:20 2024',
         'FILES'        => q[cpan/Compress-Raw-Bzip2],
         'EXCLUDED'     => [
             qr{^t/Test/},
@@ -227,8 +227,8 @@ our %Modules = (
     },
 
     'Compress::Raw::Zlib' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.212.tar.gz',
-        'SYNCINFO'     => 'LeoNerd on Sat Apr 27 14:15:07 2024',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.213.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Aug 28 13:58:29 2024',
         'FILES'    => q[cpan/Compress-Raw-Zlib],
         'EXCLUDED' => [
             qr{^examples/},
@@ -661,8 +661,8 @@ our %Modules = (
     },
 
     'IO-Compress' => {
-        'DISTRIBUTION' => 'PMQS/IO-Compress-2.212.tar.gz',
-        'SYNCINFO'     => 'LeoNerd on Sat Apr 27 14:31:39 2024',
+        'DISTRIBUTION' => 'PMQS/IO-Compress-2.213.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Aug 28 14:24:42 2024',
         'MAIN_MODULE'  => 'IO::Compress::Base',
         'FILES'        => q[cpan/IO-Compress],
         'EXCLUDED'     => [
@@ -1211,7 +1211,8 @@ our %Modules = (
     },
 
     'Tie::RefHash' => {
-        'DISTRIBUTION' => 'ETHER/Tie-RefHash-1.40.tar.gz',
+        'DISTRIBUTION' => 'ETHER/Tie-RefHash-1.41.tar.gz',
+        'SYNCINFO'     => 'mauke on Mon Aug 26 04:28:51 2024',
         'FILES'        => q[cpan/Tie-RefHash],
         'EXCLUDED'     => [
             qr{^t/00-},
