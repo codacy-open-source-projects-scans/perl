@@ -2071,6 +2071,10 @@ S_querylocale_2008_i(pTHX_ const locale_category_index index,
     const locale_t cur_obj = uselocale((locale_t) 0);
     const char * retval;
 
+#  ifdef MULTIPLICITY
+    assert(cur_obj== LC_GLOBAL_LOCALE || cur_obj == PL_cur_locale_obj);
+#  endif
+
     DEBUG_Lv(PerlIO_printf(Perl_debug_log, "querylocale_2008_i(%s) on %p;"
                                            " called from %" LINE_Tf "\n",
                                            category_names[index], cur_obj,
@@ -2270,6 +2274,11 @@ S_bool_setlocale_2008_i(pTHX_
 
     int mask = category_masks[index];
     const locale_t entry_obj = uselocale((locale_t) 0);
+
+#  ifdef MULTIPLICITY
+    assert(entry_obj== LC_GLOBAL_LOCALE || entry_obj == PL_cur_locale_obj);
+#  endif
+
     const char * locale_on_entry = querylocale_i(index);
 
     DEBUG_Lv(PerlIO_printf(Perl_debug_log,
@@ -3242,7 +3251,11 @@ S_find_locale_from_environment(pTHX_ const locale_category_index index)
     const char * locale_names[LC_ALL_INDEX_] = { NULL };
 
     /* Use any "LC_ALL" environment variable, as it overrides everything else.
-     * */
+     * This may not work correctly if LC_ALL is heterogeneous.  It is a simple
+     * matter to handle such a case, and GH #21398 would do so.  But in
+     * developing a test for that, khw couldn't get libc to handle a disparate
+     * LC_ALL environment variable, so that pull request was closed without
+     * merging, but the patch is attached to it. */
     if (lc_all && strNE(lc_all, "")) {
         return lc_all;
     }

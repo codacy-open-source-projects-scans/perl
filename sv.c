@@ -5771,7 +5771,7 @@ Perl_sv_catpv(pTHX_ SV *const dsv, const char *sstr)
 }
 
 void
-Perl_sv_catpv_flags(pTHX_ SV *dsv, const char *sstr, const I32 flags)
+Perl_sv_catpv_flags(pTHX_ SV * const dsv, const char *sstr, const I32 flags)
 {
     PERL_ARGS_ASSERT_SV_CATPV_FLAGS;
     sv_catpvn_flags(dsv, sstr, strlen(sstr), flags);
@@ -5816,6 +5816,28 @@ Perl_newSV(pTHX_ const STRLEN len)
     }
     return sv;
 }
+
+/*
+=for apidoc newSVpvz
+
+Creates a new SV initialized with an empty string, like C<newSVpvs("")>, but
+with enough available space to hold a string of C<len> bytes (plus a trailing
+NUL) without needing to grow.
+
+The reference count for the new SV is set to 1.
+
+=cut
+*/
+SV *
+Perl_newSVpvz(pTHX_ const STRLEN len)
+{
+    SV *sv = newSV_type(SVt_PV);
+    sv_grow_fresh(sv, len + 1);
+    (void) sv_setpv_freshbuf(sv);
+
+    return sv;
+}
+
 /*
 =for apidoc sv_magicext
 

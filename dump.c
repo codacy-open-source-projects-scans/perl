@@ -1452,6 +1452,48 @@ S_do_op_dump_bar(pTHX_ I32 level, UV bar, PerlIO *file, const OP *o)
         }
         break;
 
+    case OP_ARGELEM:
+        S_opdump_indent(aTHX_ o, level, bar, file, "ARGIX = %" IVdf "\n", PTR2IV(cUNOP_AUXo->op_aux));
+        break;
+
+    case OP_ARGCHECK:
+    {
+        struct op_argcheck_aux *aux = (struct op_argcheck_aux *)cUNOP_AUXo->op_aux;
+        S_opdump_indent(aTHX_ o, level, bar, file, "ARGS = %" UVuf " .. %" UVuf "\n",
+                aux->params, aux->opt_params);
+        if(aux->slurpy)
+            S_opdump_indent(aTHX_ o, level, bar, file, "SLURPY = '%c'\n", aux->slurpy);
+
+        break;
+    }
+
+    case OP_METHSTART:
+    {
+        UNOP_AUX_item *aux = cUNOP_AUXo->op_aux;
+        if(!aux)
+            break;
+
+        UV n_fields = aux[0].uv;
+        S_opdump_indent(aTHX_ o, level, bar, file, "MAX_FIELDIX = %" UVuf "\n", aux[1].uv);
+        if(!n_fields)
+            break;
+
+        S_opdump_indent(aTHX_ o, level, bar, file, "FIELDS: (%" UVuf ")\n", n_fields);
+        UNOP_AUX_item *fieldaux = aux + 2;
+        for(Size_t i = 0; i < n_fields; i++, fieldaux += 2) {
+            S_opdump_indent(aTHX_ o, level, bar, file, "  [%zd] PADIX = %" UVuf "  FIELDIX = % " UVuf "\n",
+                    i, fieldaux[0].uv, fieldaux[1].uv);
+        }
+        break;
+    }
+
+    case OP_INITFIELD:
+    {
+        UNOP_AUX_item *aux = cUNOP_AUXo->op_aux;
+        S_opdump_indent(aTHX_ o, level, bar, file, "FIELDIX = %" UVuf "\n", aux[0].uv);
+        break;
+    }
+
 
     default:
         break;

@@ -4297,6 +4297,11 @@ Perl_bind_match(pTHX_ I32 type, OP *left, OP *right)
             o = right;
         }
         else {
+            if (left->op_type == OP_NOT && !(left->op_flags & OPf_PARENS)) {
+                Perl_ck_warner(aTHX_ packWARN(WARN_PRECEDENCE),
+                    "Possible precedence problem between ! and %s", PL_op_desc[rtype]
+                );
+            }
             right->op_flags |= OPf_STACKED;
             if (rtype != OP_MATCH && rtype != OP_TRANSR &&
             ! (rtype == OP_TRANS &&
@@ -6046,34 +6051,95 @@ Perl_newBINOP(pTHX_ I32 type, I32 flags, OP *first, OP *last)
     return fold_constants(op_integerize(op_std_init((OP *)binop)));
 }
 
+/* 4 bits per hex char, highest bit position = 0,1-3 => 1; 4-7 => 2; ... */
+#define NUM_HEX_CHARS(num) ((int) ((num == 0) ? 1 : 1 + (msbit_pos(num) / 4)))
+
+#define INFTY  "INFINITY"  /* How to spell "infinity" in the output */
+
+/* Total number of bytes a given code point would occupy in the output */
+#define TOTAL_LEN(num)                                                      \
+            ((int) ((num == 0)                                              \
+                    ? 1    /* Plain 0 has no ornamentation */               \
+                    : ((num >= IV_MAX)                                      \
+                       ? STRLENs(INFTY)                                   \
+                       : ((STRLENs("0x") + ((NUM_HEX_CHARS(num) <= 2)       \
+                          ? 2  /* Otherwise, minimum of 2 hex digits */     \
+                          : NUM_HEX_CHARS(num)))))))
+
+/* To make evident, Configure with `-DDEBUGGING`, build, run 
+ *  `./perl -Ilib -Dy t/op/tr.t`
+ */
 void
 Perl_invmap_dump(pTHX_ SV* invlist, UV *map)
 {
-    const char indent[] = "    ";
+    PERL_ARGS_ASSERT_INVMAP_DUMP;
+
+    const unsigned int indent = 4;
 
     UV len = _invlist_len(invlist);
     UV * array = invlist_array(invlist);
-    UV i;
 
-    PERL_ARGS_ASSERT_INVMAP_DUMP;
+    if (len == 0) {
+        PerlIO_printf(Perl_debug_log, "(empty)\n");
+        return;
+    }
 
-    for (i = 0; i < len; i++) {
+    int upper = len - 1;
+    if (array[upper] >= IV_MAX) {   /* Avoid going off end in loop below */
+        upper--;
+    }
+
+    /* Each range is output with a start column, wide enough for the highest
+     * possible value; and an end column, similarly wide, but never narrower
+     * than the space required to output the phrase for infinity */
+    int max_start_len = TOTAL_LEN(array[upper]);
+    int max_end_len = MAX(STRLENs(INFTY), TOTAL_LEN(array[upper] - 1));
+
+    for (int i = 0; i <= upper; i++) {
         UV start = array[i];
-        UV end   = (i + 1 < len) ? array[i+1] - 1 : IV_MAX;
+        UV end = (i + 1 <= upper) ? array[i+1] - 1 : IV_MAX;
 
-        PerlIO_printf(Perl_debug_log, "%s[%" UVuf "] 0x%04" UVXf, indent, i, start);
-        if (end == IV_MAX) {
-            PerlIO_printf(Perl_debug_log, " .. INFTY");
-        }
-        else if (end != start) {
-            PerlIO_printf(Perl_debug_log, " .. 0x%04" UVXf, end);
+        /* The indentation */
+        PerlIO_printf(Perl_debug_log, "%*s[%d]", indent, " ", i);
+
+        /* Output a plain 0 without 0x ornamentation */
+        if (start == 0) {
+            PerlIO_printf(Perl_debug_log, "%*s%" UVXf,
+                                          max_start_len, " ", start);
         }
         else {
-            PerlIO_printf(Perl_debug_log, "            ");
+            PerlIO_printf(Perl_debug_log, "%*s0x%02" UVXf,
+                                          max_start_len - TOTAL_LEN(start) + 1,
+                                          " ",
+                                          start);
         }
 
-        PerlIO_printf(Perl_debug_log, "\t");
+#define RANGE_STRING  " .. "
+        if (end <= start) {
 
+            /* Skip the end column if the same as the start column, but instead
+             * space over the same number of columns it would occupy */
+            PerlIO_printf(Perl_debug_log, "%*s",
+                                            (int) STRLENs(RANGE_STRING)
+                                          + max_end_len
+                                          + 2,
+                                          " ");
+        }
+        else {
+            PerlIO_printf(Perl_debug_log, RANGE_STRING);
+
+            if (end >= IV_MAX) {
+                PerlIO_printf(Perl_debug_log, INFTY);
+            }
+            else {
+                PerlIO_printf(Perl_debug_log, "0x%02" UVXf, end);
+            }
+
+            PerlIO_printf(Perl_debug_log, "%*s",
+                                         max_end_len - TOTAL_LEN(end) + 2, " ");
+        }
+
+        /* Finally the column for the mapping */
         if (map[i] == TR_UNLISTED) {
             PerlIO_printf(Perl_debug_log, "TR_UNLISTED\n");
         }
@@ -6081,7 +6147,7 @@ Perl_invmap_dump(pTHX_ SV* invlist, UV *map)
             PerlIO_printf(Perl_debug_log, "TR_SPECIAL_HANDLING\n");
         }
         else {
-            PerlIO_printf(Perl_debug_log, "0x%04" UVXf "\n", map[i]);
+            PerlIO_printf(Perl_debug_log, "0x%02" UVXf "\n", map[i]);
         }
     }
 }
@@ -12104,6 +12170,27 @@ Perl_ck_bitop(pTHX_ OP *o)
     return o;
 }
 
+static void
+check_precedence_not_vs_cmp(pTHX_ const OP *const o)
+{
+    const OP *const left = cUNOPo->op_first,
+             *const right = OpSIBLING(left);
+    if (
+        left->op_type == OP_NOT             /* warn for !$x == ...       */
+        && !(left->op_flags & OPf_PARENS)   /* but not  (!$x) == ...     */
+        && right->op_type != OP_NOT         /* ... nor  !$x == !...      */
+        && !(                               /* ... nor  !$x == !CONSTANT */
+            right->op_folded
+            && right->op_type == OP_CONST
+            && SvIsBOOL(cSVOPx_sv(right))
+        )
+    ) {
+        Perl_ck_warner(aTHX_ packWARN(WARN_PRECEDENCE),
+            "Possible precedence problem between ! and %s", OP_DESC(o)
+        );
+    }
+}
+
 PERL_STATIC_INLINE bool
 is_dollar_bracket(pTHX_ const OP * const o)
 {
@@ -12150,6 +12237,8 @@ Perl_ck_cmp(pTHX_ OP *o)
             Perl_warner(aTHX_ packWARN(WARN_SYNTAX),
                         "$[ used in %s (did you mean $] ?)", OP_DESC(o));
     }
+
+    check_precedence_not_vs_cmp(aTHX_ o);
 
     /* convert (index(...) == -1) and variations into
      *   (r)index/BOOL(,NEG)
@@ -12230,6 +12319,17 @@ Perl_ck_cmp(pTHX_ OP *o)
     return indexop;
 }
 
+/* for slt, sgt, sle, sge, seq, sne */
+
+OP *
+Perl_ck_scmp(pTHX_ OP *o)
+{
+    PERL_ARGS_ASSERT_CK_SCMP;
+
+    check_precedence_not_vs_cmp(aTHX_ o);
+
+    return o;
+}
 
 OP *
 Perl_ck_concat(pTHX_ OP *o)
@@ -13334,6 +13434,40 @@ Perl_ck_null(pTHX_ OP *o)
     return o;
 }
 
+__attribute__nonnull__(1)
+static bool
+S_is_dup_mode(const OP *o)
+{
+    assert(o != NULL);
+    if (o->op_type != OP_CONST) {
+        return false;
+    }
+
+    const SV *const sv = cSVOPx(o)->op_sv;
+    if (!SvPOK(sv)) {
+        return false;
+    }
+
+    const char *mode = SvPVX_const(sv);
+    if (*mode == '+') {
+        mode++;
+    }
+    if (*mode == '>') {
+        if (mode[1] == '>') {
+            mode++;
+        }
+    }
+    else if (*mode == '<') {
+        /* nop */
+    }
+    else {
+        return false;
+    }
+
+    /* <&, >&, >>&, +<&, +>&, +>>& */
+    return mode[1] == '&';
+}
+
 OP *
 Perl_ck_open(pTHX_ OP *o)
 {
@@ -13346,19 +13480,18 @@ Perl_ck_open(pTHX_ OP *o)
          OP * const first = cLISTOPx(o)->op_first; /* The pushmark. */
          OP * const last  = cLISTOPx(o)->op_last;  /* The bareword. */
          OP *oa;
-         const char *mode;
 
-         if ((last->op_type == OP_CONST) &&		/* The bareword. */
+         if ((last->op_type == OP_CONST) &&             /* The bareword. */
              (last->op_private & OPpCONST_BARE) &&
              (last->op_private & OPpCONST_STRICT) &&
-             (oa = OpSIBLING(first)) &&		/* The fh. */
-             (oa = OpSIBLING(oa)) &&			/* The mode. */
-             (oa->op_type == OP_CONST) &&
-             SvPOK(cSVOPx(oa)->op_sv) &&
-             (mode = SvPVX_const(cSVOPx(oa)->op_sv)) &&
-             mode[0] == '>' && mode[1] == '&' &&	/* A dup open. */
-             (last == OpSIBLING(oa)))			/* The bareword. */
-              last->op_private &= ~OPpCONST_STRICT;
+             (oa = OpSIBLING(first)) &&                 /* The fh. */
+             (oa = OpSIBLING(oa)) &&                    /* The mode. */
+             S_is_dup_mode(oa) &&                       /* A dup open. */
+             (last == OpSIBLING(oa))) {                 /* The bareword. */
+             if (!FEATURE_BAREWORD_FILEHANDLES_IS_ENABLED)
+                 no_bareword_filehandle(SvPVX(cSVOPx_sv(last)));
+             last->op_private &= ~OPpCONST_STRICT;
+         }
     }
     {
         /* mark as special if filename is a literal undef */
@@ -15125,7 +15258,7 @@ Perl_ck_isa(pTHX_ OP *o)
     /* !$x isa Some::Class  # probably meant !($x isa Some::Class) */
     if (objop->op_type == OP_NOT && !(objop->op_flags & OPf_PARENS)) {
         Perl_ck_warner(aTHX_ packWARN(WARN_PRECEDENCE),
-            "Possible precedence problem on isa operator"
+            "Possible precedence problem between ! and %s", OP_DESC(o)
         );
     }
 

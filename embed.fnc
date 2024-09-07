@@ -2287,6 +2287,7 @@ ARdp	|SV *	|newSVpvn_share |NULLOK const char *s			\
 				|U32 hash
 ARdp	|SV *	|newSVpv_share	|NULLOK const char *s			\
 				|U32 hash
+ARdp	|SV *	|newSVpvz	|const STRLEN len
 ARdp	|OP *	|newSVREF	|NN OP *o
 Adp	|SV *	|newSVrv	|NN SV * const rv			\
 				|NULLOK const char * const classname
@@ -3060,7 +3061,7 @@ Adp	|void	|sv_catpv	|NN SV * const dsv			\
 Adfpv	|void	|sv_catpvf	|NN SV * const sv			\
 				|NN const char * const pat		\
 				|...
-Adp	|void	|sv_catpv_flags |NN SV *dsv				\
+Adp	|void	|sv_catpv_flags |NN SV * const dsv			\
 				|NN const char *sstr			\
 				|const I32 flags
 Adfpv	|void	|sv_catpvf_mg	|NN SV * const sv			\
@@ -3068,23 +3069,23 @@ Adfpv	|void	|sv_catpvf_mg	|NN SV * const sv			\
 				|...
 Adp	|void	|sv_catpv_mg	|NN SV * const dsv			\
 				|NULLOK const char * const sstr
-AMbdp	|void	|sv_catpvn	|NN SV *dsv				\
+AMbdp	|void	|sv_catpvn	|NN SV * const dsv			\
 				|NN const char *sstr			\
 				|STRLEN len
 Adp	|void	|sv_catpvn_flags|NN SV * const dsv			\
 				|NN const char *sstr			\
 				|const STRLEN len			\
 				|const I32 flags
-AMbdp	|void	|sv_catpvn_mg	|NN SV *dsv				\
+AMbdp	|void	|sv_catpvn_mg	|NN SV * const dsv			\
 				|NN const char *sstr			\
 				|STRLEN len
-AMbdp	|void	|sv_catsv	|NN SV *dsv				\
-				|NULLOK SV *sstr
+AMbdp	|void	|sv_catsv	|NN SV * const dsv			\
+				|NULLOK SV * const sstr
 Adp	|void	|sv_catsv_flags |NN SV * const dsv			\
 				|NULLOK SV * const sstr 		\
 				|const I32 flags
-AMbdp	|void	|sv_catsv_mg	|NN SV *dsv				\
-				|NULLOK SV *sstr
+AMbdp	|void	|sv_catsv_mg	|NN SV * const dsv			\
+				|NULLOK SV * const sstr
 Adp	|void	|sv_chop	|NN SV * const sv			\
 				|NULLOK const char * const ptr
 : Used only in perl.c

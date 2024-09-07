@@ -3043,6 +3043,11 @@ Perl_newSVpvn_share(pTHX_ const char *s, I32 len, U32 hash)
 #define PERL_ARGS_ASSERT_NEWSVPVN_SHARE
 
 PERL_CALLCONV SV *
+Perl_newSVpvz(pTHX_ const STRLEN len)
+        __attribute__warn_unused_result__;
+#define PERL_ARGS_ASSERT_NEWSVPVZ
+
+PERL_CALLCONV SV *
 Perl_newSVrv(pTHX_ SV * const rv, const char * const classname);
 #define PERL_ARGS_ASSERT_NEWSVRV                \
         assert(rv)
@@ -4363,7 +4368,7 @@ Perl_sv_catpv(pTHX_ SV * const dsv, const char *sstr);
         assert(dsv)
 
 PERL_CALLCONV void
-Perl_sv_catpv_flags(pTHX_ SV *dsv, const char *sstr, const I32 flags);
+Perl_sv_catpv_flags(pTHX_ SV * const dsv, const char *sstr, const I32 flags);
 #define PERL_ARGS_ASSERT_SV_CATPV_FLAGS         \
         assert(dsv); assert(sstr)
 
@@ -5891,22 +5896,22 @@ Perl_sv_2uv(pTHX_ SV *sv);
         assert(sv)
 
 PERL_CALLCONV void
-Perl_sv_catpvn(pTHX_ SV *dsv, const char *sstr, STRLEN len);
+Perl_sv_catpvn(pTHX_ SV * const dsv, const char *sstr, STRLEN len);
 # define PERL_ARGS_ASSERT_SV_CATPVN             \
         assert(dsv); assert(sstr)
 
 PERL_CALLCONV void
-Perl_sv_catpvn_mg(pTHX_ SV *dsv, const char *sstr, STRLEN len);
+Perl_sv_catpvn_mg(pTHX_ SV * const dsv, const char *sstr, STRLEN len);
 # define PERL_ARGS_ASSERT_SV_CATPVN_MG          \
         assert(dsv); assert(sstr)
 
 PERL_CALLCONV void
-Perl_sv_catsv(pTHX_ SV *dsv, SV *sstr);
+Perl_sv_catsv(pTHX_ SV * const dsv, SV * const sstr);
 # define PERL_ARGS_ASSERT_SV_CATSV              \
         assert(dsv)
 
 PERL_CALLCONV void
-Perl_sv_catsv_mg(pTHX_ SV *dsv, SV *sstr);
+Perl_sv_catsv_mg(pTHX_ SV * const dsv, SV * const sstr);
 # define PERL_ARGS_ASSERT_SV_CATSV_MG           \
         assert(dsv)
 
@@ -6463,6 +6468,13 @@ Perl_ck_sassign(pTHX_ OP *o)
         __attribute__warn_unused_result__
         __attribute__visibility__("hidden");
 # define PERL_ARGS_ASSERT_CK_SASSIGN            \
+        assert(o)
+
+PERL_CALLCONV OP *
+Perl_ck_scmp(pTHX_ OP *o)
+        __attribute__warn_unused_result__
+        __attribute__visibility__("hidden");
+# define PERL_ARGS_ASSERT_CK_SCMP               \
         assert(o)
 
 PERL_CALLCONV OP *

@@ -5731,6 +5731,7 @@ pod/perl5400delta.pod			Perl changes in version 5.40.0
 pod/perl5410delta.pod			Perl changes in version 5.41.0
 pod/perl5411delta.pod			Perl changes in version 5.41.1
 pod/perl5412delta.pod			Perl changes in version 5.41.2
+pod/perl5413delta.pod			Perl changes in version 5.41.3
 pod/perl561delta.pod			Perl changes in version 5.6.1
 pod/perl56delta.pod			Perl changes in version 5.6
 pod/perl581delta.pod			Perl changes in version 5.8.1
@@ -6619,6 +6620,7 @@ t/run/runenv.t				Test if perl honors its environment variables.
 t/run/runenv_hashseed.t			Test if perl honors PERL_HASH_SEED.
 t/run/runenv_randseed.t			Test if perl honors PERL_RAND_SEED.
 t/run/script.t				See if script invocation works
+t/run/switch-I-and-M.t			Test order of application of -I and -M
 t/run/switch0.t				Test the -0 switch
 t/run/switcha.t				Test the -a switch
 t/run/switchC.t				Test the -C switch
@@ -6643,6 +6645,7 @@ t/TEST					The regression tester
 t/test.pl				Simple testing library
 t/test_pl/_num_to_alpha.t		Tests for the simple testing library
 t/test_pl/can_isa_ok.t			Tests for the simple testing library
+t/test_pl/display.t			Tests for the simple testing library
 t/test_pl/plan_skip_all.t		Tests for the simple testing library
 t/test_pl/tempfile.t			Tests for the simple testing library
 t/thread_it.pl				Run regression tests in a new thread
