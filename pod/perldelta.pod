@@ -254,7 +254,8 @@ L</Platform Support> section, instead.
 
 =item *
 
-XXX
+Fix compilation on platforms (e.g. "Gentoo Prefix") with only a C locale [GH #22569]
+Bug first reported downstream L<bugs.gentoo.org/939014|https://bugs.gentoo.org/939014> 
 
 =back
 
@@ -350,6 +351,19 @@ well.
 
 XXX
 
+=item *
+
+The C<op_dump()> function has been expanded to include additional information
+about the recent C<OP_METHSTART> and C<OP_INITFIELD> ops, as well as for
+C<OP_ARGCHECK> and C<OP_ARGELEM> which had not been done previously.
+
+=item *
+
+C<op_dump()> now also has the facility to print extra debugging information
+about custom operators, if those operators register a helper function via the
+new C<xop_dump> element of the C<XOP> structure. For more information, see the
+relevant additions to L<perlguts|perlguts/"Custom Operators">.
+
 =back
 
 =head1 Selected Bug Fixes
@@ -382,6 +396,20 @@ Enforce C<no feature "bareword_filehandles"> for bareword file handles
 that have strictness removed because they are used in open() with a
 "dup" mode, such as in C<< open my $fh, ">&", THISHANDLE >>. [GH
 #22568]
+
+=item *
+
+Using C<goto> to tail call, or using the call_sv() and related APIs to
+call, any of trim(), refaddr(), reftype(), ceil(), floor() or
+stringify() in the C<builtin::> package would crash or assert due to a
+C<TARG> handling bug. [GH #22542]
+
+=item *
+
+Fix sv_gets() to accept a C<SSize_t> append offset instead of C<I32>.
+This prevents integer overflows when appending to a large C<SV> for
+C<readpipe> aka C<qx//> and C<readline>.
+L<https://www.perlmonks.org/?node_id=11161665>
 
 =back
 

@@ -7661,7 +7661,7 @@ S_emulate_langinfo(pTHX_ const PERL_INTMAX_T item,
 
         /* Many of the remaining digits have representations that include at
          * least two 0-sized strings */
-        SV* alt_dig_sv = newSV(2 * alt0_len);
+        SV* alt_dig_sv = newSVpvz(2 * alt0_len);
 
         /* Various %O formats can be used to derive the alternate digits.  Only
          * %Oy can go up to the full 100 values.  If it doesn't work, we try
@@ -8298,7 +8298,7 @@ S_sv_strftime_common(pTHX_ SV * fmt,
      * to get almost all the typical returns to fit without the called function
      * having to realloc; this is a somewhat educated guess, but feel free to
      * tweak it. */
-    SV* sv = newSV(MAX(fmt_cur * 2, 64));
+    SV* sv = newSVpvz(MAX(fmt_cur * 2, 64));
     if (! strftime8(fmt_str,
                     sv,
                     locale,
@@ -8972,6 +8972,7 @@ Perl_init_i18nl10n(pTHX_ int printwarn)
      * categories into our internal indices. */
     if (map_LC_ALL_position_to_index[0] == LC_ALL_INDEX_) {
 
+#    ifdef PERL_LC_ALL_CATEGORY_POSITIONS_INIT
         /* Use this array, initialized by a config.h constant */
         int lc_all_category_positions[] = PERL_LC_ALL_CATEGORY_POSITIONS_INIT;
         STATIC_ASSERT_STMT(   C_ARRAY_LENGTH(lc_all_category_positions)
@@ -8984,6 +8985,21 @@ Perl_init_i18nl10n(pTHX_ int printwarn)
             map_LC_ALL_position_to_index[i] =
                               get_category_index(lc_all_category_positions[i]);
         }
+#    else
+        /* It is possible for both PERL_LC_ALL_USES_NAME_VALUE_PAIRS and
+         * PERL_LC_ALL_CATEGORY_POSITIONS_INIT not to be defined, e.g. on
+         * systems with only a C locale during ./Configure.  Assume that this
+         * can only happen as part of some sort of bootstrapping so allow
+         * compilation to succeed by ignoring correctness.
+         */
+        for (unsigned int i = 0;
+             i < C_ARRAY_LENGTH(map_LC_ALL_position_to_index);
+             i++)
+        {
+            map_LC_ALL_position_to_index[i] = 0;
+        }
+#    endif
+
     }
 
     LOCALE_UNLOCK;

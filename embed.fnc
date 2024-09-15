@@ -427,8 +427,8 @@
 :        code. (A typical guard will be that it is being included in a
 :        particular C file(s) or in the perl core.) Therefore, all non-guarded
 :        functions should also have the 'p' flag specified to avoid polluting
-:        the XS code name space. Otherwise an error is generated if the 'S'
-:        flag is not also specified.
+:        the XS code name space.  Otherwise, this flag also turns on the 'S'
+:	 flag.
 :
 :          proto.h: function is declared as PERL_STATIC_INLINE
 :
@@ -2376,6 +2376,9 @@ ARdp	|OP *	|op_convert_list|I32 optype				\
 				|I32 flags				\
 				|NULLOK OP *o
 Adp	|void	|op_dump	|NN const OP *o
+Adfp	|void	|opdump_printf	|NN struct Perl_OpDumpContext *ctx	\
+				|NN const char *pat			\
+				|...
 ; Used in op.c and class.c
 Adp	|OP *	|op_force_list	|NULLOK OP *o
 Adp	|void	|op_free	|NULLOK OP *arg
@@ -2764,11 +2767,11 @@ p	|void	|report_wrongway_fh					\
 				|NULLOK const GV *gv			\
 				|const char have
 AOdp	|void	|require_pv	|NN const char *pv
-AMp	|void	|resume_compcv	|NN struct suspended_compcv *buffer	\
+Cop	|void	|resume_compcv	|NN struct suspended_compcv *buffer	\
 				|bool save
-dm	|void	|resume_compcv_and_save 				\
+Adm	|void	|resume_compcv_and_save 				\
 				|NN struct suspended_compcv *buffer
-dm	|void	|resume_compcv_final					\
+Adm	|void	|resume_compcv_final					\
 				|NN struct suspended_compcv *buffer
 APTdp	|char * |rninstr	|NN const char *big			\
 				|NN const char *bigend			\
@@ -3172,7 +3175,7 @@ ATdpx	|SV *	|sv_get_backrefs|NN SV * const sv
 Adip	|void	|SvGETMAGIC	|NN SV *sv
 Adp	|char * |sv_gets	|NN SV * const sv			\
 				|NN PerlIO * const fp			\
-				|I32 append
+				|SSize_t append
 Cdp	|char * |sv_grow	|NN SV * const sv			\
 				|STRLEN newlen
 Cdp	|char * |sv_grow_fresh	|NN SV * const sv			\

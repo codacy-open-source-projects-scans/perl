@@ -90,24 +90,41 @@ is documented only in this paragraph.)
 =for apidoc_section $floating
 =for apidoc Ayh||NV
 
-The seven routines are:
+There are more than a few routines that create and initialize SVs, with
+new ones occasionally added.  These are all documented in L<perlapi/SV
+Handling>; each one's name begins with C<newSV>.  Here are the basic
+ones:
 
+    SV*  newSVbool(boolean_value);
     SV*  newSViv(IV);
     SV*  newSVuv(UV);
     SV*  newSVnv(double);
     SV*  newSVpv(const char*, STRLEN);
+    SV*  newSVpvf_nocontext(const char * const pat, ...)
     SV*  newSVpvn(const char*, STRLEN);
-    SV*  newSVpvf(const char*, ...);
+    SV*  newSVpvs("literal string")
+    SV*  newSVpvz(STRLEN)
     SV*  newSVsv(SV*);
 
 C<STRLEN> is an integer type (C<Size_t>, usually defined as C<size_t> in
 F<config.h>) guaranteed to be large enough to represent the size of
 any string that perl can handle.
 
+S<C<"literal string">> is a string enclosed in double quote characters,
+and the created SV is of string type (a PV), initialized to contain a
+copy of the literal string parameter.  C<newSVpvs("")> creates an SV
+containing an empty (zero-length) string and returns a pointer to it.
+
+C<newSVpvz> is like C<newSVpvs("")>, but it reserves the number of bytes
+specified by its parameter for future growth, without having to
+reallocate memory.  It is useful in situations where you don't know what
+the string eventually will be, but you have a pretty good idea of its
+eventual minimum size.
+
 =for apidoc_section $string
 =for apidoc Ayh||STRLEN
 
-In the unlikely case of a SV requiring more complex initialization, you
+In the case of an SV requiring more complex initialization, you
 can create an empty SV with newSV(len).  If C<len> is 0 an empty SV of
 type NULL is returned, else an SV of type PV is returned with len + 1 (for
 the C<NUL>) bytes of storage allocated, accessible via SvPVX.  In both cases
@@ -117,8 +134,10 @@ the SV has the undef value.
     SV *sv = newSV(10);  /* 10 (+1) bytes of uninitialised storage
                           * allocated */
 
-To change the value of an I<already-existing> SV, there are eight routines:
+To change the value of an I<already-existing> SV, these are the basic
+routines (with more specified in L<perlapi/SV Handling>):
 
+    void  sv_setbool(SV*, bool);
     void  sv_setiv(SV*, IV);
     void  sv_setuv(SV*, UV);
     void  sv_setnv(SV*, double);
@@ -517,7 +536,7 @@ so SvIOK is false.  (In perl 5.18 onwards, tied scalars use
 the flags the same way as untied scalars.)  Another is when
 numeric conversion has occurred and precision has been lost: only the
 private flag is set on 'lossy' values.  So when an NV is converted to an
-IV with loss, SvIOKp, SvNOKp and SvNOK will be set, while SvIOK wont be.
+IV with loss, SvIOKp, SvNOKp and SvNOK will be set, while SvIOK won't be.
 
 In general, though, it's best to use the C<Sv*V> macros.
 
@@ -1274,7 +1293,7 @@ settable with L<< IO::Handle's untaint() method|IO::Handle/"$io->untaint" >>.
 =for apidoc Amnh||IOf_FLUSH
 =for apidoc Amnh||IOf_UNTAINT
 
-The IO object may also contains a directory handle:
+The IO object may also contain a directory handle:
 
   DIR *IoDIRP(io);
 
@@ -2048,7 +2067,7 @@ from the related C<SAVEDESTRUCTOR_X()> in that it MUST be either NULL or
 an C<SV*>.
 
 Note the I<end of the current statement> may occur much before the
-the I<end of the current pseudo-block>.  You may wish to look at the
+I<end of the current pseudo-block>.  You may wish to look at the
 C<SAVEDESTRUCTOR_X()> macro instead.
 
 =for apidoc Amh||MORTALSVFUNC_X|SVFUNC_t f|SV *sv
@@ -2061,7 +2080,7 @@ See the documentation for C<mortal_destructor_sv()> for details on
 the C<args> parameter is handled.
 
 Note the I<end of the current statement> may occur much before the
-the I<end of the current pseudo-block>.  If you wish to call a perl
+I<end of the current pseudo-block>.  If you wish to call a perl
 function at the end of the current pseudo block you should use the
 C<SAVEDESTRUCTOR_X()> API instead, which will require you create a
 C wrapper to call the Perl function.
@@ -2082,7 +2101,7 @@ provide pointers to the modifiable data explicitly (either C pointers,
 or Perlish C<GV *>s).  Where the above macros take C<int>, a similar
 function takes C<int *>.
 
-Other macros above have functions implementing them, but its probably
+Other macros above have functions implementing them, but it's probably
 best to just use the macro, and not those or the ones below.
 
 =over 4
@@ -2613,7 +2632,7 @@ of free()ing (i.e. their type is changed to OP_NULL).
 
 After the compile tree for a subroutine (or for an C<eval> or a file)
 is created, an additional pass over the code is performed.  This pass
-is neither top-down or bottom-up, but in the execution order (with
+is neither top-down nor bottom-up, but in the execution order (with
 additional complications for conditionals).  Optimizations performed
 at this stage are subject to the same restrictions as in the pass 2.
 
@@ -3512,7 +3531,7 @@ So don't do that!
 
 (Note that we don't have to test for invariant characters in the
 examples above.  The functions work on any well-formed UTF-8 input.
-It's just that its faster to avoid the function overhead when it's not
+It's just that it's faster to avoid the function overhead when it's not
 needed.)
 
 =head2 How does Perl store UTF-8 strings?
@@ -3678,7 +3697,7 @@ in a single byte.
 =head2 How do I compare strings?
 
 L<perlapi/sv_cmp> and L<perlapi/sv_cmp_flags> do a lexigraphic
-comparison of two SV's, and handle UTF-8ness properly.  Note, however,
+comparison of two SVs, and handle UTF-8ness properly.  Note, however,
 that Unicode specifies a much fancier mechanism for collation, available
 via the L<Unicode::Collate> module.
 
@@ -3847,6 +3866,17 @@ This member is of type C<Perl_cpeep_t>, which expands to C<void
 will be called from C<Perl_rpeep> when ops of this type are encountered
 by the peephole optimizer.  I<o> is the OP that needs optimizing;
 I<oldop> is the previous OP optimized, whose C<op_next> points to I<o>.
+
+=item xop_dump
+
+This member is a pointer to a function of type
+C<void (pTHX_ OP *, struct OpDumpContext *)>. If set, this function is called
+by C<op_dump()> when dumping a custom operator of this type, after the op's
+basic fields have been printed. This function may make use of
+C<opdump_printf()> to emit additional output that may be useful for debugging.
+
+The opaque structure pointer passed in as its final argument should be passed
+directly into C<opdump_printf()>.
 
 =for apidoc_section $optree_manipulation
 =for apidoc Ayh||Perl_cpeep_t
@@ -4088,7 +4118,7 @@ be invoked on scope exit. A full list of such macros can be found in
 F<scope.h>.
 
 There is no public API for popping individual values or items from the save
-stack. Instead, via the scope stack, the C<ENTER> and C<LEAVE> pair form a way
+stack. Instead, via the scope stack, the C<ENTER> and C<LEAVE> pair forms a way
 to start and stop nested scopes. Leaving a nested scope via C<LEAVE> will
 restore all of the saved values that had been pushed since the most recent
 C<ENTER>.
@@ -4422,7 +4452,7 @@ C<cx_popsub>. In part, this looks like:
     cx->blk_sub.cv = NULL;
     SvREFCNT_dec(cv);
 
-where its processing the just-executed CV. Note that before it decrements
+where it's processing the just-executed CV. Note that before it decrements
 the CV's reference count, it nulls the C<blk_sub.cv>. This means that if
 it re-enters, the CV won't be freed twice. It also means that you can't
 rely on such type-specific fields having useful values after the return
@@ -4443,7 +4473,7 @@ C<for (list) {}>), and what args (if any) it returns; and that will
 already have been sorted out earlier by C<leave_adjust_stacks()>.
 
 Finally, the context stack pointer is actually decremented by C<CX_POP(cx)>.
-After this point, it's possible that that the current context frame could
+After this point, it's possible that the current context frame could
 be overwritten by other contexts being pushed. Although things like ties
 and C<DESTROY> are supposed to work within a new context stack, it's best
 not to assume this. Indeed on debugging builds, C<CX_POP(cx)> deliberately
@@ -4493,7 +4523,7 @@ short), are called via special wrapper functions which adjust the stack
 before and after. At the moment there is no API to write an RC XS
 function, so all XS code will continue to be called via a wrapper (which
 makes them slightly slower), but means that in general, CPAN distributions
-containing XS code code continue to work without modification.
+containing XS code continue to work without modification.
 
 However, PP functions, either in perl core, or those in XS functions used
 to implement custom ops or to override the PP functions for built-in ops,

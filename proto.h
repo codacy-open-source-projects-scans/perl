@@ -3272,6 +3272,12 @@ Perl_op_wrap_finally(pTHX_ OP *block, OP *finally)
         assert(block); assert(finally)
 
 PERL_CALLCONV void
+Perl_opdump_printf(pTHX_ struct Perl_OpDumpContext *ctx, const char *pat, ...)
+        __attribute__format__(__printf__,pTHX_2,pTHX_3);
+#define PERL_ARGS_ASSERT_OPDUMP_PRINTF          \
+        assert(ctx); assert(pat)
+
+PERL_CALLCONV void
 Perl_package(pTHX_ OP *o)
         __attribute__visibility__("hidden");
 #define PERL_ARGS_ASSERT_PACKAGE                \
@@ -4551,7 +4557,7 @@ Perl_sv_get_backrefs(SV * const sv);
         assert(sv)
 
 PERL_CALLCONV char *
-Perl_sv_gets(pTHX_ SV * const sv, PerlIO * const fp, I32 append);
+Perl_sv_gets(pTHX_ SV * const sv, PerlIO * const fp, SSize_t append);
 #define PERL_ARGS_ASSERT_SV_GETS                \
         assert(sv); assert(fp)
 

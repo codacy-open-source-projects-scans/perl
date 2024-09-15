@@ -26,7 +26,7 @@ If you have neither, you don't have any thread support built in.
 If you have both, you are in trouble.
 
 The L<threads> and L<threads::shared> modules are included in the core Perl
-distribution.  Additionally, they are maintained as a separate modules on
+distribution.  Additionally, they are maintained as separate modules on
 CPAN, so you can check there for any updates.
 
 =head1 What Is A Thread Anyway?
@@ -299,7 +299,7 @@ automatically.
 
     $thr->detach();   # Now we officially don't care any more
 
-    sleep(15);        # Let thread run for awhile
+    sleep(15);        # Let thread run for a while
 
     sub sub1 {
         my $count = 0;

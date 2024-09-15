@@ -5463,7 +5463,7 @@ of values, as follows:
        as possible.  Bit eight (the high bit) is set on each byte
        except the last.
 
-    x  A null byte (a.k.a ASCII NUL, "\000", chr(0))
+    x  A null byte (a.k.a. ASCII NUL, "\000", chr(0))
     X  Back up a byte.
     @  Null-fill or truncate to absolute position, counted from the
        start of the innermost ()-group.
@@ -7097,7 +7097,7 @@ If the hook is an array reference, its first element must be a
 subroutine reference or an object as described above. When the first
 element is an object that supports an C<INC> or C<INCDIR> method then
 the method will be called with the object as the first argument, the
-filename requested as the second, and the hook array reference as the
+filename requested as the second, and the hook array reference as
 the third. When the first element is a subroutine then it will be
 called with the array as the first argument, and the filename as the
 second, no third parameter will be passed in. In both forms you can
@@ -8375,7 +8375,7 @@ string's internal encoding.
 
 As of Perl 5.39.9 the C</x> default modifier does NOT affect
 C<split STRING> but does affect C<split PATTERN>, this means that
-C<split " "> will produces the expected I<awk> emulation regardless as
+C<split " "> will produce the expected I<awk> emulation regardless as
 to whether it is used in the scope of a C<use re "/x"> statement. If you
 want to split by spaces under C<use re "/x"> you must do something like
 C<split /(?-x: )/> or C<split /\x{20}/> instead of C<split / />.

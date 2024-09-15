@@ -1605,8 +1605,8 @@ sub format_pod_indexes ($entries_ref) {
     return $text;
 }
 
-sub docout ($fh, $element_name, $docref) {  # output the docs for one function
-                                            # group
+    # output the docs for one function group
+sub docout ($fh, $section_name, $element_name, $docref) {
     # Trim trailing space
     $element_name =~ s/\s*$//;
 
@@ -1631,7 +1631,10 @@ sub docout ($fh, $element_name, $docref) {  # output the docs for one function
     my @xrefs;
 
     for (my $i = 0; $i < @items; $i++) {
+        last if $docref->{'xref_only'}; # Place holder
+
         my $item = ${$items[$i]};
+        next if $item->{xref_only}; # Place holder
         my $name = $item->{name};
 
         if ($item->{flags}) {
@@ -1679,7 +1682,7 @@ sub docout ($fh, $element_name, $docref) {  # output the docs for one function
         }
 
         # If there is a single item in the group, no need to give the name,
-        # bu`t capitalize the first word.
+        # but capitalize the first word.
         if (@items == 1) {
             $entry = ucfirst($entry);
         }
@@ -1746,9 +1749,8 @@ sub docout ($fh, $element_name, $docref) {  # output the docs for one function
     my @usage;
     if (defined $docref->{usage}) {
 
-        # A complete override of the usage section.  Note that the check for
-        # the O flag isn't checked for, as that usage is never output in this
-        # case
+        # A complete override of the usage section.  Note that the O flag
+        # isn't checked for, as that usage is never output in this case
         push @usage, ($docref->{usage} =~ s/^/ /mrg), "\n";
     }
     else {
@@ -1782,6 +1784,8 @@ sub docout ($fh, $element_name, $docref) {  # output the docs for one function
         my $may_need_extra_indent = 1;
         for my $item_ref (@items) {
             my $item = $$item_ref;
+            next if $item->{xref_only}; # Place holder
+
             my $name = $item->{name};
             my $flags = $item->{flags};
 
@@ -2158,9 +2162,12 @@ sub docout ($fh, $element_name, $docref) {  # output the docs for one function
     }
 
     print $fh "\n=back\n";
-    print $fh "\n=for hackers\n";
-    print $fh join "\n", @where_froms;
-    print $fh "\n";
+
+    if (@where_froms) {
+        print $fh "\n=for hackers\n";
+        print $fh join "\n", @where_froms;
+        print $fh "\n";
+    }
 }
 
 sub construct_missings_section ($missings_hdr, $missings_ref) {
@@ -2284,19 +2291,168 @@ sub output ($destpod) {  # Output a complete pod file
             }
         }
 
-        if ($section_info && keys $section_info->%*) {
+        if (! $section_info || ! keys $section_info->%*) {
+            my $pod_type = ($podname eq $api) ? "public" : "internal";
+            print $fh "\nThere are currently no $pod_type API items in ",
+                      $section_name, "\n";
+        }
+        else {
+
+            # First go through the entries in this section, looking for ones
+            # in each group that are out-of-order, and create place holder
+            # entries for them.  Each will be output where they should go
+            # according to dictionary order, and each points to where the
+            # full documentation is found.  This allows closely related
+            # entries whose names aren't alphabetically adjacent to be
+            # combined into a single group and still be easily findable
+            # by someone scanning through the pod alphabetically.
+            #
+            # Groups are arranged in the final output alphabetically by the
+            # name of the first API element in the group.  (Within a group,
+            # the ordering determined by the code is retained.)  That first
+            # API element is considered its group leader.  The algorithm is to
+            # look at the current group and the one just prior to it.  If
+            # there are items in the current group that really sort
+            # alphabetically to before the previous group, create placeholders
+            # for them.  If there are items in the previous group that sort
+            # after this group, create placeholders for them.  At the end of
+            # comparing each group with its adjacent one, all out-of-order
+            # items are found.
+
+            my %out_of_orders;  # List of the elements that need placeholders
+
+            my @leaders = sort dictionary_order keys %$section_info;
+
+            # We need two groups to compare.  Set the first, and then compare
+            # with the next.  At the end of each iteration, move on to
+            # comparing the next two adjacent groups by moving the current
+            # leader to be the previous one, and getting the next group and
+            # setting it to be the current one.
+            my $previous_leader = shift @leaders;
+            for my $this_leader (@leaders) {
+
+                # We look for both
+                #   1) items in the second group that should come before the
+                #      first group being examined;
+                #   2) those in the first group that should come after the
+                #      following adjacent group.
+                # We use the same loop for both, setting up some arrays to
+                # avoid conditionals cluttering up the logic.
+                my @leaders = ( $previous_leader, $this_leader );
+                my @groups = (
+                                $section_info->{$leaders[0]},
+                                $section_info->{$leaders[1]},
+                             );
+
+                # In the 0th loop iteration, we place the items in the second
+                # group plus the group leader of the first, and sort
+                # alphabetically.  The items that sort before the leader are
+                # the items in the second group which should have placeholders
+                # earlier in the output pointing to the second group.  We
+                # splice the sorted array to include only the items before the
+                # leader, as these are the out-of-order items.
+                #
+                # On the next loop iteration, we place the items in the first
+                # group plus the group leader of the second, and sort
+                # alphabetically.  The items that sort after the leader are
+                # the items in the first group which should have placeholders
+                # later in the output pointing to the first group.  We
+                # splice the sorted array to include only the items after the
+                # leader, as these are the out-of-order items.
+                #
+                # Below are the arguments to the splice command that gets
+                # eval'd.  In the first iteration, we splice out the leader
+                # and everything after it.  The splice command looks like
+                #   splice $leader_index;
+                # For the second iteration, we splice out the leader and
+                # everything before it.  The splice command looks like
+                #   splice 0, 1 + $leader_index;
+                my @splice_low = ( "", "0, 1 + " );
+
+                for my $which (0 .. 1) {
+                    my $other = $which ^ 1;
+
+                    # Create a list of items to compare, initialized with the
+                    # other group's sub-items.  The group's leader is
+                    # excluded.  It is always in position [0], so just shift
+                    # it off.
+                    my @items = map { $${_}->{name} }
+                                            $groups[$other]->{items}->@*;
+                    shift @items;
+
+                    # Then add this group's leader.
+                    push @items, $leaders[$which];
+
+                    # Then sort the bunch.  The result is the other group's
+                    # items sorted with respect to the leader of this group
+                    @items = sort dictionary_order @items;
+
+                    # Find where in the list this leader is.
+                    my $previous_index;
+                    for (my $i = 0; $i < @items; $i++) {
+                        next unless $leaders[$which] eq $items[$i];
+
+                        # Then splice the array, leaving only the out-of-order
+                        # items
+                        eval "splice \@items, $splice_low[$which]\$i ;";
+                        goto spliced;
+                    }
+
+                    die "Unexpecedly \@items doesn't contain $leaders[$which]";
+
+                 spliced:
+                    # The array now includes the out-of-order items.  Save,
+                    # along with which leader they should point to.
+                    $out_of_orders{$_} = $leaders[$other] for @items;
+                }
+
+                $previous_leader = $this_leader;
+            }
+
+            # Add a link entry for each out-of-order item
+            for my $item (keys %out_of_orders) {
+
+                my $linkto = $out_of_orders{$item};
+
+                # If the linked-to item merely points to another pod, just
+                # point to that, skipping the intermediary.
+                my $pod = ($section_info->{$linkto}{pod} =~ /^$described_in/)
+                          ? $section_info->{$linkto}{pod}
+                          : "Described under C<L</$linkto>>";
+
+                # Create a bare-bones entry; 'xref-only' marks it as such
+                $section_info->{$item} = {
+                                           xref_only => 1,
+                                           usage => "",
+                                           pod => $pod,
+                                           items => [
+                                                      \{ name => "$item*",
+                                                         xref_only => 1,
+                                                       }
+                                                    ],
+                                         };
+            }
+
             my $leader_name;
             my $leader_pod;
 
-            # To make things even more compact, go through the list, and
+            # To make things more compact, go through the list again, and
             # combine adjacent elements that have identical pod.
             for my $next_name (sort dictionary_order keys %$section_info) {
                 my $this_pod = $section_info->{$next_name}{pod};
 
                 # Combine if are the same pod
                 if ($leader_pod && $this_pod && $leader_pod eq $this_pod) {
-                    push $section_info->{$leader_name}{items}->@*,
-                         $section_info->{$next_name}{items}->@*;
+
+                    # But the combining may cause a new placeholder entry to
+                    # be put back into the same group as its original.  So
+                    # check for that.
+                    foreach my $item ($section_info->{$next_name}{items}->@*)
+                    {
+                        next if grep { $$item->{name}  eq $$_->{name} }
+                                    $section_info->{$leader_name}{items}->@*;
+                        push $section_info->{$leader_name}{items}->@*, $item;
+                    }
                     delete $section_info->{$next_name};
                 }
                 else {  # Set new pod otherwise
@@ -2306,14 +2462,10 @@ sub output ($destpod) {  # Output a complete pod file
             }
 
             # Then, output everything.
-            for my $function_name (sort dictionary_order keys %$section_info) {
-                docout($fh, $function_name, $section_info->{$function_name});
+            for my $this_leader (sort dictionary_order keys %$section_info) {
+                docout($fh, $section_name,
+                       $this_leader, $section_info->{$this_leader});
             }
-        }
-        else {
-            my $pod_type = ($podname eq $api) ? "public" : "internal";
-            print $fh "\nThere are currently no $pod_type API items in ",
-                      $section_name, "\n";
         }
 
         print $fh "\n", $valid_sections{$section_name}{footer}, "\n"
@@ -2690,7 +2842,10 @@ $api{hdr} = <<"_EOB_";
 |Suggestions and patches welcome
 |L<perl5-porters\@perl.org|mailto:perl5-porters\@perl.org>.
 |
-|The sections in this document currently are
+|The API elements are grouped by functionality into sections, as follows.
+|Within sections the elements are ordered alphabetically, ignoring case, with
+|non-leading underscores sorted first, and leading underscores and digits
+|sorted last.
 |
 |=over $standard_indent
 

@@ -973,7 +973,7 @@ Here's a sample TCP client using Internet-domain sockets:
 
 And here's a corresponding server to go along with it.  We'll
 leave the address as C<INADDR_ANY> so that the kernel can choose
-the appropriate interface on multihomed hosts.  If you want sit
+the appropriate interface on multihomed hosts.  If you want to sit
 on a particular interface (like the external side of a gateway
 or firewall machine), fill this in with your real address instead.
 
@@ -1445,7 +1445,7 @@ simultaneously copies everything from standard input to the socket.
 To accomplish the same thing using just one process would be I<much>
 harder, because it's easier to code two processes to do one thing than it
 is to code one process to do two things.  (This keep-it-simple principle
-a cornerstones of the Unix philosophy, and good software engineering as
+is a cornerstone of the Unix philosophy, and good software engineering as
 well, which is probably why it's spread to other systems.)
 
 Here's the code:
