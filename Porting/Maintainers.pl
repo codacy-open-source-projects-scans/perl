@@ -827,7 +827,7 @@ our %Modules = (
     },
 
     'Module::CoreList' => {
-        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20240829.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20240920.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
     },
 
@@ -1000,8 +1000,8 @@ our %Modules = (
     },
 
     'Scalar::Util' => {
-        'DISTRIBUTION' => 'PEVANS/Scalar-List-Utils-1.65.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Wed Aug 14 21:09:49 2024',
+        'DISTRIBUTION' => 'PEVANS/Scalar-List-Utils-1.66.tar.gz',
+        'SYNCINFO'     => 'tib on Fri Sep 20 08:05:21 2024',
         'FILES'        => q[cpan/Scalar-List-Utils],
     },
 
@@ -1110,8 +1110,8 @@ our %Modules = (
     },
 
     'Test::Simple' => {
-        'DISTRIBUTION' => 'EXODIST/Test-Simple-1.302203.tar.gz',
-        'SYNCINFO'     => 'tib on Fri Sep 13 19:16:48 2024',
+        'DISTRIBUTION' => 'EXODIST/Test-Simple-1.302204.tar.gz',
+        'SYNCINFO'     => 'tib on Mon Sep 16 08:49:09 2024',
         'FILES'        => q[cpan/Test-Simple],
         'EXCLUDED'     => [
             qr{^examples/},
@@ -1282,8 +1282,8 @@ our %Modules = (
     },
 
     'version' => {
-        'DISTRIBUTION' => 'LEONT/version-0.9930.tar.gz',
-        'SYNCINFO'     => 'LeoNerd on Mon Sep 18 21:49:09 2023',
+        'DISTRIBUTION' => 'LEONT/version-0.9933.tar.gz',
+        'SYNCINFO'     => 'tib on Sat Sep 14 15:02:52 2024',
         'FILES'        => q[cpan/version vutil.c vutil.h vxs.inc],
         'EXCLUDED' => [
             qr{^vutil/lib/},
