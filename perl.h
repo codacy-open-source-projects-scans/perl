@@ -2560,22 +2560,7 @@ You probably want to be using L<C</INT2PTR>> instead.
 #  endif
 #endif
 
-/* On MS Windows,with 64-bit mingw-w64 compilers, we
-   need to attend to a __float128 alignment issue if
-   USE_QUADMATH is defined. Otherwise we simply:
-   typedef NVTYPE NV
-   32-bit mingw.org compilers might also require
-   aligned(32) - at least that's what I found with my
-   Math::Foat128 module. But this is as yet untested
-   here, so no allowance is being made for mingw.org
-   compilers at this stage. -- sisyphus January 2021
-*/
-#if (defined(USE_LONG_DOUBLE) || defined(USE_QUADMATH)) && defined(__MINGW64__)
-   /* 64-bit build, mingw-w64 compiler only */
-   typedef NVTYPE NV __attribute__ ((aligned(8)));
-#else
-   typedef NVTYPE NV;
-#endif
+typedef NVTYPE NV;
 
 #ifdef I_IEEEFP
 #   include <ieeefp.h>
@@ -3605,6 +3590,8 @@ freeing any remaining Perl interpreters.
 #define PERL_SYS_INIT(argc, argv)	Perl_sys_init(argc, argv)
 #define PERL_SYS_INIT3(argc, argv, env)	Perl_sys_init3(argc, argv, env)
 #define PERL_SYS_TERM()			Perl_sys_term()
+
+#define SHUTDOWN_TERM PL_shutdownhook();
 
 #ifndef PERL_WRITE_MSG_TO_CONSOLE
 #  define PERL_WRITE_MSG_TO_CONSOLE(io, msg, len) PerlIO_write(io, msg, len)
@@ -5350,6 +5337,7 @@ typedef int  (*thrhook_proc_t) (pTHX);
 typedef OP* (*PPADDR_t[]) (pTHX);
 typedef bool (*destroyable_proc_t) (pTHX_ SV *sv);
 typedef void (*despatch_signals_proc_t) (pTHX);
+typedef void (*shutdown_proc_t)();
 
 #if defined(__DYNAMIC__) && defined(PERL_DARWIN) && defined(PERL_CORE)
 #  include <crt_externs.h>	/* for the env array */
