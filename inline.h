@@ -2672,11 +2672,6 @@ PERL_STATIC_INLINE U8 *
 Perl_utf8_hop_forward(const U8 *s, SSize_t off, const U8 *end)
 {
     PERL_ARGS_ASSERT_UTF8_HOP_FORWARD;
-
-    /* Note: cannot use UTF8_IS_...() too eagerly here since e.g
-     * the bitops (especially ~) can create illegal UTF-8.
-     * In other words: in Perl UTF-8 is not just for Unicode. */
-
     assert(off >= 0);
 
     if (UNLIKELY(s >= end)) {
@@ -2736,11 +2731,6 @@ PERL_STATIC_INLINE U8 *
 Perl_utf8_hop_back(const U8 *s, SSize_t off, const U8 *start)
 {
     PERL_ARGS_ASSERT_UTF8_HOP_BACK;
-
-    /* Note: cannot use UTF8_IS_...() too eagerly here since e.g
-     * the bitops (especially ~) can create illegal UTF-8.
-     * In other words: in Perl UTF-8 is not just for Unicode. */
-
     assert(start <= s);
     assert(off <= 0);
 
@@ -2986,80 +2976,22 @@ Perl_is_utf8_fixed_width_buf_loclen_flags(const U8 * const s,
 }
 
 PERL_STATIC_INLINE UV
-Perl_utf8n_to_uvchr_msgs(const U8 *s,
+Perl_utf8n_to_uvchr_msgs(const U8 * const s0,
                          STRLEN curlen,
                          STRLEN *retlen,
                          const U32 flags,
                          U32 * errors,
                          AV ** msgs)
 {
+    PERL_ARGS_ASSERT_UTF8N_TO_UVCHR_MSGS;
+
     /* This is the inlined portion of utf8n_to_uvchr_msgs.  It handles the
      * simple cases, and, if necessary calls a helper function to deal with the
      * more complex ones.  Almost all well-formed non-problematic code points
      * are considered simple, so that it's unlikely that the helper function
-     * will need to be called.
-     *
-     * This is an adaptation of the tables and algorithm given in
-     * https://bjoern.hoehrmann.de/utf-8/decoder/dfa/, which provides
-     * comprehensive documentation of the original version.  A copyright notice
-     * for the original version is given at the beginning of this file.  The
-     * Perl adaptation is documented at the definition of PL_strict_utf8_dfa_tab[].
-     */
+     * will need to be called. */
 
-    const U8 * const s0 = s;
-    const U8 * send = s0 + curlen;
-    UV type;
-    UV uv;
-
-    PERL_ARGS_ASSERT_UTF8N_TO_UVCHR_MSGS;
-
-    /* This dfa is fast.  If it accepts the input, it was for a well-formed,
-     * non-problematic code point, which can be returned immediately.
-     * Otherwise we call a helper function to figure out the more complicated
-     * cases. */
-
-    /* No calls from core pass in an empty string; non-core need a check */
-#ifdef PERL_CORE
-    assert(curlen > 0);
-#else
-    if (curlen == 0) return _utf8n_to_uvchr_msgs_helper(s0, 0, retlen,
-                                                        flags, errors, msgs);
-#endif
-
-    type = PL_strict_utf8_dfa_tab[*s];
-
-    /* The table is structured so that 'type' is 0 iff the input byte is
-     * represented identically regardless of the UTF-8ness of the string */
-    if (type == 0) {   /* UTF-8 invariants are returned unchanged */
-        uv = *s;
-    }
-    else {
-        UV state = PL_strict_utf8_dfa_tab[256 + type];
-        uv = (0xff >> type) & NATIVE_UTF8_TO_I8(*s);
-
-        while (LIKELY(state != 1) && ++s < send) {
-            type  = PL_strict_utf8_dfa_tab[*s];
-            state = PL_strict_utf8_dfa_tab[256 + state + type];
-
-            uv = UTF8_ACCUMULATE(uv, *s);
-
-            if (state == 0) {
-#ifdef EBCDIC
-                uv = UNI_TO_NATIVE(uv);
-#endif
-                goto success;
-            }
-        }
-
-        /* Here is potentially problematic.  Use the full mechanism */
-        return _utf8n_to_uvchr_msgs_helper(s0, curlen, retlen, flags,
-                                           errors, msgs);
-    }
-
-  success:
-    if (retlen) {
-        *retlen = s - s0 + 1;
-    }
+    /* Assume that isn't malformed; the vast majority of calls won't be */
     if (errors) {
         *errors = 0;
     }
@@ -3067,7 +2999,67 @@ Perl_utf8n_to_uvchr_msgs(const U8 *s,
         *msgs = NULL;
     }
 
-    return uv;
+
+    /* No calls from core pass in an empty string; non-core need a check */
+#ifdef PERL_CORE
+    assert(curlen > 0);
+#else
+    if (LIKELY(curlen > 0))
+#endif
+
+    {
+        /* UTF-8 invariants are returned unchanged.  The code below is quite
+         * capable of handling this, but this shortcuts this very common case
+         * */
+        if (UTF8_IS_INVARIANT(*s0)) {
+            if (retlen) {
+                *retlen = 1;
+            }
+
+            return *s0;
+        }
+
+        const U8 * s = s0;
+        const U8 * send = s + curlen;
+
+        /* This dfa is fast.  If it accepts the input, it was for a
+         * well-formed, non-problematic code point, which can be returned
+         * immediately.  Otherwise we call a helper function to figure out the
+         * more complicated cases.
+         *
+         * It is an adaptation of the tables and algorithm given in
+         * https://bjoern.hoehrmann.de/utf-8/decoder/dfa/, which provides
+         * comprehensive documentation of the original version.  A copyright
+         * notice for the original version is given at the beginning of this
+         * file.  The Perl adaptation is documented at the definition of
+         * PL_strict_utf8_dfa_tab[].
+         *
+         * The terminology of the dfa refers to a 'class'.  The variable 'type'
+         * would have been named 'class' except that is a reserved word in C++
+         * */
+        PERL_UINT_FAST8_T type = PL_strict_utf8_dfa_tab[*s];
+        PERL_UINT_FAST8_T state = PL_strict_utf8_dfa_tab[256 + type];
+        UV uv = (0xff >> type) & NATIVE_UTF8_TO_I8(*s);
+
+        while (state > 1 && ++s < send) {
+            type  = PL_strict_utf8_dfa_tab[*s];
+            state = PL_strict_utf8_dfa_tab[256 + state + type];
+
+            uv = UTF8_ACCUMULATE(uv, *s);
+        }
+
+        if (LIKELY(state == 0)) {
+            if (retlen) {
+                *retlen = s - s0 + 1;
+            }
+
+            return UNI_TO_NATIVE(uv);
+        }
+    }
+
+    /* Here is potentially problematic.  Use the full mechanism */
+    return _utf8n_to_uvchr_msgs_helper(s0, curlen, retlen, flags,
+                                       errors, msgs);
 }
 
 PERL_STATIC_INLINE UV
