@@ -769,8 +769,7 @@ Perl_is_utf8_char_helper_(const U8 * const s, const U8 * e, const U32 flags)
     PERL_ARGS_ASSERT_IS_UTF8_CHAR_HELPER_;
 
     assert(e > s);
-    assert(0 == (flags & ~(UTF8_DISALLOW_ILLEGAL_INTERCHANGE
-                          |UTF8_DISALLOW_PERL_EXTENDED)));
+    assert(0 == (flags & ~UTF8_DISALLOW_ILLEGAL_INTERCHANGE));
 
     full_len = UTF8SKIP(s);
 
@@ -1289,7 +1288,7 @@ C<UTF8_DISALLOW_SUPER> or the C<UTF8_WARN_SUPER> flags.
 
 =item C<UTF8_GOT_SURROGATE>
 
-The input sequence was malformed in that it is for a -Unicode UTF-16 surrogate
+The input sequence was malformed in that it is for a Unicode UTF-16 surrogate
 code point.
 This bit is set only if the input C<flags> parameter contains either the
 C<UTF8_DISALLOW_SURROGATE> or the C<UTF8_WARN_SURROGATE> flags.
@@ -2398,14 +2397,14 @@ Perl_utf8_to_bytes(pTHX_ U8 *s, STRLEN *lenp)
 
     U8 * const save = s;
     U8 * const send = s + *lenp;
-    U8 * d;
+    s = first_variant;
 
 #ifndef EBCDIC      /* The below relies on the bit patterns of UTF-8 */
 
     /* There is some start-up/tear-down overhead with this, so no real gain
-     * unless the string is long enough.  The current value is just a
-     * guess. */
-    if (*lenp > 5 * PERL_WORDSIZE) {
+     * unless the remaining portion of the string is long enough.  The current
+     * value is just a guess. */
+    if ((send - s) > (ptrdiff_t) (5 * PERL_WORDSIZE)) {
 
         /* First, go through the string a word at-a-time to verify that it is
          * downgradable.  If it contains any start byte besides C2 and C3, then
@@ -2518,7 +2517,7 @@ Perl_utf8_to_bytes(pTHX_ U8 *s, STRLEN *lenp)
      * and should a malformed one come along, it undoes what it already has
      * done */
 
-    d = s = first_variant;
+    U8 * d = s = first_variant;
 
     while (s < send) {
         U8 * s1;
