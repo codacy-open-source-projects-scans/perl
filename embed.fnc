@@ -52,10 +52,9 @@
 :
 : The default without flags is to declare a function for internal perl-core use
 : only.  The short name is visible only when the PERL_CORE symbol is defined.
-: On some platforms, such as Linux and Darwin, all non-static functions
-: are currently externally visible.  Because of this, and also for programs
-: that embed perl, most non-static functions should have the 'p' flag to avoid
-: namespace clashes.
+: On some platforms all non-static functions are currently externally visible.
+: Because of this, and also for programs that embed perl, most non-static
+: functions should have the 'p' flag to avoid namespace clashes.
 :
 : There are several advantages to using a macro instead of the full Perl_foo or
 : S_foo form: it hides the need to know if the called function requires a
@@ -5941,8 +5940,7 @@ RS	|UV	|check_locale_boundary_crossing 			\
 				|NN STRLEN *lenp
 RTi	|int	|does_utf8_overflow					\
 				|NN const U8 * const s			\
-				|NN const U8 *e 			\
-				|const bool consider_overlongs
+				|NN const U8 *e
 RTi	|int	|isFF_overlong	|NN const U8 * const s			\
 				|const STRLEN len
 Ri	|bool	|is_utf8_common |NN const U8 * const p			\
