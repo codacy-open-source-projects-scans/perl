@@ -347,6 +347,39 @@ package FetchStoreCounter {
     is(prototype(\&builtin::indexed), '@', 'indexed prototype');
 }
 
+# indexed + foreach loop optimisation appears transparent
+{
+    my @output;
+    my @input = qw( zero one two three four five );
+
+    foreach my ( $idx, $val ) ( builtin::indexed @input ) {
+        push @output, "[$idx]=$val";
+    }
+
+    ok(eq_array(\@output, [qw( [0]=zero [1]=one [2]=two [3]=three [4]=four [5]=five )] ),
+        'foreach + builtin::indexed ARRAY' );
+
+    undef @output;
+
+    use builtin qw( indexed );
+
+    foreach my ( $idx, $val ) ( indexed @input ) {
+        push @output, "[$idx]=$val";
+    }
+
+    ok(eq_array(\@output, [qw( [0]=zero [1]=one [2]=two [3]=three [4]=four [5]=five )] ),
+        'foreach + imported indexed ARRAY' );
+
+    undef @output;
+
+    foreach my ( $idx, $val ) ( builtin::indexed qw( six seven eight nine ) ) {
+        push @output, "[$idx]=$val";
+    }
+
+    ok(eq_array(\@output, [qw( [0]=six [1]=seven [2]=eight [3]=nine )] ),
+        'foreach + builtin::indexed LIST' );
+}
+
 # Vanilla trim tests
 {
     use builtin qw( trim );
@@ -643,6 +676,14 @@ f($arg);
 print "ok";
 EOS
     }
+}
+
+# github #22784
+{
+    use builtin qw( trim );
+    sub f { 0+trim($_[0]) }
+    is(f(4), 4, "populate TARG.iv");
+    is(f(123), 123, "check TARG.IOK is reset properly");
 }
 
 # vim: tabstop=4 shiftwidth=4 expandtab autoindent softtabstop=4

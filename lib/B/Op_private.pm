@@ -118,7 +118,7 @@ package B::Op_private;
 our %bits;
 
 
-our $VERSION = "5.041006";
+our $VERSION = "5.041007";
 
 $bits{$_}{3} = 'OPpENTERSUB_AMPER' for qw(entersub rv2cv);
 $bits{$_}{6} = 'OPpENTERSUB_DB' for qw(entersub rv2cv);
@@ -289,6 +289,7 @@ $bits{andassign}{0} = $bf[0];
 $bits{anonconst}{0} = $bf[0];
 @{$bits{anonhash}}{3,2,1,0} = ($bf[5], $bf[5], $bf[5], $bf[5]);
 @{$bits{anonlist}}{3,2,1,0} = ($bf[5], $bf[5], $bf[5], $bf[5]);
+$bits{anywhile}{0} = $bf[0];
 $bits{argcheck}{0} = $bf[0];
 @{$bits{argdefelem}}{7,6,0} = ('OPpARG_IF_UNDEF', 'OPpARG_IF_FALSE', $bf[0]);
 @{$bits{argelem}}{2,1,0} = ($bf[8], $bf[8], $bf[0]);
@@ -436,6 +437,7 @@ $bits{is_bool}{0} = $bf[0];
 $bits{is_tainted}{0} = $bf[0];
 $bits{is_weak}{0} = $bf[0];
 @{$bits{isa}}{1,0} = ($bf[1], $bf[1]);
+$bits{iter}{2} = 'OPpITER_INDEXED';
 @{$bits{join}}{3,2,1,0} = ($bf[5], $bf[5], $bf[5], $bf[5]);
 $bits{keys}{0} = $bf[0];
 @{$bits{kill}}{3,2,1,0} = ($bf[5], $bf[5], $bf[5], $bf[5]);
@@ -685,6 +687,7 @@ our %defines = (
     OPpINITFIELD_AV          =>   2,
     OPpINITFIELD_HV          =>   4,
     OPpITER_DEF              =>   8,
+    OPpITER_INDEXED          =>   4,
     OPpITER_REVERSED         =>   2,
     OPpKVSLICE               =>  32,
     OPpLIST_GUESSED          =>  64,
@@ -808,6 +811,7 @@ our %labels = (
     OPpINITFIELD_AV          => 'INITFIELD_AV',
     OPpINITFIELD_HV          => 'INITFIELD_HV',
     OPpITER_DEF              => 'DEF',
+    OPpITER_INDEXED          => 'INDEXED',
     OPpITER_REVERSED         => 'REVERSED',
     OPpKVSLICE               => 'KVSLICE',
     OPpLIST_GUESSED          => 'GUESSED',
@@ -895,6 +899,7 @@ our %ops_using = (
     OPpINITFIELDS            => [qw(methstart)],
     OPpINITFIELD_AV          => [qw(initfield)],
     OPpITER_DEF              => [qw(enteriter)],
+    OPpITER_INDEXED          => [qw(iter)],
     OPpITER_REVERSED         => [qw(enteriter iter)],
     OPpKVSLICE               => [qw(delete)],
     OPpLIST_GUESSED          => [qw(list)],

@@ -4298,6 +4298,18 @@ CODE:
     exit(0);
 }
 
+#  ifndef WIN32
+
+bool
+thread_id_matches()
+CODE:
+    /* pthread_t might not be a scalar type */
+    RETVAL = pthread_equal(pthread_self(), PL_main_thread);
+OUTPUT:
+    RETVAL
+
+#  endif /* ifndef WIN32 */
+
 #endif /* USE_ITHREADS */
 
 SV*
@@ -7396,6 +7408,12 @@ gimme()
     OUTPUT:
         RETVAL
 
+bool
+valid_identifier(SV *s)
+    CODE:
+        RETVAL = valid_identifier_sv(s);
+    OUTPUT:
+        RETVAL
 
 MODULE = XS::APItest            PACKAGE = XS::APItest::Backrefs
 

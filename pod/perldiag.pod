@@ -75,6 +75,12 @@ removed in a future Perl version:
     use feature "refaliasing";
     \$x = \$y;
 
+=item all is experimental
+
+(S experimental::all) This warning is emitted if you use the C<all>
+keyword of C<use feature 'all'>.  This keyword is currently
+experimental and its behaviour may change in future releases of Perl.
+
 =item '%c' allowed only after types %s in %s
 
 (F) The modifiers '!', '<' and '>' are allowed in pack() or unpack() only
@@ -181,6 +187,12 @@ which 'splits' output into two streams, such as
         print OUT;
     }
     close OUT;
+
+=item any is experimental
+
+(S experimental::any) This warning is emitted if you use the C<any>
+keyword of C<use feature 'any'>.  This keyword is currently
+experimental and its behaviour may change in future releases of Perl.
 
 =item Applying %s to %s will act on scalar(%s)
 
@@ -487,7 +499,7 @@ results.
 of Perl.  Check the #! line, or manually feed your script into
 Perl yourself.
 
-=item Bad name after %s::
+=item Bad name after %s
 
 (F) You started to name a symbol by using a package prefix, and then
 didn't finish the symbol.  In particular, you can't interpolate outside
@@ -698,6 +710,13 @@ subroutine definition ahead of the call to get proper prototype
 checking.  Alternatively, if you are certain that you're calling the
 function correctly, you may put an ampersand before the name to avoid
 the warning.  See L<perlsub>.
+
+=item Cannot apply a :writer attribute to a non-scalar field
+
+(F) An attempt was made to use the C<:writer> attribute on a field that is
+not a scalar (i.e. an array or hash).  At the present version, these are only
+permitted on scalar fields.  You will have to manually create a writer
+accessor method yourself.
 
 =item Cannot assign :param(%s) to field %s because that name is already in use
 
@@ -2889,14 +2908,6 @@ declaration.  The '_' in a prototype must be followed by a ';',
 indicating the rest of the parameters are optional, or one of '@'
 or '%', since those two will accept 0 or more final parameters.
 
-=item Illegal character \%o (carriage return)
-
-(F) Perl normally treats carriage returns in the program text as
-it would any other whitespace, which means you should never see
-this error when Perl was built using standard options.  For some
-reason, your version of Perl appears to have been built without
-this support.  Talk to your Perl administrator.
-
 =item Illegal character following sigil in a subroutine signature
 
 (F) A parameter in a subroutine signature contained an unexpected character
@@ -3498,6 +3509,13 @@ should use the printf/sprintf functions instead.
 (W overload) The second (fourth, sixth, ...) argument of
 overload::constant needs to be a code reference.  Either
 an anonymous subroutine, or a reference to a subroutine.
+
+=item "%s" is not a valid name for a generated method
+
+(F) A custom method name was passed to an attribute on a field, such as
+C<:reader>, which creates a new method.  These generated methods must have
+valid names, but the value given to the attribute would result in an
+invalid name.
 
 =item '%s' is not an overloadable type
 
@@ -6984,7 +7002,7 @@ enough to figure out what you really meant.
 =item Unexpected characters while parsing class :isa attribute: %s
 
 (F) You tried to specify something other than a single class name with an
-optional trailing verison number as the value for a C<class> C<:isa>
+optional trailing version number as the value for a C<class> C<:isa>
 attribute.  This confused the parser.
 
 =item Unexpected exit %u
@@ -7044,7 +7062,7 @@ the only way to do that in Perl is to mark it as serious.
 
 (F) A Unicode property wildcard looks like a delimited regular
 expression pattern (all within the braces of the enclosing C<\p{...}>.
-The closing delimtter to match the opening one was not found.  If the
+The closing delimiter to match the opening one was not found.  If the
 opening one is escaped by preceding it with a backslash, the closing one
 must also be so escaped.
 
@@ -7710,7 +7728,7 @@ only C.  This usually means there's a better way to do it in Perl.
 a starting delimiter of a string outside the scope of
 S<C<use feature 'extra_paired_delimiters'>>. This character is the
 mirror image of another Unicode character; within the scope of that
-feature, the two are considered a pair for delimitting strings. It is
+feature, the two are considered a pair for delimiting strings. It is
 planned to make that feature the default, at which point this usage
 would become illegal; hence this warning.
 
@@ -7734,7 +7752,7 @@ subpatterns in regex; marked by S<<-- HERE> in m/%s/
 (F) You were using a wildcard subpattern a Unicode property value, and
 the subpattern contained something that is illegal.  Not all regular
 expression capabilities are legal in such subpatterns, and this is one.
-Rewrite your subppattern to not use the offending construct.
+Rewrite your subpattern to not use the offending construct.
 See L<perlunicode/Wildcards in Property Values>.
 
 =item Use of -l on filehandle%s

@@ -177,6 +177,7 @@ if ($define{USE_LOCALE_THREADS} && ! $define{NO_THREAD_SAFE_LOCALE}) {
 if (    $define{USE_POSIX_2008_LOCALE}
     && (   $define{HAS_QUERYLOCALE}
         || (     $Config{cppsymbols} =~ /__GLIBC__/
+            && ! $define{NO_USE_NL_LOCALE_NAME}
             &&   $define{HAS_NL_LANGINFO_L}
             && ! $define{SETLOCALE_ACCEPTS_ANY_LOCALE_NAME})))
 {
@@ -458,6 +459,10 @@ unless ($define{'USE_ITHREADS'}) {
 unless ($define{'USE_THREADS'}) {
     ++$skip{Perl_thread_locale_init};
     ++$skip{Perl_thread_locale_term};
+}
+
+if (!$define{USE_ITHREADS} || $define{WIN32}) {
+    ++$skip{PL_main_thread};
 }
 
 unless ($define{USE_POSIX_2008_LOCALE})

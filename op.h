@@ -661,7 +661,7 @@ typedef enum {
                                                    list of SVs */
 
 #if defined(PERL_IN_PERLY_C) || defined(PERL_IN_OP_C) || defined(PERL_IN_TOKE_C)
-#define ref(o, type) doref(o, type, TRUE)
+#define Perl_ref(mTHX, o, type)  Perl_doref(aTHX_ o, type, TRUE)
 #endif
 
 
@@ -1080,6 +1080,9 @@ C<sib> is non-null. For a higher-level interface, see C<L</op_sibling_splice>>.
 #define OP_TYPE_ISNT_AND_WASNT(o, type) \
     ( (o) && OP_TYPE_ISNT_AND_WASNT_NN(o, type) )
 
+#define OP_TYPE_IS_COP_NN(o) \
+    (OP_TYPE_IS_NN(o, OP_NEXTSTATE) || OP_TYPE_IS_NN(o, OP_DBSTATE))
+
 /* should match anything that uses ck_ftst in regen/opcodes */
 #define OP_IS_STAT(op) (OP_IS_FILETEST(op) || (op) == OP_LSTAT || (op) == OP_STAT)
 
@@ -1096,8 +1099,10 @@ C<sib> is non-null. For a higher-level interface, see C<L</op_sibling_splice>>.
 #  define OP_SIBLING(o)		OpSIBLING(o)
 #endif
 
-#define newATTRSUB(f, o, p, a, b) Perl_newATTRSUB_x(aTHX_  f, o, p, a, b, FALSE)
-#define newSUB(f, o, p, b)	newATTRSUB((f), (o), (p), NULL, (b))
+#define Perl_newATTRSUB(mTHX, f, o, p, a, b)                            \
+        Perl_newATTRSUB_x(aTHX_  f, o, p, a, b, FALSE)
+#define Perl_newSUB(mTHX, f, o, p, b)	                                \
+        Perl_newATTRSUB(aTHX, (f), (o), (p), NULL, (b))
 
 #ifdef USE_ITHREADS
 #  define OP_CHECK_MUTEX_INIT		MUTEX_INIT(&PL_check_mutex)

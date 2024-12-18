@@ -5015,7 +5015,7 @@ S_setup_EXACTISH_ST(pTHX_ const regnode * const text_node,
 
             /* Add this character to the list of possible matches */
             if (utf8_target) {
-                uvchr_to_utf8(matches[(U8) m->count], fold_from);
+                uv_to_utf8(matches[(U8) m->count], fold_from);
                 lengths[m->count] = UVCHR_SKIP(fold_from);
                 m->count++;
             }
@@ -8317,8 +8317,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
                     }
 
                     if (o->op_type != OP_STUB) {
-                        assert(    o->op_type == OP_NEXTSTATE
-                                || o->op_type == OP_DBSTATE
+                        assert(OP_TYPE_IS_COP_NN(o)
                                 || (o->op_type == OP_NULL
                                     &&  (  o->op_targ == OP_NEXTSTATE
                                         || o->op_targ == OP_DBSTATE
@@ -10918,7 +10917,7 @@ S_reginclass(pTHX_ regexp * const prog, const regnode * const n, const U8* const
         const U32 utf8n_flags = UTF8_ALLOW_DEFAULT;
         c = utf8n_to_uvchr(p, p_end - p, &c_len, utf8n_flags | UTF8_CHECK_ONLY);
         if (c_len == (STRLEN)-1) {
-            _force_out_malformed_utf8_message(p, p_end,
+            force_out_malformed_utf8_message_(p, p_end,
                                               utf8n_flags,
                                               MALFORMED_UTF8_DIE);
             NOT_REACHED; /* NOTREACHED */

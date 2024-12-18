@@ -90,6 +90,7 @@ S_init_tls_and_interp(PerlInterpreter *my_perl)
         ENV_INIT;
         MUTEX_INIT(&PL_dollarzero_mutex);
         MUTEX_INIT(&PL_my_ctx_mutex);
+        PTHREAD_INIT_SELF(PL_main_thread);
 #  endif
     }
 #if defined(USE_ITHREADS)
@@ -310,9 +311,9 @@ perl_construct(pTHXx)
     STATUS_ALL_SUCCESS;
 
     init_uniprops();
-    (void) uvchr_to_utf8_flags((U8 *) PL_TR_SPECIAL_HANDLING_UTF8,
-                               TR_SPECIAL_HANDLING,
-                               UNICODE_ALLOW_ABOVE_IV_MAX);
+    (void) uv_to_utf8_flags((U8 *) PL_TR_SPECIAL_HANDLING_UTF8,
+                            TR_SPECIAL_HANDLING,
+                            UNICODE_ALLOW_ABOVE_IV_MAX);
 
 #if defined(LOCAL_PATCH_COUNT)
     PL_localpatches = local_patches;	/* For possible -v */
@@ -2230,9 +2231,7 @@ S_parse_body(pTHX_ char **env, XSINIT_t xsinit)
       reswitch:
         switch ((c = *s)) {
         case 'C':
-#ifndef PERL_STRICT_CR
         case '\r':
-#endif
         case ' ':
         case '0':
         case 'F':
@@ -3954,9 +3953,7 @@ Perl_moreswitches(pTHX_ const char *s)
         break;
     case '-':
     case 0:
-#if defined(WIN32) || !defined(PERL_STRICT_CR)
     case '\r':
-#endif
     case '\n':
     case '\t':
         break;

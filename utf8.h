@@ -23,7 +23,12 @@
  * which differs from UTF-8 only in a few details.  It is often useful to
  * translate UTF-EBCDIC into this form for processing.  In general, macros and
  * functions that are expecting their inputs to be either in I8 or UTF-8 are
- * named UTF_foo (without an '8'), to indicate this.
+ * named UTF_foo (without an '8'), to indicate this.  khw thinks it would be
+ * clearer if these were renamed to be I8, because UTF is the prefix for UTF16,
+ * U32, etc., and we use it only for 8 bit quantities; though on ASCII machines
+ * these are final, not intermediate, values.  U8 would be more accurate, but
+ * bears too much resemblence to the ubiquitous U8 declaration.  'I8' stands
+ * out as very different from 'UTFn'.
  *
  * Unfortunately there are inconsistencies.
  *
@@ -136,17 +141,41 @@ typedef enum {
 
 #define uvoffuni_to_utf8_flags(d,uv,flags)                                     \
                                uvoffuni_to_utf8_flags_msgs(d, uv, flags, 0)
-#define uvchr_to_utf8(a,b)          uvchr_to_utf8_flags(a,b,0)
-#define uvchr_to_utf8_flags(d,uv,flags)                                        \
-                                    uvchr_to_utf8_flags_msgs(d,uv,flags, 0)
-#define uvchr_to_utf8_flags_msgs(d,uv,flags,msgs)                              \
-                uvoffuni_to_utf8_flags_msgs(d,NATIVE_TO_UNI(uv),flags, msgs)
+
+#define Perl_uv_to_utf8(mTHX, d, u)                                         \
+        Perl_uv_to_utf8_flags(aTHX, d, u, 0)
+#define Perl_uv_to_utf8_flags(mTHX, d, u, f)                                \
+        Perl_uv_to_utf8_msgs(aTHX, d, u, f, 0)
+#define Perl_uv_to_utf8_msgs(mTHX, d, u, f , m)                             \
+        Perl_uvoffuni_to_utf8_flags_msgs(aTHX_ d, NATIVE_TO_UNI(u), f, m)
+
+/* This is needed to cast the parameters for all those calls that had them
+ * improperly as chars */
 #define utf8_to_uvchr_buf(s, e, lenp)                                          \
-            utf8_to_uvchr_buf_helper((const U8 *) (s), (const U8 *) e, lenp)
-#define utf8n_to_uvchr(s, len, lenp, flags)                                    \
-                                utf8n_to_uvchr_error(s, len, lenp, flags, 0)
-#define utf8n_to_uvchr_error(s, len, lenp, flags, errors)                      \
-                        utf8n_to_uvchr_msgs(s, len, lenp, flags, errors, 0)
+    Perl_utf8_to_uvchr_buf(aTHX_ (const U8 *) (s), (const U8 *) e, lenp)
+
+#define Perl_utf8n_to_uvchr(s, len, lenp, flags)                               \
+                          Perl_utf8n_to_uvchr_error(s, len, lenp, flags, 0)
+#define Perl_utf8n_to_uvchr_error(s, len, lenp, flags, errors)                 \
+                    Perl_utf8n_to_uvchr_msgs(s, len, lenp, flags, errors, 0)
+
+#define Perl_utf8_to_uv(         s, e, cp_p, advance_p)                     \
+        Perl_utf8_to_uv_flags(   s, e, cp_p, advance_p, 0)
+#define Perl_utf8_to_uv_flags(   s, e, cp_p, advance_p, flags)              \
+        Perl_utf8_to_uv_errors(  s, e, cp_p, advance_p, flags, 0)
+#define Perl_utf8_to_uv_errors(  s, e, cp_p, advance_p, flags, errors)      \
+          Perl_utf8_to_uv_msgs(  s, e, cp_p, advance_p, flags, errors, 0)
+#define Perl_extended_utf8_to_uv(s, e, cp_p, advance_p)                     \
+                 Perl_utf8_to_uv(s, e, cp_p, advance_p)
+#define Perl_strict_utf8_to_uv(  s, e, cp_p, advance_p)                     \
+        Perl_utf8_to_uv_flags(   s, e, cp_p, advance_p,                     \
+                                        UTF8_DISALLOW_ILLEGAL_INTERCHANGE)
+#define Perl_c9strict_utf8_to_uv(s, e, cp_p, advance_p)                     \
+        Perl_utf8_to_uv_flags(   s, e, cp_p, advance_p,                     \
+                                     UTF8_DISALLOW_ILLEGAL_C9_INTERCHANGE)
+#define Perl_uvchr_to_utf8              Perl_uv_to_utf8
+#define Perl_uvchr_to_utf8_flags        Perl_uv_to_utf8_flags
+#define Perl_uvchr_to_utf8_flags_msgs   Perl_uv_to_utf8_msgs
 
 #define utf16_to_utf8(p, d, bytelen, newlen)                                \
                             utf16_to_utf8_base(p, d, bytelen, newlen, 0, 1)
@@ -1121,44 +1150,29 @@ point's representation.
 /* Largest code point we accept from external sources */
 #define MAX_LEGAL_CP  ((UV)IV_MAX)
 
-#define UTF8_ALLOW_EMPTY		0x0001	/* Allow a zero length string */
+/* The ordering of these bits is important to a switch() statement in utf8.c
+ * for handling problems in converting UTF-8 to a UV */
+#define UTF8_ALLOW_OVERFLOW             0x0001
+#define UTF8_GOT_OVERFLOW               UTF8_ALLOW_OVERFLOW
+
+#define UTF8_ALLOW_EMPTY		0x0002	/* Allow a zero length string */
 #define UTF8_GOT_EMPTY                  UTF8_ALLOW_EMPTY
 
 /* Allow first byte to be a continuation byte */
-#define UTF8_ALLOW_CONTINUATION		0x0002
+#define UTF8_ALLOW_CONTINUATION		0x0004
 #define UTF8_GOT_CONTINUATION		UTF8_ALLOW_CONTINUATION
-
-/* Unexpected non-continuation byte */
-#define UTF8_ALLOW_NON_CONTINUATION	0x0004
-#define UTF8_GOT_NON_CONTINUATION	UTF8_ALLOW_NON_CONTINUATION
 
 /* expecting more bytes than were available in the string */
 #define UTF8_ALLOW_SHORT		0x0008
 #define UTF8_GOT_SHORT		        UTF8_ALLOW_SHORT
 
-/* Overlong sequence; i.e., the code point can be specified in fewer bytes.
- * First one will convert the overlong to the REPLACEMENT CHARACTER; second
- * will return what the overlong evaluates to */
-#define UTF8_ALLOW_LONG                 0x0010
-#define UTF8_ALLOW_LONG_AND_ITS_VALUE   (UTF8_ALLOW_LONG|0x0020)
-#define UTF8_GOT_LONG                   UTF8_ALLOW_LONG
+/* Unexpected non-continuation byte */
+#define UTF8_ALLOW_NON_CONTINUATION	0x0010
+#define UTF8_GOT_NON_CONTINUATION	UTF8_ALLOW_NON_CONTINUATION
 
-#define UTF8_ALLOW_OVERFLOW             0x0080
-#define UTF8_GOT_OVERFLOW               UTF8_ALLOW_OVERFLOW
-
-#define UTF8_DISALLOW_SURROGATE		0x0100	/* Unicode surrogates */
+#define UTF8_DISALLOW_SURROGATE		0x0020	/* Unicode surrogates */
 #define UTF8_GOT_SURROGATE		UTF8_DISALLOW_SURROGATE
-#define UTF8_WARN_SURROGATE		0x0200
-
-/* Unicode non-character  code points */
-#define UTF8_DISALLOW_NONCHAR           0x0400
-#define UTF8_GOT_NONCHAR                UTF8_DISALLOW_NONCHAR
-#define UTF8_WARN_NONCHAR               0x0800
-
-/* Super-set of Unicode: code points above the legal max */
-#define UTF8_DISALLOW_SUPER		0x1000
-#define UTF8_GOT_SUPER		        UTF8_DISALLOW_SUPER
-#define UTF8_WARN_SUPER		        0x2000
+#define UTF8_WARN_SURROGATE		0x0040
 
 /* The original UTF-8 standard did not define UTF-8 with start bytes of 0xFE or
  * 0xFF, though UTF-EBCDIC did.  This allowed both versions to represent code
@@ -1169,9 +1183,26 @@ point's representation.
  * extensions, and not likely to be interchangeable with other languages.  Note
  * that on ASCII platforms, FE overflows a signed 32-bit word, and FF an
  * unsigned one. */
-#define UTF8_DISALLOW_PERL_EXTENDED     0x4000
+#define UTF8_DISALLOW_PERL_EXTENDED     0x0080
 #define UTF8_GOT_PERL_EXTENDED          UTF8_DISALLOW_PERL_EXTENDED
-#define UTF8_WARN_PERL_EXTENDED         0x8000
+#define UTF8_WARN_PERL_EXTENDED         0x0100
+
+/* Super-set of Unicode: code points above the legal max */
+#define UTF8_DISALLOW_SUPER		0x0200
+#define UTF8_GOT_SUPER		        UTF8_DISALLOW_SUPER
+#define UTF8_WARN_SUPER		        0x0400
+
+/* Unicode non-character  code points */
+#define UTF8_DISALLOW_NONCHAR           0x0800
+#define UTF8_GOT_NONCHAR                UTF8_DISALLOW_NONCHAR
+#define UTF8_WARN_NONCHAR               0x1000
+
+/* Overlong sequence; i.e., the code point can be specified in fewer bytes.
+ * First one will convert the overlong to the REPLACEMENT CHARACTER; second
+ * will return what the overlong evaluates to */
+#define UTF8_ALLOW_LONG                 0x2000
+#define UTF8_ALLOW_LONG_AND_ITS_VALUE   0x4000
+#define UTF8_GOT_LONG                   UTF8_ALLOW_LONG
 
 /* For back compat, these old names are misleading for overlongs and
  * UTF_EBCDIC. */
@@ -1181,8 +1212,10 @@ point's representation.
 #define UTF8_DISALLOW_FE_FF             UTF8_DISALLOW_PERL_EXTENDED
 #define UTF8_WARN_FE_FF                 UTF8_WARN_PERL_EXTENDED
 
-#define UTF8_CHECK_ONLY			0x10000
-#define _UTF8_NO_CONFIDENCE_IN_CURLEN   0x20000  /* Internal core use only */
+#define UTF8_CHECK_ONLY			0x8000
+#define UTF8_NO_CONFIDENCE_IN_CURLEN_   0x10000  /* Internal core use only */
+#define UTF8_DIE_IF_MALFORMED           0x20000
+#define UTF8_FORCE_WARN_IF_MALFORMED    0x40000
 
 /* For backwards source compatibility.  They do nothing, as the default now
  * includes what they used to mean.  The first one's meaning was to allow the
@@ -1295,9 +1328,26 @@ point's representation.
 /* Should be removed; maybe deprecated, but not used in CPAN */
 #define SHARP_S_SKIP 2
 
-#define is_utf8_char_buf(buf, buf_end) isUTF8_CHAR(buf, buf_end)
-#define bytes_from_utf8(s, lenp, is_utf8p)                                  \
-                            bytes_from_utf8_loc(s, lenp, is_utf8p, 0)
+#define Perl_is_utf8_char_buf(buf, buf_end) isUTF8_CHAR(buf, buf_end)
+
+typedef enum {
+    PL_utf8_to_bytes_overwrite = 0,
+    PL_utf8_to_bytes_new_memory,
+    PL_utf8_to_bytes_use_temporary,
+} Perl_utf8_to_bytes_arg;
+
+/* INT2PTR() is because this parameter should not be used in this case, but
+ * there is a NN assertion for it.  It causes that to pass but to still
+ * segfault if wrongly gets used */
+#define Perl_utf8_to_bytes_overwrite(mTHX, s, l)                            \
+        Perl_utf8_to_bytes_(aTHX_ s, l, INT2PTR(U8 **, 1),                  \
+                                  PL_utf8_to_bytes_overwrite)
+#define Perl_utf8_to_bytes_new_pv(mTHX, s, l, f)                            \
+        Perl_utf8_to_bytes_(aTHX_ (U8 **) s, l, f,                          \
+                                  PL_utf8_to_bytes_new_memory)
+#define Perl_utf8_to_bytes_temp_pv(mTHX, s, l)                              \
+        Perl_utf8_to_bytes_(aTHX_ (U8 **) s, l, INT2PTR(U8 **, 1),          \
+                                  PL_utf8_to_bytes_use_temporary)
 
 /* Do not use; should be deprecated.  Use isUTF8_CHAR() instead; this is
  * retained solely for backwards compatibility */

@@ -793,7 +793,7 @@ S_do_chomp(pTHX_ SV *retval, SV *sv, bool chomping)
     s = SvPV(sv, len);
     if (chomping) {
         if (s && len) {
-            char *temp_buffer = NULL;
+            U8 *temp_buffer = NULL;
             s += --len;
             if (RsPARA(PL_rs)) {
                 if (*s != '\n')
@@ -817,23 +817,18 @@ S_do_chomp(pTHX_ SV *retval, SV *sv, bool chomping)
                     /* Assumption is that rs is shorter than the scalar.  */
                     if (SvUTF8(PL_rs)) {
                         /* RS is utf8, scalar is 8 bit.  */
-                        bool is_utf8 = TRUE;
-                        temp_buffer = (char*)bytes_from_utf8((U8*)rsptr,
-                                                             &rslen, &is_utf8);
-                        if (is_utf8) {
-                            /* Cannot downgrade, therefore cannot possibly match.
-                               At this point, temp_buffer is not alloced, and
-                               is the buffer inside PL_rs, so don't free it.
-                             */
-                            assert (temp_buffer == rsptr);
+                        if (! utf8_to_bytes_new_pv(&rsptr, &rslen,
+                                                   &temp_buffer))
+                        {
+                            /* Cannot downgrade, therefore cannot possibly
+                             * match. */
                             goto nope_free_nothing;
                         }
-                        rsptr = temp_buffer;
                     }
                     else {
                         /* RS is 8 bit, scalar is utf8.  */
-                        temp_buffer = (char*)bytes_to_utf8((U8*)rsptr, &rslen);
-                        rsptr = temp_buffer;
+                        temp_buffer = bytes_to_utf8((U8*)rsptr, &rslen);
+                        rsptr = (char *) temp_buffer;
                     }
                 }
                 if (rslen == 1) {
@@ -3318,7 +3313,7 @@ PP(pp_int)
       }
       else if (SvIOK(sv)) {
         if (SvIsUV(sv))
-            TARGu(SvUV_nomg(sv), 1);
+            TARGu(SvUVX(sv), 1);
         else
             TARGi(iv, 1);
       }
@@ -3824,21 +3819,29 @@ PP(pp_index)
         if (little_utf8) {
             /* Well, maybe instead we might be able to downgrade the small
                string?  */
-            char * const pv = (char*)bytes_from_utf8((U8 *)little_p, &llen,
-                                                     &little_utf8);
-            if (little_utf8) {
-                /* If the large string is ISO-8859-1, and it's not possible to
+            U8 * free_little_p = NULL;
+            if (utf8_to_bytes_new_pv(&little_p, &llen, &free_little_p)) {
+                little_utf8 = false;
+
+                /* Here 'little_p' is in byte form, and 'free_little_p' is
+                 * non-NULL if the original wasn't, and 'little_p' is pointing
+                 * to new memory.  We create a new SV for use by the rest of
+                 * the routine that contains the new byte string, and donate it
+                 * to temp to ensure it will get free()d */
+                if (free_little_p) {
+                    little = temp = newSV_type(SVt_NULL);
+                    sv_usepvn(temp, (char *) little_p, llen);
+                    little_p = SvPVX_const(little);
+                }
+            }
+            else {
+                /* When the large string is ISO-8859-1, and it's not possible to
                    convert the small string to ISO-8859-1, then there is no
                    way that it could be found anywhere by index.  */
                 retval = -1;
                 goto push_result;
             }
 
-            /* At this point, pv is a malloc()ed string. So donate it to temp
-               to ensure it will get free()d  */
-            little = temp = newSV_type(SVt_NULL);
-            sv_usepvn(temp, pv, llen);
-            little_p = SvPVX(little);
         } else {
             temp = newSVpvn(little_p, llen);
 
@@ -3982,7 +3985,7 @@ PP(pp_chr)
 
     if (value > 255 && !IN_BYTES) {
         SvGROW(TARG, (STRLEN)UVCHR_SKIP(value)+1);
-        tmps = (char*)uvchr_to_utf8_flags((U8*)SvPVX(TARG), value, 0);
+        tmps = (char*)uv_to_utf8((U8*)SvPVX(TARG), value);
         SvCUR_set(TARG, tmps - SvPVX_const(TARG));
         *tmps = '\0';
         (void)SvPOK_only(TARG);
@@ -6517,10 +6520,10 @@ PP_wrapped(pp_reverse, 0, 1)
             SP = MARK + 1;
             SETs(TARG);
         } else if (SP > MARK) {
-            sv_setsv(TARG, *SP);
+            sv_setsv_flags(TARG, *SP, SV_GMAGIC);
             SETs(TARG);
         } else {
-            sv_setsv(TARG, DEFSV);
+            sv_setsv_flags(TARG, DEFSV, SV_GMAGIC);
             XPUSHs(TARG);
         }
         SvSETMAGIC(TARG); /* remove any utf8 length magic */

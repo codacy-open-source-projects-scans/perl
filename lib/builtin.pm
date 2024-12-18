@@ -1,4 +1,4 @@
-package builtin 0.015;
+package builtin 0.017;
 
 use v5.40;
 
@@ -106,6 +106,13 @@ The following bundles currently exist:
     :5.40      true false weaken unweaken is_weak blessed refaddr reftype
                ceil floor is_tainted trim indexed
 
+=head2 Function Optimisations
+
+There are a number of optimisations that apply to functions in the L<builtin>
+package.  If you replace or override these functions (such as by assignment
+into glob references) the optimisations may not take effect.  Do so with
+caution.
+
 =head1 FUNCTIONS
 
 =head2 true
@@ -127,7 +134,7 @@ bundles.
 
     $val = false;
 
-Returns the boolean fiction value. While any non-true scalar value is
+Returns the boolean false value. While any non-true scalar value is
 considered "false" by perl, this one is special in that L</is_bool> considers
 it to be a distinguished boolean value.
 

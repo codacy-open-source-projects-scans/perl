@@ -1231,12 +1231,12 @@ typedef enum {
  * platform that instead uses positional notation.  By doing this, you can find
  * many bugs without trying it out on a real such platform.  It would be
  * possible to create the reverse definitions for people who have ready access
- * to a posiional notation box, but harder to get a name=value box */
+ * to a positional notation box, but harder to get a name=value box */
 #  if defined(USE_FAKE_LC_ALL_POSITIONAL_NOTATION)            \
    && defined(PERL_LC_ALL_USES_NAME_VALUE_PAIRS)
 #    undef  PERL_LC_ALL_USES_NAME_VALUE_PAIRS
 
-#    define  PERL_LC_ALL_CATEGORY_POSITIONS_INIT /* Assumes glibc cateories */\
+#    define  PERL_LC_ALL_CATEGORY_POSITIONS_INIT /* Assumes glibc categories */\
                                   { 12, 11, 10, 9, 8, 7, 5, 4, 3, 2, 1, 0 }
 #    define  PERL_LC_ALL_SEPARATOR "/ = /"
 #  endif
@@ -4536,8 +4536,8 @@ struct Perl_OpDumpContext;
 #include "utf8.h"
 
 /* these would be in doio.h if there was such a file */
-#define my_stat()  my_stat_flags(SV_GMAGIC)
-#define my_lstat() my_lstat_flags(SV_GMAGIC)
+#define Perl_my_stat(mTHX_)  Perl_my_stat_flags(aTHX_  SV_GMAGIC)
+#define Perl_my_lstat(mTHX)  Perl_my_lstat_flags(aTHX_ SV_GMAGIC)
 
 /* defined in sv.c, but also used in [ach]v.c */
 #undef _XPV_HEAD
@@ -5424,7 +5424,7 @@ string.  All you are interested in is the first character of that string.  To
 get uppercase letters (for the values 10..15), add 16 to the index.  Hence,
 C<PL_hexdigit[11]> is C<'b'>, and C<PL_hexdigit[11+16]> is C<'B'>.  Adding 16
 to an index whose representation is '0'..'9' yields the same as not adding 16.
-Indices outside the range 0..31 result in (bad) undedefined behavior.
+Indices outside the range 0..31 result in (bad) undefined behavior.
 
 =cut
 */
@@ -5531,7 +5531,7 @@ EXTCONST  unsigned char PL_fold[] = {
 
 EXTCONST  unsigned char PL_fold_latin1[] = {
     /* Full latin1 complement folding, except for three problematic code points:
-     *	Micro sign (181 = 0xB5) and y with diearesis (255 = 0xFF) have their
+     *	Micro sign (181 = 0xB5) and y with diaeresis (255 = 0xFF) have their
      *	fold complements outside the Latin1 range, so can't match something
      *	that isn't in utf8.
      *	German lower case sharp s (223 = 0xDF) folds to two characters, 'ss',
@@ -6559,14 +6559,6 @@ static U8 utf8d_C9[] = {
  *          arbitrary class number chosen to not conflict with the above
  *          classes, and to index into the remaining table
  *
- * It would make the code simpler if start byte FF could also be handled, but
- * doing so would mean adding two more classes (one from splitting 80 from 81,
- * and one for FF), and nodes for each of 6 new continuation bytes.  The
- * current table has 436 entries; the new one would require 140 more = 576 (2
- * additional classes for each of the 10 existing nodes, and 20 for each of 6
- * new nodes.  The array would have to be made U16 instead of U8, not worth it
- * for this rarely encountered case
- *
  *      byte          class
  *      00-7F           0   Always legal, single byte sequence
  *      80-81           7   Not legal immediately after start bytes E0 F0 F8 FC
@@ -6588,7 +6580,7 @@ static U8 utf8d_C9[] = {
  *      FD              6   Legal start byte for six byte sequences
  *      FE             17   Some sequences are overlong; others legal
  *                          (is 1 on 32-bit machines, since it overflows)
- *      FF              1   Need to handle specially
+ *      FF              1   Need to handle specially  (explained below)
  */
 
 EXTCONST U8 PL_extended_utf8_dfa_tab[] = {
@@ -6670,7 +6662,54 @@ EXTCONST U8 PL_extended_utf8_dfa_tab[] = {
 /*N10*/  1, 1, 1, 1, 1, 1, 1, 1,N5,N5,N5,N5,N5, 1, 1, 1, 1, 1,
 };
 
-/* And below is a version of the above table that accepts only strict UTF-8.
+/* The first portion of the table is 256 bytes.  To keep the table declarable
+ * as U8, 256 is added to the index when accessing this portion at runtime.
+ * That addition could be eliminated if we were willing to declare the table
+ * U16 and adjust the numbers accordingly.
+ *
+ * FF is handled specially because otherwise the table would need to contain
+ * elements that occupy more than 8 bits and so the table would have to be
+ * declared as U16, so not worth it for this rarely encountered case.  If you
+ * are tempted anyway, here is a sketch of what the nodes would look like:
+ * N0     The initial state, and final accepting one.
+ * N1     Any one continuation byte (80-BF) left.  This is transitioned to
+ *        immediately when the start byte indicates a two-byte sequence
+ * N2     Any two continuation bytes left.
+ * N3     Any three continuation bytes left.
+ * N4     Any four continuation bytes left.
+ * N5     Any five continuation bytes left.
+ * N6     Any six continuation bytes left.
+ * N7     Any seven continuation bytes left.
+ * N8     Any eight continuation bytes left.
+ * N9     Any nine continuation bytes left.
+ * N10    Any ten continuation bytes left.
+ * N11    Start byte is E0.  Continuation bytes 80-9F are illegal (overlong);
+ *        the other continuations transition to N1
+ * N12    Start byte is F0.  Continuation bytes 80-8F are illegal (overlong);
+ *        the other continuations transition to N2
+ * N13    Start byte is F8.  Continuation bytes 80-87 are illegal (overlong);
+ *        the other continuations transition to N3
+ * N14    Start byte is FC.  Continuation bytes 80-83 are illegal (overlong);
+ *        the other continuations transition to N4
+ * N15    Start byte is FE.  Continuation bytes 80-81 are illegal (overlong);
+ * N16    Start byte is FF.  Continuation byte 80 transitions to N17;
+ *        the other continuations are illegal (overflow)
+ * N17    sequence so far is FF 80; continuation byte 80 transitions to N18;
+ *        81-9F to N10; the other continuations are illegal (overflow)
+ * N18    sequence so far is FF 80 80; continuation byte 80 transitions to N19;
+ *        the other continuations transition to N9
+ * N19    sequence so far is FF 80 80 80; continuation byte 80 transitions to
+ *        N20; the other continuations transition to N8
+ * N20    sequence so far is FF 80 80 80 80; continuation byte 80 transitions to
+ *        N21; the other continuations transition to N7
+ * N21    sequence so far is FF 80 80 80 80 80; continuation bytes 81-BF
+ *        transition to N6; 80 is illegal (overlong)
+ *
+ * A new class, the 19th, would have to be created for FF.  Then the nodes
+ * portion of the table would have 21 * 19 = 399 slots.  The current table has
+ * 18 classes and 10 nodes = 180 slots for the nodes portion. */
+
+/* Below is a version of the above table that accepts only strict UTF-8.
  * Hence no surrogates nor non-characters, nor non-Unicode.  Thus, if the input
  * passes this dfa, it will be for a well-formed, non-problematic code point
  * that can be returned immediately.
@@ -7149,7 +7188,7 @@ typedef struct am_table_short AMTS;
  * They require some sort of exclusive lock against similar functions, and a
  * read lock on both the locale and environment.  However, on systems which
  * have per-thread locales, the locale is constant during the execution of
- * these functions, and so no locale lock is necssary.  For such systems, an
+ * these functions, and so no locale lock is necessary.  For such systems, an
  * exclusive ENV lock is necessary and sufficient.  On systems where the locale
  * could change out from under us, we use an exclusive LOCALE lock to prevent
  * that, and a read ENV lock to prevent other threads that have nothing to do
@@ -7237,7 +7276,7 @@ typedef struct am_table_short AMTS;
 #define STRFTIME_LOCK                   ENVr_LOCALEr_LOCK
 #define STRFTIME_UNLOCK                 ENVr_LOCALEr_UNLOCK
 
-/* These time-related functions all requre that the environment and locale
+/* These time-related functions all require that the environment and locale
  * don't change while they are executing (at least in glibc; this appears to be
  * contrary to the POSIX standard).  tzset() writes global variables, so
  * always needs to have write locking.  ctime, localtime, mktime, and strftime
@@ -7273,7 +7312,7 @@ typedef struct am_table_short AMTS;
 #define TZSET_LOCK         gwENVr_LOCALEr_LOCK
 #define TZSET_UNLOCK       gwENVr_LOCALEr_UNLOCK
 
-/* Similiarly, these functions need a constant environment and/or locale.  And
+/* Similarly, these functions need a constant environment and/or locale.  And
  * some have a buffer that is shared with another thread executing the same or
  * a related call.  A mutex could be created for each class, but for now, share
  * the ENV mutex with everything, as none probably gets called so much that
@@ -8359,15 +8398,16 @@ so no C<x++>.
 #pragma message disable (mainparm) /* Perl uses the envp in main(). */
 #endif
 
-#define do_open(g, n, l, a, rm, rp, sf) \
-        do_openn(g, n, l, a, rm, rp, sf, (SV **) NULL, 0)
+#define Perl_do_open(mTHX, g, n, l, a, rm, rp, sf)                      \
+        Perl_do_openn(aTHX_ g, n, l, a, rm, rp, sf, (SV **) NULL, 0)
 #ifdef PERL_DEFAULT_DO_EXEC3_IMPLEMENTATION
 #  define do_exec(cmd)			do_exec3(cmd,0,0)
 #endif
 #ifdef OS2
-#  define do_aexec			Perl_do_aexec
+#  define Perl_do_aexec			Perl_do_aexec
 #else
-#  define do_aexec(really, mark,sp)	do_aexec5(really, mark, sp, 0, 0)
+#  define Perl_do_aexec(mTHX_, really, mark,sp)                         \
+          Perl_do_aexec5(aTHX_ really, mark, sp, 0, 0)
 #endif
 
 
@@ -9135,7 +9175,7 @@ END_EXTERN_C
 
 #endif /* DOUBLE_HAS_NAN */
 
-/* these are used to faciliate the env var PERL_RAND_SEED,
+/* these are used to facilitate the env var PERL_RAND_SEED,
  * which allows consistent behavior from code that calls
  * srand() with no arguments, either explicitly or implicitly.
  */

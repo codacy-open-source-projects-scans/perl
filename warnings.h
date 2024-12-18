@@ -150,24 +150,25 @@
 
 #define WARN_EXPERIMENTAL__CLASS	 75
 
-/* Warnings Categories added in Perl 5.037009 */
-
-#define WARN_DEPRECATED__APOSTROPHE_AS_PACKAGE_SEPARATOR 76
-
 /* Warnings Categories added in Perl 5.03701 */
 
-#define WARN_DEPRECATED__SMARTMATCH	 77
+#define WARN_DEPRECATED__SMARTMATCH	 76
 
 /* Warnings Categories added in Perl 5.039002 */
 
-#define WARN_DEPRECATED__MISSING_IMPORT_CALLED_WITH_ARGS 78
+#define WARN_DEPRECATED__MISSING_IMPORT_CALLED_WITH_ARGS 77
 
 /* Warnings Categories added in Perl 5.039008 */
 
-#define WARN_DEPRECATED__SUBSEQUENT_USE_VERSION 79
-#define WARNsize			 20
-#define WARN_ALLstring			 "\125\125\125\125\125\125\125\125\125\125\125\125\125\125\125\125\125\125\125\125"
-#define WARN_NONEstring			 "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+#define WARN_DEPRECATED__SUBSEQUENT_USE_VERSION 78
+
+/* Warnings Categories added in Perl 5.041 */
+
+#define WARN_EXPERIMENTAL__ALL		 79
+#define WARN_EXPERIMENTAL__ANY		 80
+#define WARNsize			 21
+#define WARN_ALLstring			 "\125\125\125\125\125\125\125\125\125\125\125\125\125\125\125\125\125\125\125\125\125"
+#define WARN_NONEstring			 "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
 
 #define isLEXWARN_on \
         cBOOL(PL_curcop && PL_curcop->cop_warnings != pWARN_STD)
@@ -355,10 +356,11 @@ category parameters passed.
 =for apidoc Amnh||WARN_DEPRECATED__VERSION_DOWNGRADE
 =for apidoc Amnh||WARN_DEPRECATED__DELIMITER_WILL_BE_PAIRED
 =for apidoc Amnh||WARN_EXPERIMENTAL__CLASS
-=for apidoc Amnh||WARN_DEPRECATED__APOSTROPHE_AS_PACKAGE_SEPARATOR
 =for apidoc Amnh||WARN_DEPRECATED__SMARTMATCH
 =for apidoc Amnh||WARN_DEPRECATED__MISSING_IMPORT_CALLED_WITH_ARGS
 =for apidoc Amnh||WARN_DEPRECATED__SUBSEQUENT_USE_VERSION
+=for apidoc Amnh||WARN_EXPERIMENTAL__ALL
+=for apidoc Amnh||WARN_EXPERIMENTAL__ANY
 
 =cut
 */

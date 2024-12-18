@@ -263,8 +263,8 @@ our %Modules = (
     },
 
     'CPAN' => {
-        'DISTRIBUTION' => 'ANDK/CPAN-2.37.tar.gz',
-        'SYNCINFO'     => 'tib on Fri Sep 13 19:07:54 2024',
+        'DISTRIBUTION' => 'ANDK/CPAN-2.38.tar.gz',
+        'SYNCINFO'     => 'tib on Mon Nov 18 08:14:50 2024',
         'FILES'        => q[cpan/CPAN],
         'EXCLUDED'     => [
             qr{^distroprefs/},
@@ -329,7 +329,8 @@ our %Modules = (
     },
 
     'CPAN::Meta::YAML' => {
-        'DISTRIBUTION' => 'DAGOLDEN/CPAN-Meta-YAML-0.018.tar.gz',
+        'DISTRIBUTION' => 'ETHER/CPAN-Meta-YAML-0.020.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Dec 18 08:00:14 2024',
         'FILES'        => q[cpan/CPAN-Meta-YAML],
         'EXCLUDED'     => [
             't/00-report-prereqs.t',
@@ -624,11 +625,10 @@ our %Modules = (
     },
 
     'HTTP::Tiny' => {
-        'DISTRIBUTION' => 'DAGOLDEN/HTTP-Tiny-0.088.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Sat Aug 12 14:49:17 2023',
+        'DISTRIBUTION' => 'HAARG/HTTP-Tiny-0.090.tar.gz',
+        'SYNCINFO'     => 'tib on Tue Nov 12 16:59:11 2024',
         'FILES'        => q[cpan/HTTP-Tiny],
         'EXCLUDED'     => [
-            'corpus/snake-oil.crt', # only used by 210_live_ssl.t
             't/00-report-prereqs.t',
             't/00-report-prereqs.dd',
             't/200_live.t',
@@ -677,8 +677,8 @@ our %Modules = (
     },
 
     'IO::Socket::IP' => {
-        'DISTRIBUTION' => 'PEVANS/IO-Socket-IP-0.42.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Wed Aug 16 21:34:20 2023',
+        'DISTRIBUTION' => 'PEVANS/IO-Socket-IP-0.43.tar.gz',
+        'SYNCINFO'     => 'tib on Wed Dec  4 17:32:19 2024',
         'FILES'        => q[cpan/IO-Socket-IP],
         'EXCLUDED'     => [
             qr{^examples/},
@@ -807,7 +807,8 @@ our %Modules = (
     },
 
     'Memoize' => {
-        'DISTRIBUTION' => 'ARISTOTLE/Memoize-1.16.tar.gz',
+        'DISTRIBUTION' => 'ARISTOTLE/Memoize-1.17.tar.gz',
+        'SYNCINFO'     => 'tib on Sun Nov 17 20:07:33 2024',
         'FILES'        => q[cpan/Memoize],
         'EXCLUDED'     => [ qr{^inc/} ],
     },
@@ -826,7 +827,7 @@ our %Modules = (
     },
 
     'Module::CoreList' => {
-        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20241020.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20241120.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
     },
 
@@ -885,8 +886,8 @@ our %Modules = (
     },
 
     'parent' => {
-        'DISTRIBUTION' => 'CORION/parent-0.242.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Wed Aug 14 21:41:51 2024',
+        'DISTRIBUTION' => 'CORION/parent-0.244.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Sat Dec 14 07:56:36 2024',
         'FILES'        => q[cpan/parent],
         'EXCLUDED'     => [
             qr{^xt}
@@ -1078,8 +1079,8 @@ our %Modules = (
     },
 
     'Term::Table' => {
-        'DISTRIBUTION' => 'EXODIST/Term-Table-0.022.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Wed Aug 14 21:27:04 2024',
+        'DISTRIBUTION' => 'EXODIST/Term-Table-0.023.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Sun Nov 10 18:18:57 2024',
         'FILES'        => q[cpan/Term-Table],
         'EXCLUDED'     => [
             qw( appveyor.yml ),

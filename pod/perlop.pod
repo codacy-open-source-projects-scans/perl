@@ -480,22 +480,17 @@ Shifting by negative number of bits means the reverse shift: left
 shift becomes right shift, right shift becomes left shift.  This is
 unlike in C, where negative shift is undefined.
 
-Shifting by more bits than the size of the integers means most of the
-time zero (all bits fall off), except that under S<C<use integer>>
-right overshifting a negative shiftee results in -1.  This is unlike
-in C, where shifting by too many bits is undefined.  A common C
-behavior is "shift by modulo wordbits", so that for example
-
-    1 >> 64 == 1 >> (64 % 64) == 1 >> 0 == 1  # Common C behavior.
-
-but that is completely accidental.
+Shifting by a value greater than or equal to integer size (in bits)
+results in zero (all bits fall off), except that under S<C<use integer>>
+right shifting a negative value by such an amount results in -1.
+This is unlike in C, where shifting by too many bits is undefined.
 
 If you get tired of being subject to your platform's native integers,
 the S<C<use bigint>> pragma neatly sidesteps the issue altogether:
 
     print 20 << 20;  # 20971520
-    print 20 << 40;  # 5120 on 32-bit machines,
-                     # 21990232555520 on 64-bit machines
+    print 20 << 32;  # 0 with 32-bit integer,
+                     # 85899345920 with 64-bit integer
     use bigint;
     print 20 << 100; # 25353012004564588029934064107520
 
@@ -806,15 +801,9 @@ operators depending on the context.  In list context, it returns a
 list of values counting (up by ones) from the left value to the right
 value.  If the left value is greater than the right value then it
 returns the empty list.  The range operator is useful for writing
-S<C<foreach (1..10)>> loops and for doing slice operations on arrays.  In
-the current implementation, no temporary array is created when the
-range operator is used as the expression in C<foreach> loops, but older
-versions of Perl might burn a lot of memory when you write something
-like this:
-
-    for (1 .. 1_000_000) {
-	# code
-    }
+S<C<foreach (1..10)>> loops and for doing slice operations on arrays.
+No temporary array is created when the range operator is used as the
+expression in C<foreach> loops.
 
 The range operator also works on strings, using the magical
 auto-increment, see below.

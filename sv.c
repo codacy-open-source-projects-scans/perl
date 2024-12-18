@@ -4201,7 +4201,7 @@ Perl_sv_setsv_flags(pTHX_ SV *dsv, SV* ssv, const I32 flags)
     STATIC_ASSERT_STMT(SVt_IV   == 1);
     STATIC_ASSERT_STMT(SVt_NV   == 2);
 #if NVSIZE <= IVSIZE
-    if (both_type <= 2) {
+    if ((stype <= SVt_NV) & (dtype <= SVt_NV)) {
 #else
     if (both_type <= 1) {
 #endif
@@ -4275,18 +4275,15 @@ Perl_sv_setsv_flags(pTHX_ SV *dsv, SV* ssv, const I32 flags)
         SvREFCNT_dec(old_rv);
         return;
     }
-
+/*
+#if NVSIZE <= IVSIZE
+    both_type = (stype | dtype);
+#endif
+*/
     if (UNLIKELY(both_type == SVTYPEMASK)) {
-        if (SvIS_FREED(dsv)) {
-            Perl_croak(aTHX_ "panic: attempt to copy value %" SVf
-                       " to a freed scalar %p", SVfARG(ssv), (void *)dsv);
-        }
-        if (SvIS_FREED(ssv)) {
-            Perl_croak(aTHX_ "panic: attempt to copy freed scalar %p to %p",
-                       (void*)ssv, (void*)dsv);
-        }
+        croak_sv_setsv_flags(dsv, ssv);
+        NOT_REACHED;
     }
-
 
 
     SV_CHECK_THINKFIRST_COW_DROP(dsv);
@@ -4306,17 +4303,15 @@ Perl_sv_setsv_flags(pTHX_ SV *dsv, SV* ssv, const I32 flags)
         break;
     case SVt_IV:
         if (SvIOK(ssv)) {
+            /* Bodiless-SV code above should have handled these cases */
+            assert(dtype != SVt_NULL);
+#if NVSIZE <= IVSIZE
+            assert(dtype != SVt_NV);
+#endif
             switch (dtype) {
-            case SVt_NULL:
-                /* For performance, we inline promoting to type SVt_IV. */
-                /* We're starting from SVt_NULL, so provided that define is
-                 * actual 0, we don't have to unset any SV type flags
-                 * to promote to SVt_IV. */
-                STATIC_ASSERT_STMT(SVt_NULL == 0);
-                SET_SVANY_FOR_BODYLESS_IV(dsv);
-                SvFLAGS(dsv) |= SVt_IV;
-                break;
+#if NVSIZE > IVSIZE
             case SVt_NV:
+#endif
             case SVt_PV:
                 sv_upgrade(dsv, SVt_PVIV);
                 break;
@@ -4337,17 +4332,21 @@ Perl_sv_setsv_flags(pTHX_ SV *dsv, SV* ssv, const I32 flags)
         }
         if (!SvROK(ssv))
             goto undef_sstr;
+#if NVSIZE > IVSIZE
         if (dtype < SVt_PV && dtype != SVt_IV)
             sv_upgrade(dsv, SVt_IV);
+#endif
         break;
 
     case SVt_NV:
         if (LIKELY( SvNOK(ssv) )) {
             switch (dtype) {
+#if NVSIZE > IVSIZE
             case SVt_NULL:
             case SVt_IV:
                 sv_upgrade(dsv, SVt_NV);
                 break;
+#endif
             case SVt_PV:
             case SVt_PVIV:
                 sv_upgrade(dsv, SVt_PVNV);
@@ -4384,14 +4383,7 @@ Perl_sv_setsv_flags(pTHX_ SV *dsv, SV* ssv, const I32 flags)
         invlist_clone(ssv, dsv);
         return;
     default:
-        {
-        const char * const type = sv_reftype(ssv,0);
-        if (PL_op)
-            /* diag_listed_as: Bizarre copy of %s */
-            Perl_croak(aTHX_ "Bizarre copy of %s in %s", type, OP_DESC(PL_op));
-        else
-            Perl_croak(aTHX_ "Bizarre copy of %s", type);
-        }
+        croak_sv_setsv_flags(dsv, ssv);
         NOT_REACHED; /* NOTREACHED */
 
     case SVt_REGEXP:
@@ -4445,12 +4437,8 @@ Perl_sv_setsv_flags(pTHX_ SV *dsv, SV* ssv, const I32 flags)
     else if (UNLIKELY(dtype == SVt_PVAV || dtype == SVt_PVHV
              || dtype == SVt_PVFM))
     {
-        const char * const type = sv_reftype(dsv,0);
-        if (PL_op)
-            /* diag_listed_as: Cannot copy to %s */
-            Perl_croak(aTHX_ "Cannot copy to %s in %s", type, OP_DESC(PL_op));
-        else
-            Perl_croak(aTHX_ "Cannot copy to %s", type);
+        croak_sv_setsv_flags(dsv, ssv);
+        NOT_REACHED;
     } else if (sflags & SVf_ROK) {
         if (isGV_with_GP(dsv)
             && SvTYPE(SvRV(ssv)) == SVt_PVGV && isGV_with_GP(SvRV(ssv))) {
@@ -7120,12 +7108,18 @@ Perl_sv_clear(pTHX_ SV *const orig_sv)
                 }
             }
 
-            /* unrolled SvREFCNT_dec and sv_free2 follows: */
+            /* Do the equivalent of SvREFCNT_dec(sv), except:
+             - for the case of RC==1, inline the actions normally taken
+               by sv_free2() prior it calling sv_clear(), and handle the
+               sv_clear() actions ourselves (without needing to
+               recurse).
+             - For the exceptional case of RC==0, do a traditional
+               recursive free. */
 
             if (!sv)
                 continue;
             if (!SvREFCNT(sv)) {
-                sv_free(sv);
+                Perl_sv_free2(aTHX_ sv, 0);
                 continue;
             }
             if (--(SvREFCNT(sv)))
@@ -7491,23 +7485,16 @@ S_sv_pos_u2b_forwards(const U8 *const start, const U8 *const send,
 
     PERL_ARGS_ASSERT_SV_POS_U2B_FORWARDS;
 
-    while (s < send && uoffset) {
-        --uoffset;
-        s += UTF8SKIP(s);
-    }
-    if (s == send) {
+    SSize_t overshoot;
+    s = utf8_hop_forward_overshoot(s, uoffset, send, &overshoot);
+    if (s >= send) {
         *at_end = TRUE;
     }
-    else if (s > send) {
-        *at_end = TRUE;
-        /* This is the existing behaviour. Possibly it should be a croak, as
-           it's actually a bounds error  */
-        s = send;
-    }
+
     /* If the unicode position is beyond the end, we return the end but
        shouldn't cache that position */
-    *canonical_position = (uoffset == 0);
-    *uoffset_p -= uoffset;
+    *canonical_position = ! overshoot;
+    *uoffset_p -= overshoot;
     return s - start;
 }
 
@@ -9893,14 +9880,18 @@ Perl_newSVpvn_share(pTHX_ const char *src, I32 len, U32 hash)
 {
     SV *sv;
     bool is_utf8 = FALSE;
-    const char *const orig_src = src;
 
     if (len < 0) {
-        STRLEN tmplen = -len;
-        is_utf8 = TRUE;
+        len = -len;
+        Size_t size_t_len = len;
         /* See the note in hv.c:hv_fetch() --jhi */
-        src = (char*)bytes_from_utf8((const U8*)src, &tmplen, &is_utf8);
-        len = tmplen;
+        if (! utf8_to_bytes_temp_pv((const U8**)&src, &size_t_len)) {
+            is_utf8 = true;
+        }
+        else {
+            hash = 0;
+            len = size_t_len;
+        }
     }
     if (!hash)
         PERL_HASH(hash, src, len);
@@ -9914,8 +9905,6 @@ Perl_newSVpvn_share(pTHX_ const char *src, I32 len, U32 hash)
     SvPOK_on(sv);
     if (is_utf8)
         SvUTF8_on(sv);
-    if (src != orig_src)
-        Safefree(src);
     return sv;
 }
 
@@ -13256,7 +13245,7 @@ Perl_sv_vcatpvfn_flags(pTHX_ SV *const sv, const char *const pat, const STRLEN p
                     {
                         STATIC_ASSERT_STMT(sizeof(ebuf) >= UTF8_MAXBYTES + 1);
                         eptr = ebuf;
-                        elen = uvchr_to_utf8((U8*)eptr, uv) - (U8*)ebuf;
+                        elen = uv_to_utf8((U8*)eptr, uv) - (U8*)ebuf;
                         is_utf8 = TRUE;
                     }
                     else {
@@ -17727,6 +17716,44 @@ Perl_report_uninit(pTHX_ const SV *uninit_sv)
         Perl_warner(aTHX_ packWARN(WARN_UNINITIALIZED), PL_warn_uninit,
                 "", "", "");
     GCC_DIAG_RESTORE_STMT;
+}
+
+/* This helper function for Perl_sv_setsv_flags is as cold as they come.
+ * We should almost never call it and it will definitely croak when we do.
+ * Therefore it should not matter that it is not close to the main function
+ * or that we make it redo work that the caller already did.
+ * The main aim is to keep Perl_sv_setsv_flags as slim as possible and this
+ * includes keeping the call sites for this function small.
+ */
+void S_croak_sv_setsv_flags(pTHX_ SV * const dsv, SV * const ssv)
+{
+    OP *op = PL_op;
+    if (SvIS_FREED(dsv)) {
+        Perl_croak(aTHX_ "panic: attempt to copy value %" SVf
+                   " to a freed scalar %p", SVfARG(ssv), (void *)dsv);
+    }
+    if (SvIS_FREED(ssv)) {
+        Perl_croak(aTHX_ "panic: attempt to copy freed scalar %p to %p",
+                   (void*)ssv, (void*)dsv);
+    }
+
+    if (SvTYPE(ssv) > SVt_PVLV)
+    {
+        const char * const type = sv_reftype(ssv,0);
+        if (op)
+            /* diag_listed_as: Bizarre copy of %s */
+            Perl_croak(aTHX_ "Bizarre copy of %s in %s", type, OP_DESC(op));
+        else
+            Perl_croak(aTHX_ "Bizarre copy of %s", type);
+    }
+
+    const char * const type = sv_reftype(dsv,0);
+    if (op)
+        /* diag_listed_as: Cannot copy to %s */
+        Perl_croak(aTHX_ "Cannot copy to %s in %s", type, OP_DESC(op));
+    else
+        Perl_croak(aTHX_ "Cannot copy to %s", type);
+
 }
 
 /*

@@ -173,6 +173,7 @@ X<list>
 
 =for Pod::Functions =LIST
 
+L<C<all>|/all BLOCK LIST>, L<C<any>|/any BLOCK LIST>,
 L<C<grep>|/grep BLOCK LIST>, L<C<join>|/join EXPR,LIST>,
 L<C<map>|/map BLOCK LIST>, L<C<qwE<sol>E<sol>>|/qwE<sol>STRINGE<sol>>,
 L<C<reverse>|/reverse LIST>, L<C<sort>|/sort SUBNAME LIST>,
@@ -805,6 +806,67 @@ For more information see L<perlipc>.
 
 Portability issues: L<perlport/alarm>.
 
+=item all BLOCK LIST
+
+=for Pod::Functions test if every value in a list satisfies the given condition
+
+Evaluates the BLOCK for each element of the LIST (locally setting
+L<C<$_>|perlvar/$_> to each element) and checks the truth of the result of
+that block.  Returns true if every element makes the block yield true, or
+returns false if at least one element makes the block false.
+
+As soon as any element makes the block yield false, then the result of this
+operator is determined.  It will short-circuit in that case and not consider
+any further elements.
+
+When used as a condition, this is similar to using L<C<grep>|/grep BLOCK LIST>
+to count that every value satisfies the condition, except for this
+short-circuit behaviour.
+
+    if( all { length $_ } @strings ) {
+        say "Every string is non-empty";
+    }
+
+is roughly equivalent to
+
+    if( @strings == grep { length $_ } @strings ) ...
+
+This operator is only available if the
+L<C<all> feature|feature/"The 'all' feature"> is enabled.
+
+It is currently considered B<experimental>, and will issue a compile-time
+warning in the category C<experimental::all> unless that category is silenced.
+
+=item any BLOCK LIST
+
+=for Pod::Functions test if at least one value in a list satisfies the given condition
+
+Evaluates the BLOCK for each element of the LIST (locally setting
+L<C<$_>|perlvar/$_> to each element) and checks the truth of the result of
+that block.  Returns true if at least one element makes the block yield
+true, or returns false if no element is found to make it true.
+
+As soon as any element makes the block yield true, then the result of this
+operator is determined.  It will short-circuit in that case and not consider
+any further elements.
+
+When used as a condition, this is similar to L<C<grep>|/grep BLOCK LIST>,
+except for this short-circuit behaviour.
+
+    if( any { length $_ } @strings ) {
+        say "At least one string is non-empty";
+    }
+
+is roughly equivalent to
+
+    if( grep { length $_ } @strings ) ...
+
+This operator is only available if the
+L<C<any> feature|feature/"The 'any' feature"> is enabled.
+
+It is currently considered B<experimental>, and will issue a compile-time
+warning in the category C<experimental::any> unless that category is silenced.
+
 =item atan2 Y,X
 X<atan2> X<arctangent> X<tan> X<tangent>
 
@@ -1001,7 +1063,7 @@ confusion.
 Also avoid C<bless>ing things into the class name C<0>; this
 will cause code which (erroneously) checks the result of
 L<C<ref>|/ref EXPR> to see if a reference is C<bless>ed to fail,
-as "0", a falsy value, is returned.
+as "0", a false value, is returned.
 
 See L<perlmod/"Perl Modules"> for more details.
 
@@ -3582,7 +3644,7 @@ is used as a C<while>/C<for> condition, then the condition actually
 tests for definedness of the expression's value, not for its regular
 truth value.
 
-Internal implemenation details:
+Internal implementation details:
 
 This is the internal function implementing the C<< <*.c> >> operator,
 but you can use it directly. The C<< <*.c> >> operator is discussed in
@@ -4232,33 +4294,30 @@ X<localtime> X<ctime>
 =for Pod::Functions convert UNIX time into record or string using local time
 
 Converts a time as returned by the time function to a 9-element list
-with the time analyzed for the local time zone.  Typically used as
-follows:
+with the time analyzed for the local time zone.  If EXPR is omitted,
+L<C<localtime>|/localtime EXPR> uses the current time (as returned by
+L<C<time>|/time>).
+
+Typically used as follows:
 
     #     0    1    2     3     4    5     6     7     8
     my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
                                                 localtime(time);
 
-All list elements are numeric and come straight out of the C 'struct
-tm'.  C<$sec>, C<$min>, and C<$hour> are the seconds, minutes, and hours
+All list elements are numeric and come straight out of the C C<struct
+tm>.  C<$sec>, C<$min>, and C<$hour> are the seconds, minutes, and hours
 of the specified time.
 
-C<$mday> is the day of the month and C<$mon> the month in
-the range C<0..11>, with 0 indicating January and 11 indicating December.
-This makes it easy to get a month name from a list:
+C<$mday> is the day of the month in the range C<1..31> (i.e. 1-based).  C<$mon>
+is the month in the range C<0..11> (i.e. 0-based), with 0 indicating January
+and 11 indicating December.  This makes it easy to get a month name from a
+list:
 
     my @abbr = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
     print "$abbr[$mon] $mday";
     # $mon=9, $mday=18 gives "Oct 18"
 
-C<$year> contains the number of years since 1900.  To get the full
-year write:
-
-    $year += 1900;
-
-To get the last two digits of the year (e.g., "01" in 2001) do:
-
-    $year = sprintf("%02d", $year % 100);
+C<$year> contains the number of years since 1900 (e.g. C<129> for 2029).
 
 C<$wday> is the day of the week, with 0 indicating Sunday and 3 indicating
 Wednesday.  C<$yday> is the day of the year, in the range C<0..364>
@@ -4267,21 +4326,42 @@ Wednesday.  C<$yday> is the day of the year, in the range C<0..364>
 C<$isdst> is true if the specified time occurs when Daylight Saving
 Time is in effect, false otherwise.
 
-If EXPR is omitted, L<C<localtime>|/localtime EXPR> uses the current
-time (as returned by L<C<time>|/time>).
+To get a human-readable date/time string, use L<POSIX/C<strftime>>:
+
+    use POSIX qw(strftime);
+    my @now = localtime;
+    my $now_string = strftime "%Y-%m-%d %H:%M:%S", @now;
+    # e.g. "2025-11-29 15:19:02"
+
+To get just the year, you can use either L<POSIX/C<strftime>>:
+
+    use POSIX qw(strftime);
+    # full year:
+    my $year = strftime "%Y", localtime;
+    # just the last two digits of the year:
+    my $ar = strftime "%y", localtime;
+
+... or manual arithmetic:
+
+    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+                                                            localtime;
+    # full year:
+    $year += 1900;
+    # just the last two digits of the year:
+    my $ar = sprintf("%02d", $year % 100);
 
 In scalar context, L<C<localtime>|/localtime EXPR> returns the
 L<ctime(3)> value:
 
- my $now_string = localtime;  # e.g., "Thu Oct 13 04:54:34 1994"
+    my $now_string = localtime;  # e.g., "Thu Oct 13 04:54:34 1994"
 
 This scalar value is always in English, and is B<not> locale-dependent.
 To get similar but locale-dependent date strings, try for example:
 
- use POSIX qw(strftime);
- my $now_string = strftime "%a %b %e %H:%M:%S %Y", localtime;
- # or for GMT formatted appropriately for your locale:
- my $now_string = strftime "%a %b %e %H:%M:%S %Y", gmtime;
+    use POSIX qw(strftime);
+    my $now_string = strftime "%a %b %e %H:%M:%S %Y", localtime;
+    # or for GMT formatted appropriately for your locale:
+    my $now_string = strftime "%a %b %e %H:%M:%S %Y", gmtime;
 
 C<$now_string> will be formatted according to the current LC_TIME locale
 the program or thread is running in.  See L<perllocale> for how to set
@@ -6543,32 +6623,61 @@ X<rand> X<random>
 
 =for Pod::Functions retrieve the next pseudorandom number
 
-Returns a random fractional number greater than or equal to C<0> and less
+Returns a random fractional number greater than or equal to C<0> and B<less>
 than the value of EXPR.  (EXPR should be positive.)  If EXPR is
-omitted, the value C<1> is used.  Currently EXPR with the value C<0> is
-also special-cased as C<1> (this was undocumented before Perl 5.8.0
-and is subject to change in future versions of Perl).  Automatically calls
-L<C<srand>|/srand EXPR> unless L<C<srand>|/srand EXPR> has already been
-called.  See also L<C<srand>|/srand EXPR>.
+omitted, the value C<1> is used.
 
-Apply L<C<int>|/int EXPR> to the value returned by L<C<rand>|/rand EXPR>
-if you want random integers instead of random fractional numbers.  For
-example,
+    my $num1 = rand();        # Random float at least 0 and below 1
+    my $num2 = rand(7);       # Random float at least 0 and below 7
+    my $num3 = int(rand(10)); # Random integer at least 0 and below 10
 
-    int(rand(10))
+B<Notes:>
 
-returns a random integer between C<0> and C<9>, inclusive.
+=over
 
-(Note: If your rand function consistently returns numbers that are too
-large or too small, then your version of Perl was probably compiled
-with the wrong number of RANDBITS.)
+=item *
+
+Calling C<rand> automatically calls L<C<srand>|/srand EXPR> unless
+srand has already been called.
+
+=item *
+
+Currently EXPR with the value C<0> is special-cased as C<1>. This was
+undocumented before Perl 5.8.0 and is subject to change in future versions of
+Perl.
+
+=item *
+
+As of Perl v5.20.0 C<rand()> uses the C<drand48> pseudorandom number generator
+to generate random numbers. As a PRNG C<drand48> should be sufficient for most
+non-cryptographic needs. If you need cryptographic random numbers check CPAN
+for crypto safe alternatives.
+
+=back
+
+=over
+
+=item B<Security:>
 
 B<L<C<rand>|/rand EXPR> is not cryptographically secure.  You should not rely
 on it in security-sensitive situations.>  As of this writing, a
 number of third-party CPAN modules offer random number generators
 intended by their authors to be cryptographically secure,
-including: L<Data::Entropy>, L<Crypt::Random>, L<Math::Random::Secure>,
-and L<Math::TrulyRandom>.
+including:
+
+=back
+
+=over
+
+=item * L<Data::Entropy>
+
+=item * L<Crypt::Random>
+
+=item * L<Math::Random::Secure>
+
+=item * L<Math::TrulyRandom>
+
+=back
 
 =item read FILEHANDLE,SCALAR,LENGTH,OFFSET
 X<read> X<file, read>
@@ -8933,11 +9042,8 @@ startup, and changing it during the program flow will not affect the
 currently running process. See L<perlrun> for more details.
 
 B<L<C<rand>|/rand EXPR> is not cryptographically secure.  You should not rely
-on it in security-sensitive situations.>  As of this writing, a
-number of third-party CPAN modules offer random number generators
-intended by their authors to be cryptographically secure,
-including: L<Data::Entropy>, L<Crypt::Random>, L<Math::Random::Secure>,
-and L<Math::TrulyRandom>.
+on it in security-sensitive situations.> See documentation of C<rand> for
+a list of suitable alternatives.
 
 =item stat FILEHANDLE
 X<stat> X<file, status> X<ctime>

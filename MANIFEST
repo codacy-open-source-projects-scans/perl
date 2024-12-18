@@ -642,56 +642,58 @@ cpan/CPAN-Meta-Requirements/t/from-hash.t
 cpan/CPAN-Meta-Requirements/t/merge.t
 cpan/CPAN-Meta-Requirements/t/strings.t
 cpan/CPAN-Meta-YAML/lib/CPAN/Meta/YAML.pm				CPAN-Meta-YAML files
-cpan/CPAN-Meta-YAML/t/01_api.t
+cpan/CPAN-Meta-YAML/t/01_api.t						Test file related to CPAN::Meta::YAML
 cpan/CPAN-Meta-YAML/t/01_compile.t					CPAN-Meta-YAML files
-cpan/CPAN-Meta-YAML/t/10_read.t
-cpan/CPAN-Meta-YAML/t/11_read_string.t
-cpan/CPAN-Meta-YAML/t/12_write.t
-cpan/CPAN-Meta-YAML/t/13_write_string.t
+cpan/CPAN-Meta-YAML/t/10_read.t						Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/11_read_string.t					Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/12_write.t					Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/13_write_string.t					Test file related to CPAN::Meta::YAML
 cpan/CPAN-Meta-YAML/t/20_subclass.t					CPAN-Meta-YAML files
-cpan/CPAN-Meta-YAML/t/21_yamlpm_compat.t
-cpan/CPAN-Meta-YAML/t/30_yaml_spec_tml.t
-cpan/CPAN-Meta-YAML/t/31_local_tml.t
-cpan/CPAN-Meta-YAML/t/32_world_tml.t
-cpan/CPAN-Meta-YAML/t/86_fail.t
-cpan/CPAN-Meta-YAML/t/data/ascii.yml
-cpan/CPAN-Meta-YAML/t/data/latin1.yml
+cpan/CPAN-Meta-YAML/t/21_yamlpm_compat.t				Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/30_yaml_spec_tml.t				Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/31_local_tml.t					Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/32_world_tml.t					Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/86_fail.t						Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/data/ascii.yml					CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/data/latin1.yml					CPAN::Meta::YAML
 cpan/CPAN-Meta-YAML/t/data/multibyte.yml				CPAN-Meta-YAML files
 cpan/CPAN-Meta-YAML/t/data/utf_16_le_bom.yml				CPAN-Meta-YAML files
-cpan/CPAN-Meta-YAML/t/data/utf_8_bom.yml
-cpan/CPAN-Meta-YAML/t/lib/SubtestCompat.pm
-cpan/CPAN-Meta-YAML/t/lib/TestBridge.pm
-cpan/CPAN-Meta-YAML/t/lib/TestML/Tiny.pm
-cpan/CPAN-Meta-YAML/t/lib/TestUtils.pm
-cpan/CPAN-Meta-YAML/t/README.md
-cpan/CPAN-Meta-YAML/t/tml
-cpan/CPAN-Meta-YAML/t/tml-local/dump-error/circular.tml
-cpan/CPAN-Meta-YAML/t/tml-local/load-error/document.tml
-cpan/CPAN-Meta-YAML/t/tml-local/load-error/scalar.tml
-cpan/CPAN-Meta-YAML/t/tml-local/load-error/tag.tml
-cpan/CPAN-Meta-YAML/t/tml-local/load-warning/document.tml
-cpan/CPAN-Meta-YAML/t/tml-local/perl-to-yaml/quoting.tml
-cpan/CPAN-Meta-YAML/t/tml-local/yaml-roundtrip/collection.tml
-cpan/CPAN-Meta-YAML/t/tml-local/yaml-roundtrip/comment.tml
-cpan/CPAN-Meta-YAML/t/tml-local/yaml-roundtrip/document.tml
-cpan/CPAN-Meta-YAML/t/tml-local/yaml-roundtrip/mapping.tml
-cpan/CPAN-Meta-YAML/t/tml-local/yaml-roundtrip/quoting.tml
-cpan/CPAN-Meta-YAML/t/tml-local/yaml-roundtrip/scalar.tml
-cpan/CPAN-Meta-YAML/t/tml-local/yaml-roundtrip/sequence.tml
-cpan/CPAN-Meta-YAML/t/tml-spec/basic-data.tml
-cpan/CPAN-Meta-YAML/t/tml-spec/unicode.tml
-cpan/CPAN-Meta-YAML/t/tml-world/Acme-Time-Baby.tml
-cpan/CPAN-Meta-YAML/t/tml-world/Data-Swap.tml
-cpan/CPAN-Meta-YAML/t/tml-world/Games-Nintendo-Wii-Mii.tml
-cpan/CPAN-Meta-YAML/t/tml-world/HTML-WebDAO.tml
-cpan/CPAN-Meta-YAML/t/tml-world/ITS-SIN-FIDS-Content-XML.tml
-cpan/CPAN-Meta-YAML/t/tml-world/Plagger.tml
-cpan/CPAN-Meta-YAML/t/tml-world/Spreadsheet-Read.tml
-cpan/CPAN-Meta-YAML/t/tml-world/Template-Provider-Unicode-Japanese.tml
-cpan/CPAN-Meta-YAML/t/tml-world/toolbar.tml
-cpan/CPAN-Meta-YAML/t/tml-world/Vanilla-Perl.tml
-cpan/CPAN-Meta-YAML/t/tml-world/YAML-Tiny-META.tml
-cpan/CPAN-Meta-YAML/t/tml-world/yaml_org.tml
+cpan/CPAN-Meta-YAML/t/data/utf_8_bom.yml				CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/lib/SubtestCompat.pm				Module related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/lib/TestBridge.pm					Module related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/lib/TestML/Tiny.pm				Module related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/lib/TestUtils.pm					Module related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/README.md						CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml						CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-local/dump-error/circular.tml			Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-local/load-error/document.tml			Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-local/load-error/scalar.tml			Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-local/load-error/tag.tml			Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-local/load-warning/document.tml		Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-local/perl-to-yaml/quoting.tml		Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-local/yaml-roundtrip/collection.tml		Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-local/yaml-roundtrip/comment.tml		Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-local/yaml-roundtrip/document.tml		Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-local/yaml-roundtrip/mapping.tml		Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-local/yaml-roundtrip/quoting.tml		Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-local/yaml-roundtrip/scalar.tml		Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-local/yaml-roundtrip/sequence.tml		Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-spec/basic-data.tml				Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-spec/multiline.tml				CPAN-Meta-YAML
+cpan/CPAN-Meta-YAML/t/tml-spec/unicode.tml				Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-world/Acme-Time-Baby.tml			Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-world/Data-Swap.tml				Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-world/Games-Nintendo-Wii-Mii.tml		Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-world/HTML-WebDAO.tml				Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-world/ITS-SIN-FIDS-Content-XML.tml		Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-world/Plagger.tml				Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-world/Spreadsheet-Read.tml			Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-world/Template-Provider-Unicode-Japanese.tml	Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-world/toolbar.tml				Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-world/Vanilla-Perl.tml			Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-world/YAML-Tiny-META.tml			Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/t/tml-world/yaml_org.tml				Test file related to CPAN::Meta::YAML
+cpan/CPAN-Meta-YAML/weaver.ini						CPAN-Meta-YAML
 cpan/DB_File/config.in			Part of Berkeley DB configuration
 cpan/DB_File/DB_File.pm			Berkeley DB extension Perl module
 cpan/DB_File/DB_File.xs			Berkeley DB extension external subroutines
@@ -1176,6 +1178,7 @@ cpan/HTTP-Tiny/corpus/form-02.txt	Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/corpus/form-03.txt	Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/corpus/form-04.txt	Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/corpus/form-05.txt	Test file related to HTTP::Tiny
+cpan/HTTP-Tiny/corpus/form-06.txt	Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/corpus/get-01.txt	Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/corpus/get-02.txt	Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/corpus/get-03.txt	Test file related to HTTP::Tiny
@@ -1231,6 +1234,7 @@ cpan/HTTP-Tiny/corpus/redirect-07.txt	Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/corpus/redirect-08.txt	Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/corpus/redirect-09.txt	Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/corpus/redirect-10.txt	Test file related to HTTP::Tiny
+cpan/HTTP-Tiny/corpus/snake-oil.crt	Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/lib/HTTP/Tiny.pm		Module related to HTTP::Tiny
 cpan/HTTP-Tiny/t/000_load.t		Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/t/001_api.t		Test file related to HTTP::Tiny
@@ -1259,6 +1263,7 @@ cpan/HTTP-Tiny/t/161_basic_auth.t	Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/t/162_proxy_auth.t	Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/t/170_keepalive.t	Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/t/180_verify_SSL.t	Test file related to HTTP::Tiny
+cpan/HTTP-Tiny/t/190_find_CA.t		Test file related to HTTP::Tiny
 cpan/HTTP-Tiny/t/BrokenCookieJar.pm	Module related to HTTP::Tiny
 cpan/HTTP-Tiny/t/SimpleCookieJar.pm	Module related to HTTP::Tiny
 cpan/HTTP-Tiny/t/Util.pm		Module related to HTTP::Tiny
@@ -5187,6 +5192,7 @@ ext/XS-APItest/t/swaptwostmts.t			test recursive descent statement parsing
 ext/XS-APItest/t/sym-hook.t			Test rv2cv hooks for bareword lookup
 ext/XS-APItest/t/synthetic_scope.t		Test block_start/block_end/intro_my
 ext/XS-APItest/t/temp_lv_sub.t			XS::APItest: tests for lvalue subs returning temps
+ext/XS-APItest/t/thread.t			Threads related tests
 ext/XS-APItest/t/underscore_length.t		Test find_rundefsv()
 ext/XS-APItest/t/utf16_to_utf8.t		Test behaviour of utf16_to_utf8{,reversed}
 ext/XS-APItest/t/utf8.t				Tests for code in utf8.c
@@ -5203,6 +5209,7 @@ ext/XS-APItest/t/utf8_warn07.t			Tests for code in utf8.c
 ext/XS-APItest/t/utf8_warn08.t			Tests for code in utf8.c
 ext/XS-APItest/t/utf8_warn09.t			Tests for code in utf8.c
 ext/XS-APItest/t/utf8_warn_base.pl		Tests for code in utf8.c
+ext/XS-APItest/t/valid_identifier.t		XS::APItest: tests for valid_identifier_sv()
 ext/XS-APItest/t/weaken.t			XS::APItest: tests for sv_rvweaken() and sv_get_backrefs()
 ext/XS-APItest/t/whichsig.t			XS::APItest: tests for whichsig() and variants
 ext/XS-APItest/t/win32.t			Test Win32 specific APIs
@@ -5735,6 +5742,7 @@ pod/perl5412delta.pod			Perl changes in version 5.41.2
 pod/perl5413delta.pod			Perl changes in version 5.41.3
 pod/perl5414delta.pod			Perl changes in version 5.41.4
 pod/perl5415delta.pod			Perl changes in version 5.41.5
+pod/perl5416delta.pod			Perl changes in version 5.41.6
 pod/perl561delta.pod			Perl changes in version 5.6.1
 pod/perl56delta.pod			Perl changes in version 5.6
 pod/perl581delta.pod			Perl changes in version 5.8.1
@@ -6105,6 +6113,7 @@ t/lib/Devel/switchd_empty.pm		Module for t/run/switchd.t
 t/lib/Devel/switchd_goto.pm		Module for t/run/switchd.t
 t/lib/Dies.pm				For test case in op/require_errors.t
 t/lib/feature/api			Test API for checking features enabled/disabled
+t/lib/feature/apos_as_pack_sep		Tests for enabling/disabling apostrophe_as_package_separator feature
 t/lib/feature/bareword_filehandles	Tests for enabling/disabling bareword_filehandles feature
 t/lib/feature/bits			Tests for feature bit handling
 t/lib/feature/bundle			Tests for feature bundles
@@ -6249,6 +6258,7 @@ t/op/aassign.t				test list assign
 t/op/alarm.t				See if alarm works
 t/op/anonconst.t			See if :const works
 t/op/anonsub.t				See if anonymous subroutines work
+t/op/any_all.t				See if feature 'any' and 'all' work
 t/op/append.t				See if . works
 t/op/args.t				See if operations on @_ work
 t/op/arith2.t				See if arithmetic works

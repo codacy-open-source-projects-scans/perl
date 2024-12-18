@@ -2247,15 +2247,15 @@ END_EXTERN_C
 
 #define isBLANK_LC_uni(c)    isBLANK_LC_uvchr(UNI_TO_NATIVE(c))
 
-/* The "_safe" macros make sure that we don't attempt to read beyond 'e', but
- * they don't otherwise go out of their way to look for malformed UTF-8.  If
- * they can return accurate results without knowing if the input is otherwise
- * malformed, they do so.  For example isASCII is accurate in spite of any
- * non-length malformations because it looks only at a single byte. Likewise
- * isDIGIT looks just at the first byte for code points 0-255, as all UTF-8
- * variant ones return FALSE.  But, if the input has to be well-formed in order
- * for the results to be accurate, the macros will test and if malformed will
- * call a routine to die
+/* The "_safe" macros make sure that we don't attempt to read the byte at 'e'
+ * or beyond, but they don't otherwise go out of their way to look for
+ * malformed UTF-8.  If they can return accurate results without knowing if the
+ * input is otherwise malformed, they do so.  For example isASCII is accurate
+ * in spite of any non-length malformations because it looks only at a single
+ * byte. Likewise isDIGIT looks just at the first byte for code points 0-255,
+ * as all UTF-8 variant ones return FALSE.  But, if the input has to be
+ * well-formed in order for the results to be accurate, the macros will test
+ * and if malformed will call a routine to die
  *
  * Except for toke.c, the macros do assume that e > p, asserting that on
  * DEBUGGING builds.  Much code that calls these depends on this being true,
@@ -2272,14 +2272,14 @@ END_EXTERN_C
 
 #define generic_utf8_safe_(classnum, p, e, above_latin1)                    \
     ((! _utf8_safe_assert(p, e))                                            \
-      ? (_force_out_malformed_utf8_message((U8 *) (p), (U8 *) (e), 0, MALFORMED_UTF8_DIE), 0)\
+      ? (force_out_malformed_utf8_message_((U8 *) (p), (U8 *) (e), 0, MALFORMED_UTF8_DIE), 0)\
       : (UTF8_IS_INVARIANT(*(p)))                                           \
           ? generic_isCC_(*(p), classnum)                                   \
           : (UTF8_IS_DOWNGRADEABLE_START(*(p))                              \
              ? ((LIKELY((e) - (p) > 1 && UTF8_IS_CONTINUATION(*((p)+1))))   \
                 ? generic_isCC_(EIGHT_BIT_UTF8_TO_NATIVE(*(p), *((p)+1 )),  \
                                 classnum)                                   \
-                : (_force_out_malformed_utf8_message(                       \
+                : (force_out_malformed_utf8_message_(                       \
                                         (U8 *) (p), (U8 *) (e), 0, MALFORMED_UTF8_DIE), 0))  \
              : above_latin1))
 /* Like the above, but calls 'above_latin1(p)' to get the utf8 value.
@@ -2289,7 +2289,7 @@ END_EXTERN_C
 #define generic_non_invlist_utf8_safe_(classnum, above_latin1, p, e)        \
           generic_utf8_safe_(classnum, p, e,                                \
                              (UNLIKELY((e) - (p) < UTF8SKIP(p))             \
-                              ? (_force_out_malformed_utf8_message(         \
+                              ? (force_out_malformed_utf8_message_(         \
                                       (U8 *) (p), (U8 *) (e), 0, MALFORMED_UTF8_DIE), 0) \
                               : above_latin1(p)))
 /* Like the above, but passes classnum to _isFOO_utf8(), instead of having an
@@ -2379,7 +2379,7 @@ END_EXTERN_C
 #define isXDIGIT_utf8_safe(p, e)                                            \
                    generic_utf8_safe_no_upper_latin1_(CC_XDIGIT_, p, e,     \
                              (UNLIKELY((e) - (p) < UTF8SKIP(p))             \
-                              ? (_force_out_malformed_utf8_message(         \
+                              ? (force_out_malformed_utf8_message_(         \
                                       (U8 *) (p), (U8 *) (e), 0, MALFORMED_UTF8_DIE), 0) \
                               : is_XDIGIT_high(p)))
 
@@ -2428,7 +2428,7 @@ END_EXTERN_C
           : (UTF8_IS_DOWNGRADEABLE_START(*(p))                              \
              ? ((LIKELY((e) - (p) > 1 && UTF8_IS_CONTINUATION(*((p)+1))))   \
                 ? macro(EIGHT_BIT_UTF8_TO_NATIVE(*(p), *((p)+1)))           \
-                : (_force_out_malformed_utf8_message(                       \
+                : (force_out_malformed_utf8_message_(                       \
                                         (U8 *) (p), (U8 *) (e), 0, MALFORMED_UTF8_DIE), 0)) \
               : above_latin1))
 
@@ -2442,7 +2442,7 @@ END_EXTERN_C
 #define generic_LC_non_invlist_utf8_safe_(classnum, above_latin1, p, e)       \
           generic_LC_utf8_safe_(classnum, p, e,                             \
                              (UNLIKELY((e) - (p) < UTF8SKIP(p))             \
-                              ? (_force_out_malformed_utf8_message(         \
+                              ? (force_out_malformed_utf8_message_(         \
                                       (U8 *) (p), (U8 *) (e), 0, MALFORMED_UTF8_DIE), 0) \
                               : above_latin1(p)))
 

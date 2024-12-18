@@ -225,7 +225,6 @@ XS(XS_builtin_trim)
     SV *source = TOPs;
     STRLEN len;
     const U8 *start;
-    SV *dest;
 
     SvGETMAGIC(source);
 
@@ -273,33 +272,14 @@ XS(XS_builtin_trim)
         }
     }
 
-    dest = TARG;
+    sv_setpvn(TARG, (const char *)start, len);
 
-    if (SvPOK(dest) && (dest == source)) {
-        sv_chop(dest, (const char *)start);
-        SvCUR_set(dest, len);
-    }
-    else {
-        SvUPGRADE(dest, SVt_PV);
-        SvGROW(dest, len + 1);
+    if (DO_UTF8(source))
+        SvUTF8_on(TARG);
+    else
+        SvUTF8_off(TARG);
 
-        Copy(start, SvPVX(dest), len, U8);
-        SvPVX(dest)[len] = '\0';
-        SvPOK_on(dest);
-        SvCUR_set(dest, len);
-
-        if (DO_UTF8(source))
-            SvUTF8_on(dest);
-        else
-            SvUTF8_off(dest);
-
-        if (SvTAINTED(source))
-            SvTAINT(dest);
-    }
-
-    SvSETMAGIC(dest);
-
-    SETs(dest);
+    SETTARG;
 
     XSRETURN(1);
 }
@@ -490,9 +470,13 @@ static OP *ck_builtin_func1(pTHX_ OP *entersubop, GV *namegv, SV *ckobj)
     }
 }
 
-XS(XS_builtin_indexed)
+/* This does not use the XS() macro so that op.c can see its prototype */
+void
+Perl_XS_builtin_indexed(pTHX_ CV *cv)
 {
     dXSARGS;
+    PERL_ARGS_ASSERT_XS_BUILTIN_INDEXED;
+    PERL_UNUSED_VAR(cv);
 
     switch(GIMME_V) {
         case G_VOID:
@@ -638,7 +622,7 @@ static const struct BuiltinFuncDescriptor builtins[] = {
     { "load_module", NO_BUNDLE, &XS_builtin_load_module, &ck_builtin_func1, 0, true },
 
     /* list functions */
-    { "indexed",          SHORTVER(5,39), &XS_builtin_indexed,          &ck_builtin_funcN, 0, false },
+    { "indexed",          SHORTVER(5,39), &Perl_XS_builtin_indexed,     &ck_builtin_funcN, 0, false },
     { "export_lexically",      NO_BUNDLE, &XS_builtin_export_lexically, NULL,              0, true },
 
     { NULL, 0, NULL, NULL, 0, false }
