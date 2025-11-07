@@ -434,6 +434,15 @@ the octets.
 
 #include "mydtrace.h"
 
+/* keep in sync with feature.h (which will complain if this is out of sync)
+ */
+#define COP_FEATURE_SIZE 1
+
+/* make this a struct so we can copy the feature bits with assignment */
+struct cop_feature_t {
+  U32 bits[COP_FEATURE_SIZE];
+};
+
 struct cop {
     BASEOP
     /* On LP64 putting this here takes advantage of the fact that BASEOP isn't
@@ -460,12 +469,11 @@ struct cop {
     /* compile time state of %^H.  See the comment in op.c for how this is
        used to recreate a hash to return from caller.  */
     COPHH *	cop_hints_hash;
-    /* for now just a bitmask stored here.
-       If we get sufficient features this may become a pointer.
+    /*
        How these flags are stored is subject to change without
        notice.  Use the macros to test for features.
     */
-    U32		cop_features;
+    struct cop_feature_t	cop_features;
 };
 
 /*
@@ -1119,21 +1127,27 @@ struct context {
    and a static array of context names in pp_ctl.c  */
 #define CXTYPEMASK	0xf
 #define CXt_NULL	0 /* currently only used for sort BLOCK */
-#define CXt_BLOCK	1
+#define CXt_WHEN	1
+#define CXt_BLOCK	2
+/* When micro-optimising :-) keep GIVEN next to the LOOPs, as these 5 share a
+   jump table in pp_ctl.c
+   The first 4 don't have a 'case' in at least one switch statement in pp_ctl.c
+*/
+#define CXt_GIVEN	3
 
 /* be careful of the ordering of these five. Macros like CxTYPE_is_LOOP,
  * CxFOREACH compare ranges */
-#define CXt_LOOP_ARY	2 /* for (@ary)     { ...; } */
-#define CXt_LOOP_LAZYSV	3 /* for ('a'..'z') { ...; } */
-#define CXt_LOOP_LAZYIV	4 /* for (1..9)     { ...; } */
-#define CXt_LOOP_LIST	5 /* for (1,2,3)    { ...; } */
-#define CXt_LOOP_PLAIN	6 /* while (...)    { ...; }
+#define CXt_LOOP_ARY	4 /* for (@ary)     { ...; } */
+#define CXt_LOOP_LAZYSV	5 /* for ('a'..'z') { ...; } */
+#define CXt_LOOP_LAZYIV	6 /* for (1..9)     { ...; } */
+#define CXt_LOOP_LIST	7 /* for (1,2,3)    { ...; } */
+#define CXt_LOOP_PLAIN	8 /* while (...)    { ...; }
                              or plain block { ...; } */
-#define CXt_SUB		7
-#define CXt_FORMAT      8
-#define CXt_EVAL        9 /* eval'', eval{}, try{} */
-#define CXt_SUBST      10
-#define CXt_DEFER      11
+#define CXt_SUB		9
+#define CXt_FORMAT     10
+#define CXt_EVAL       11 /* eval'', eval{}, try{} */
+#define CXt_SUBST      12
+#define CXt_DEFER      13
 /* SUBST doesn't feature in all switch statements.  */
 
 /* private flags for CXt_SUB and CXt_FORMAT */
@@ -1244,6 +1258,8 @@ struct context {
 #define PERLSI_REQUIRE		9
 #define PERLSI_MULTICALL       10
 #define PERLSI_REGCOMP         11
+#define PERLSI_SMARTMATCH      12
+#define PERLSI_CONSTRUCTOR     13
 
 struct stackinfo {
     AV *		si_stack;	/* stack for current runlevel */
@@ -1288,7 +1304,13 @@ typedef struct stackinfo PERL_SI;
 
 #ifdef DEBUGGING
 #  define SET_MARK_OFFSET \
-    PL_curstackinfo->si_markoff = PL_markstack_ptr - PL_markstack
+    STMT_START {                                                                \
+        /* ensure .si_markoff is an I32 and can hold the pointer difference */  \
+        STATIC_ASSERT_STMT(sizeof PL_curstackinfo->si_markoff == sizeof (I32)); \
+        assert(PL_markstack_ptr >= PL_markstack);                               \
+        assert(PL_markstack_ptr - PL_markstack <= (ptrdiff_t)I32_MAX);          \
+        PL_curstackinfo->si_markoff = (I32)(PL_markstack_ptr - PL_markstack);   \
+    } STMT_END
 #else
 #  define SET_MARK_OFFSET NOOP
 #endif
@@ -1376,8 +1398,8 @@ See L<perlcall/LIGHTWEIGHT CALLBACKS>.
 #define PUSH_MULTICALL_FLAGS(the_cv, flags) \
     STMT_START {							\
         PERL_CONTEXT *cx;						\
-        CV * const _nOnclAshIngNamE_ = the_cv;				\
-        CV * const cv = _nOnclAshIngNamE_;				\
+        CV * const nOnclAshIngNamE_ = the_cv;				\
+        CV * const cv = nOnclAshIngNamE_;				\
         PADLIST * const padlist = CvPADLIST(cv);			\
         multicall_oldcatch = CATCH_GET;					\
         CATCH_SET(TRUE);						\
@@ -1420,8 +1442,8 @@ See L<perlcall/LIGHTWEIGHT CALLBACKS>.
 
 #define CHANGE_MULTICALL_FLAGS(the_cv, flags) \
     STMT_START {							\
-        CV * const _nOnclAshIngNamE_ = the_cv;				\
-        CV * const cv = _nOnclAshIngNamE_;				\
+        CV * const nOnclAshIngNamE_ = the_cv;				\
+        CV * const cv = nOnclAshIngNamE_;				\
         PADLIST * const padlist = CvPADLIST(cv);			\
         PERL_CONTEXT *cx = CX_CUR();					\
         assert(CxMULTICALL(cx));                                        \

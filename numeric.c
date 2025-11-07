@@ -361,7 +361,7 @@ S_output_non_portable(pTHX_ const U8 base)
      * are the first word, it would be hard for a user to find them there
      * starting with a %s */
     /* diag_listed_as: Hexadecimal number > 0xffffffff non-portable */
-    Perl_ck_warner(aTHX_ packWARN(WARN_PORTABLE), "%s non-portable", which);
+    ck_warner(packWARN(WARN_PORTABLE), "%s non-portable", which);
 }
 
 UV
@@ -529,12 +529,12 @@ Perl_grok_bin_oct_hex(pTHX_ const char *start,
                 if (   ! (input_flags & PERL_SCAN_SILENT_OVERFLOW)
                     &&    ckWARN_d(WARN_OVERFLOW))
                 {
-                    Perl_warner(aTHX_ packWARN(WARN_OVERFLOW),
-                                       "Integer overflow in %s number",
-                                       (base == 16) ? "hexadecimal"
-                                                    : (base == 2)
-                                                      ? "binary"
-                                                      : "octal");
+                    warner(packWARN(WARN_OVERFLOW),
+                           "Integer overflow in %s number",
+                           (base == 16) ? "hexadecimal"
+                                        : (base == 2)
+                                          ? "binary"
+                                          : "octal");
                 }
             }
             continue;
@@ -561,12 +561,12 @@ Perl_grok_bin_oct_hex(pTHX_ const char *start,
                 &&    ckWARN(WARN_DIGIT))
             {
                 if (base != 8) {
-                    Perl_warner(aTHX_ packWARN(WARN_DIGIT),
-                                           "Illegal %s digit '%c' ignored",
-                                           ((base == 2)
-                                            ? "binary"
-                                              : "hexadecimal"),
-                                            *s);
+                    warner(packWARN(WARN_DIGIT),
+                           "Illegal %s digit '%c' ignored",
+                           ((base == 2)
+                            ? "binary"
+                            : "hexadecimal"),
+                           *s);
                 }
                 else if (isDIGIT(*s)) { /* octal base */
 
@@ -575,8 +575,8 @@ Perl_grok_bin_oct_hex(pTHX_ const char *start,
                      * complain only if someone seems to want to use the digits
                      * eight and nine.  Since we know it is not octal, then if
                      * isDIGIT, must be an 8 or 9). */
-                    Perl_warner(aTHX_ packWARN(WARN_DIGIT),
-                                       "Illegal octal digit '%c' ignored", *s);
+                    warner(packWARN(WARN_DIGIT),
+                           "Illegal octal digit '%c' ignored", *s);
                 }
             }
 
@@ -742,12 +742,12 @@ If an infinity or a not-a-number is recognized, C<*sp> will point to
 one byte past the end of the recognized string.  If the recognition fails,
 zero is returned, and C<*sp> will not move.
 
-=for apidoc Amnh|bool|IS_NUMBER_GREATER_THAN_UV_MAX
-=for apidoc Amnh|bool|IS_NUMBER_INFINITY
-=for apidoc Amnh|bool|IS_NUMBER_IN_UV
-=for apidoc Amnh|bool|IS_NUMBER_NAN
-=for apidoc Amnh|bool|IS_NUMBER_NEG
-=for apidoc Amnh|bool|IS_NUMBER_NOT_INT
+=for apidoc Amnh||IS_NUMBER_GREATER_THAN_UV_MAX
+=for apidoc Amnh||IS_NUMBER_INFINITY
+=for apidoc Amnh||IS_NUMBER_IN_UV
+=for apidoc Amnh||IS_NUMBER_NAN
+=for apidoc Amnh||IS_NUMBER_NEG
+=for apidoc Amnh||IS_NUMBER_NOT_INT
 
 =cut
 */
@@ -998,8 +998,8 @@ Perl_grok_infnan(pTHX_ const char** sp, const char* send)
 =for apidoc      grok_number
 =for apidoc_item grok_number_flags
 
-Look for a number in the C<len> bytes starting at C<pv>.  If one isn't found,
-return 0; otherwise return its type (and optionally its value).  In
+Look for a base 10 number in the C<len> bytes starting at C<pv>.  If one isn't
+found, return 0; otherwise return its type (and optionally its value).  In
 C<grok_number> all C<len> bytes must be either leading C<L</isSPACE>>
 characters or part of the number.  The same is true in C<grok_number_flags>
 unless C<flags> contains the C<PERL_SCAN_TRAILING> bit, which allows for
@@ -1516,7 +1516,7 @@ Perl_my_atof(pTHX_ const char* s)
 =for apidoc      my_atof
 =for apidoc_item Atof
 
-These each are L<C<atof>(3)>, but properly work with Perl locale handling,
+These each are C<L<atof(3)>>, but properly work with Perl locale handling,
 accepting a dot radix character always, but also the current locale's radix
 character if and only if called from within the lexical scope of a Perl C<use
 locale> statement.

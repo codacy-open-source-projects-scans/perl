@@ -79,7 +79,7 @@ L<perlcall>.
 Declares a local copy of perl's stack pointer for the XSUB, available via
 the C<SP> macro.  See C<L</SP>>.
 
-=for apidoc m;||djSP
+=for apidoc mn;||djSP
 
 Declare Just C<SP>.  This is actually identical to C<dSP>, and declares
 a local copy of perl's stack pointer, available via the C<SP> macro.
@@ -397,33 +397,33 @@ Does not use C<TARG>.  See also C<L</XPUSHu>>, C<L</mPUSHu>> and C<L</PUSHu>>.
 #  define EXTEND_HWM_SET(p, n) NOOP
 #endif
 
-/* _EXTEND_SAFE_N(n): private helper macro for EXTEND().
+/* EXTEND_SAFE_N_(n): private helper macro for EXTEND().
  * Tests whether the value of n would be truncated when implicitly cast to
  * SSize_t as an arg to stack_grow(). If so, sets it to -1 instead to
  * trigger a panic. It will be constant folded on platforms where this
  * can't happen.
  */
 
-#define _EXTEND_SAFE_N(n) \
+#define EXTEND_SAFE_N_(n) \
         (sizeof(n) > sizeof(SSize_t) && ((SSize_t)(n) != (n)) ? -1 : (n))
 
 #ifdef STRESS_REALLOC
 # define EXTEND_SKIP(p, n) EXTEND_HWM_SET(p, n)
 
 # define EXTEND(p,n)   STMT_START {                                     \
-                           sp = stack_grow(sp,p,_EXTEND_SAFE_N(n));     \
+                           sp = stack_grow(sp,p,EXTEND_SAFE_N_(n));     \
                            PERL_UNUSED_VAR(sp);                         \
                        } STMT_END
 /* Same thing, but update mark register too. */
 # define MEXTEND(p,n)   STMT_START {                                    \
                             const SSize_t markoff = mark - PL_stack_base; \
-                            sp = stack_grow(sp,p,_EXTEND_SAFE_N(n));    \
+                            sp = stack_grow(sp,p,EXTEND_SAFE_N_(n));    \
                             mark = PL_stack_base + markoff;             \
                             PERL_UNUSED_VAR(sp);                        \
                         } STMT_END
 #else
 
-/* _EXTEND_NEEDS_GROW(p,n): private helper macro for EXTEND().
+/* EXTEND_NEEDS_GROW_(p,n): private helper macro for EXTEND().
  * Tests to see whether n is too big and we need to grow the stack. Be
  * very careful if modifying this. There are many ways to get things wrong
  * (wrapping, truncating etc) that could cause a false negative and cause
@@ -439,7 +439,7 @@ Does not use C<TARG>.  See also C<L</XPUSHu>>, C<L</mPUSHu>> and C<L</PUSHu>>.
  * this just gives a safe false positive
  */
 
-#  define _EXTEND_NEEDS_GROW(p,n) ((n) < 0 || PL_stack_max - (p) < (n))
+#  define EXTEND_NEEDS_GROW_(p,n) ((n) < 0 || PL_stack_max - (p) < (n))
 
 
 /* EXTEND_SKIP(): used for where you would normally call EXTEND(), but
@@ -452,23 +452,23 @@ Does not use C<TARG>.  See also C<L</XPUSHu>>, C<L</mPUSHu>> and C<L</PUSHu>>.
 
 #  define EXTEND_SKIP(p, n) STMT_START {                                \
                                 EXTEND_HWM_SET(p, n);                   \
-                                assert(!_EXTEND_NEEDS_GROW(p,n));       \
+                                assert(!EXTEND_NEEDS_GROW_(p,n));       \
                             } STMT_END
 
 
 #  define EXTEND(p,n)   STMT_START {                                    \
                          EXTEND_HWM_SET(p, n);                          \
-                         if (UNLIKELY(_EXTEND_NEEDS_GROW(p,n))) {       \
-                           sp = stack_grow(sp,p,_EXTEND_SAFE_N(n));     \
+                         if (UNLIKELY(EXTEND_NEEDS_GROW_(p,n))) {       \
+                           sp = stack_grow(sp,p,EXTEND_SAFE_N_(n));     \
                            PERL_UNUSED_VAR(sp);                         \
                          }                                              \
                         } STMT_END
 /* Same thing, but update mark register too. */
 #  define MEXTEND(p,n)  STMT_START {                                    \
                          EXTEND_HWM_SET(p, n);                          \
-                         if (UNLIKELY(_EXTEND_NEEDS_GROW(p,n))) {       \
+                         if (UNLIKELY(EXTEND_NEEDS_GROW_(p,n))) {       \
                            const SSize_t markoff = mark - PL_stack_base;\
-                           sp = stack_grow(sp,p,_EXTEND_SAFE_N(n));     \
+                           sp = stack_grow(sp,p,EXTEND_SAFE_N_(n));     \
                            mark = PL_stack_base + markoff;              \
                            PERL_UNUSED_VAR(sp);                         \
                          }                                              \
@@ -633,6 +633,8 @@ Does not use C<TARG>.  See also C<L</XPUSHu>>, C<L</mPUSHu>> and C<L</PUSHu>>.
 #define ARGTARG		PL_op->op_targ
 
 #define MAXARG		(PL_op->op_private & OPpARG4_MASK)
+#define MAXARG3         (PL_op->op_private & OPpARG3_MASK)
+
 
 /* for backcompat - use switch_argstack() instead */
 
@@ -699,14 +701,7 @@ True if this op will be the return value of an lvalue subroutine
 =cut */
 #define LVRET ((PL_op->op_private & OPpMAYBE_LVSUB) && is_lvalue_sub())
 
-#define SvCANEXISTDELETE(sv) \
- (!SvRMAGICAL(sv)            \
-  || !(mg = mg_find((const SV *) sv, PERL_MAGIC_tied))           \
-  || (   (stash = SvSTASH(SvRV(SvTIED_obj(MUTABLE_SV(sv), mg)))) \
-      && gv_fetchmethod_autoload(stash, "EXISTS", TRUE)          \
-      && gv_fetchmethod_autoload(stash, "DELETE", TRUE)          \
-     )                       \
-  )
+#define SvCANEXISTDELETE(sv) Perl_sv_can_existdelete(aTHX_ MUTABLE_SV(sv))
 
 #ifdef PERL_CORE
 

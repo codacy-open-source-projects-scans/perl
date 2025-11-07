@@ -4,23 +4,25 @@
 # Any changes made here will be lost!
 
 package feature;
-our $VERSION = '1.93';
+our $VERSION = '2.00';
 
 our %feature = (
     fc                              => 'feature_fc',
-    all                             => 'feature_all',
-    any                             => 'feature_any',
     isa                             => 'feature_isa',
     say                             => 'feature_say',
     try                             => 'feature_try',
     class                           => 'feature_class',
     defer                           => 'feature_defer',
     state                           => 'feature_state',
+    switch                          => 'feature_switch',
     bitwise                         => 'feature_bitwise',
     indirect                        => 'feature_indirect',
     evalbytes                       => 'feature_evalbytes',
     signatures                      => 'feature_signatures',
+    smartmatch                      => 'feature_smartmatch',
     current_sub                     => 'feature___SUB__',
+    keyword_all                     => 'feature_keyword_all',
+    keyword_any                     => 'feature_keyword_any',
     module_true                     => 'feature_module_true',
     refaliasing                     => 'feature_refaliasing',
     postderef_qq                    => 'feature_postderef_qq',
@@ -34,17 +36,17 @@ our %feature = (
 );
 
 our %feature_bundle = (
-    "5.10"    => [qw(apostrophe_as_package_separator bareword_filehandles indirect multidimensional say state)],
-    "5.11"    => [qw(apostrophe_as_package_separator bareword_filehandles indirect multidimensional say state unicode_strings)],
-    "5.15"    => [qw(apostrophe_as_package_separator bareword_filehandles current_sub evalbytes fc indirect multidimensional say state unicode_eval unicode_strings)],
-    "5.23"    => [qw(apostrophe_as_package_separator bareword_filehandles current_sub evalbytes fc indirect multidimensional postderef_qq say state unicode_eval unicode_strings)],
-    "5.27"    => [qw(apostrophe_as_package_separator bareword_filehandles bitwise current_sub evalbytes fc indirect multidimensional postderef_qq say state unicode_eval unicode_strings)],
-    "5.35"    => [qw(apostrophe_as_package_separator bareword_filehandles bitwise current_sub evalbytes fc isa postderef_qq say signatures state unicode_eval unicode_strings)],
-    "5.37"    => [qw(apostrophe_as_package_separator bitwise current_sub evalbytes fc isa module_true postderef_qq say signatures state unicode_eval unicode_strings)],
-    "5.39"    => [qw(apostrophe_as_package_separator bitwise current_sub evalbytes fc isa module_true postderef_qq say signatures state try unicode_eval unicode_strings)],
+    "5.10"    => [qw(apostrophe_as_package_separator bareword_filehandles indirect multidimensional say smartmatch state switch)],
+    "5.11"    => [qw(apostrophe_as_package_separator bareword_filehandles indirect multidimensional say smartmatch state switch unicode_strings)],
+    "5.15"    => [qw(apostrophe_as_package_separator bareword_filehandles current_sub evalbytes fc indirect multidimensional say smartmatch state switch unicode_eval unicode_strings)],
+    "5.23"    => [qw(apostrophe_as_package_separator bareword_filehandles current_sub evalbytes fc indirect multidimensional postderef_qq say smartmatch state switch unicode_eval unicode_strings)],
+    "5.27"    => [qw(apostrophe_as_package_separator bareword_filehandles bitwise current_sub evalbytes fc indirect multidimensional postderef_qq say smartmatch state switch unicode_eval unicode_strings)],
+    "5.35"    => [qw(apostrophe_as_package_separator bareword_filehandles bitwise current_sub evalbytes fc isa postderef_qq say signatures smartmatch state unicode_eval unicode_strings)],
+    "5.37"    => [qw(apostrophe_as_package_separator bitwise current_sub evalbytes fc isa module_true postderef_qq say signatures smartmatch state unicode_eval unicode_strings)],
+    "5.39"    => [qw(apostrophe_as_package_separator bitwise current_sub evalbytes fc isa module_true postderef_qq say signatures smartmatch state try unicode_eval unicode_strings)],
     "5.41"    => [qw(bitwise current_sub evalbytes fc isa module_true postderef_qq say signatures state try unicode_eval unicode_strings)],
-    "all"     => [qw(all any apostrophe_as_package_separator bareword_filehandles bitwise class current_sub declared_refs defer evalbytes extra_paired_delimiters fc indirect isa module_true multidimensional postderef_qq refaliasing say signatures state try unicode_eval unicode_strings)],
-    "default" => [qw(apostrophe_as_package_separator bareword_filehandles indirect multidimensional)],
+    "all"     => [qw(apostrophe_as_package_separator bareword_filehandles bitwise class current_sub declared_refs defer evalbytes extra_paired_delimiters fc indirect isa keyword_all keyword_any module_true multidimensional postderef_qq refaliasing say signatures smartmatch state switch try unicode_eval unicode_strings)],
+    "default" => [qw(apostrophe_as_package_separator bareword_filehandles indirect multidimensional smartmatch)],
 );
 
 $feature_bundle{"5.12"} = $feature_bundle{"5.11"};
@@ -71,6 +73,8 @@ $feature_bundle{"5.36"} = $feature_bundle{"5.35"};
 $feature_bundle{"5.38"} = $feature_bundle{"5.37"};
 $feature_bundle{"5.40"} = $feature_bundle{"5.39"};
 $feature_bundle{"5.42"} = $feature_bundle{"5.41"};
+$feature_bundle{"5.43"} = $feature_bundle{"5.41"};
+$feature_bundle{"5.44"} = $feature_bundle{"5.41"};
 $feature_bundle{"5.9.5"} = $feature_bundle{"5.10"};
 my %noops = (
     postderef => 1,
@@ -78,7 +82,6 @@ my %noops = (
 );
 my %removed = (
     array_base => 1,
-    switch => 1,
 );
 
 our $hint_shift   = 26;
@@ -89,6 +92,158 @@ our @hint_bundles = qw( default 5.10 5.11 5.15 5.23 5.27 5.35 5.37 5.39 5.41 );
 # for runtime speed of the uc/lc/ucfirst/lcfirst functions.
 # See HINT_UNI_8_BIT in perl.h.
 our $hint_uni8bit = 0x00000800;
+
+sub import {
+    shift;
+
+    if (!@_) {
+        croak("No features specified");
+    }
+
+    __common(1, @_);
+}
+
+sub unimport {
+    shift;
+
+    # A bare C<no feature> should reset to the default bundle
+    if (!@_) {
+	$^H &= ~($hint_uni8bit|$hint_mask);
+	return;
+    }
+
+    __common(0, @_);
+}
+
+
+sub __common {
+    my $import = shift;
+    my $bundle_number = $^H & $hint_mask;
+    my $features = $bundle_number != $hint_mask
+      && $feature_bundle{$hint_bundles[$bundle_number >> $hint_shift]};
+    if ($features) {
+	# Features are enabled implicitly via bundle hints.
+	# Delete any keys that may be left over from last time.
+	delete @^H{ values(%feature) };
+	$^H |= $hint_mask;
+	for (@$features) {
+	    $^H{$feature{$_}} = 1;
+	    $^H |= $hint_uni8bit if $_ eq 'unicode_strings';
+	}
+    }
+    while (@_) {
+        my $name = shift;
+        if (substr($name, 0, 1) eq ":") {
+            my $v = substr($name, 1);
+            if (!exists $feature_bundle{$v}) {
+                $v =~ s/^([0-9]+)\.([0-9]+).[0-9]+$/$1.$2/;
+                if (!exists $feature_bundle{$v}) {
+                    unknown_feature_bundle(substr($name, 1));
+                }
+            }
+            unshift @_, @{$feature_bundle{$v}};
+            next;
+        }
+        if (!exists $feature{$name}) {
+            if (exists $noops{$name}) {
+                next;
+            }
+            if (!$import && exists $removed{$name}) {
+                next;
+            }
+            unknown_feature($name);
+        }
+	if ($import) {
+	    $^H{$feature{$name}} = 1;
+	    $^H |= $hint_uni8bit if $name eq 'unicode_strings';
+	} else {
+            delete $^H{$feature{$name}};
+            $^H &= ~ $hint_uni8bit if $name eq 'unicode_strings';
+        }
+    }
+}
+
+sub unknown_feature {
+    my $feature = shift;
+    croak(sprintf('Feature "%s" is not supported by Perl %vd',
+            $feature, $^V));
+}
+
+sub unknown_feature_bundle {
+    my $feature = shift;
+    croak(sprintf('Feature bundle "%s" is not supported by Perl %vd',
+            $feature, $^V));
+}
+
+sub croak {
+    require Carp;
+    Carp::croak(@_);
+}
+
+sub features_enabled {
+    my ($depth) = @_;
+
+    $depth //= 1;
+    my @frame = caller($depth+1)
+      or return;
+    my ($hints, $hinthash) = @frame[8, 10];
+
+    my $bundle_number = $hints & $hint_mask;
+    if ($bundle_number != $hint_mask) {
+        return $feature_bundle{$hint_bundles[$bundle_number >> $hint_shift]}->@*;
+    }
+    else {
+        my @features;
+        for my $feature (sort keys %feature) {
+            if ($hinthash->{$feature{$feature}}) {
+                push @features, $feature;
+            }
+        }
+        return @features;
+    }
+}
+
+sub feature_enabled {
+    my ($feature, $depth) = @_;
+
+    $depth //= 1;
+    my @frame = caller($depth+1)
+      or return;
+    my ($hints, $hinthash) = @frame[8, 10];
+
+    my $hint_feature = $feature{$feature}
+      or croak "Unknown feature $feature";
+    my $bundle_number = $hints & $hint_mask;
+    if ($bundle_number != $hint_mask) {
+        my $bundle = $hint_bundles[$bundle_number >> $hint_shift];
+        for my $bundle_feature ($feature_bundle{$bundle}->@*) {
+            return 1 if $bundle_feature eq $feature;
+        }
+        return 0;
+    }
+    else {
+        return $hinthash->{$hint_feature} // 0;
+    }
+}
+
+sub feature_bundle {
+    my $depth = shift;
+
+    $depth //= 1;
+    my @frame = caller($depth+1)
+      or return;
+    my $bundle_number = $frame[8] & $hint_mask;
+    if ($bundle_number != $hint_mask) {
+        return $hint_bundles[$bundle_number >> $hint_shift];
+    }
+    else {
+        return undef;
+    }
+}
+
+1;
+
+__END__
 
 # TODO:
 # - think about versioned features (use feature switch => 2)
@@ -176,12 +331,33 @@ See L<perlsub/"Persistent Private Variables"> for details.
 
 This feature is available starting with Perl 5.10.
 
+=head2 The 'smartmatch' feature
+
+C<use feature 'smartmatch'> tells the compiler to enable the
+smartmatch operator C<~~>.  It is enabled by default, but can be
+turned off to disallow the C<~~> operator.
+
+This feature is disabled by default in the 5.42 feature bundle
+onwards:
+
+  $x ~~ $y; # fine
+  use v5.42;
+  $x ~~ $y; # error
+
+This has no effect on the implicit smartmatches done by C<when>.
+
+See L<perlop/"Smartmatch Operator"> for details.
+
 =head2 The 'switch' feature
 
-C<use feature 'switch'> told the compiler to enable the Raku
+C<use feature 'switch'> tells the compiler to enable the Raku
 given/when construct.
 
-This feature was removed in Perl 5.42.
+See L<perlsyn/"Switch Statements"> for details.
+
+This feature is available starting with Perl 5.10.  It is enabled by
+feature bundles 5.10 through 5.34, and disabled from the 5.36 feature
+bundle onwards.
 
 =head2 The 'unicode_strings' feature
 
@@ -399,7 +575,7 @@ disallow indirect object syntax.
 This feature is available under this name from Perl 5.32 onwards. In
 previous versions, it was simply on all the time.  To disallow (or
 warn on) indirect object syntax on older Perls, see the L<indirect>
-CPAN module.
+CPAN module.  It is disabled from the 5.36 feature bundle onwards.
 
 =head2 The 'multidimensional' feature
 
@@ -413,7 +589,8 @@ When this feature is disabled the syntax that is normally replaced
 will report a compilation error.
 
 This feature is available under this name from Perl 5.34 onwards. In
-previous versions, it was simply on all the time.
+previous versions, it was simply on all the time.  It is disabled from
+the 5.36 feature bundle onwards.
 
 You can use the L<multidimensional> module on CPAN to disable
 multidimensional array emulation for older versions of Perl.
@@ -429,7 +606,8 @@ The perl built-in filehandles C<STDIN>, C<STDOUT>, C<STDERR>, C<DATA>,
 C<ARGV>, C<ARGVOUT> and the special C<_> are always enabled.
 
 This feature is available under this name from Perl 5.34 onwards.  In
-previous versions it was simply on all the time.
+previous versions it was simply on all the time.  It is disabled from
+the 5.38 feature bundle onwards.
 
 You can use the L<bareword::filehandles> module on CPAN to disable
 bareword filehandles for older versions of perl.
@@ -509,46 +687,48 @@ warn when you use the feature, unless you have explicitly disabled the warning:
 This feature enables the C<class> block syntax and other associated keywords
 which implement the "new" object system, previously codenamed "Corinna".
 
+This feature is available starting in Perl 5.38.
+
 =head2 The 'apostrophe_as_package_separator' feature
 
 This feature enables use C<'> (apostrophe) as an alternative to using
 C<::> as a separate in package and other global names.
 
-This is enabled by default, but disabled from the 5.41 feature bundle
+This is enabled by default, but disabled from the 5.42 feature bundle
 onwards.  In previous versions it was enabled all the time.
 
 This only disables C<'> in symbols in your source code, the internal
 conversion from C<'> to C<::>, including for symbolic references, is
 always enabled.
 
-=head2 The 'any' feature
+=head2 The 'keyword_any' feature
 
 B<WARNING>: This feature is still experimental and the implementation may
 change or be removed in future versions of Perl.  For this reason, Perl will
 warn when you use the feature, unless you have explicitly disabled the warning:
 
-    no warnings "experimental::any";
+    no warnings "experimental::keyword_any";
 
 This feature enables the L<C<any>|perlfunc/any BLOCK LIST> operator keyword.
 This allow testing whether any of the values in a list satisfy a given
 condition, with short-circuiting behaviour as soon as it finds one.
 
-=head2 The 'all' feature
+This feature is available starting in Perl 5.42.
+
+=head2 The 'keyword_all' feature
 
 B<WARNING>: This feature is still experimental and the implementation may
 change or be removed in future versions of Perl.  For this reason, Perl will
 warn when you use the feature, unless you have explicitly disabled the warning:
 
-    no warnings "experimental::all";
+    no warnings "experimental::keyword_all";
 
 This feature enables the L<C<all>|perlfunc/all BLOCK LIST> operator keyword.
 This allow testing whether all of the values in a list satisfy a given
 condition, with short-circuiting behaviour as soon as it finds one that does
 not.
 
-B<Note:> remember that this enables one specific feature whose name is C<all>;
-it does not enable all of the features.  This is not C<use feature ':all'>.
-For that, see the section below.
+This feature is available starting in Perl 5.42.
 
 =head1 FEATURE BUNDLES
 
@@ -564,90 +744,99 @@ The following feature bundles are available:
   --------- -----------------
   :default  indirect multidimensional
             bareword_filehandles
-            apostrophe_as_package_separator
+            apostrophe_as_package_separator smartmatch
 
   :5.10     apostrophe_as_package_separator
             bareword_filehandles indirect
-            multidimensional say state
+            multidimensional say smartmatch state switch
 
   :5.12     apostrophe_as_package_separator
             bareword_filehandles indirect
-            multidimensional say state unicode_strings
+            multidimensional say smartmatch state switch
+            unicode_strings
 
   :5.14     apostrophe_as_package_separator
             bareword_filehandles indirect
-            multidimensional say state unicode_strings
+            multidimensional say smartmatch state switch
+            unicode_strings
 
   :5.16     apostrophe_as_package_separator
             bareword_filehandles current_sub evalbytes
-            fc indirect multidimensional say state
-            unicode_eval unicode_strings
+            fc indirect multidimensional say smartmatch
+            state switch unicode_eval unicode_strings
 
   :5.18     apostrophe_as_package_separator
             bareword_filehandles current_sub evalbytes
-            fc indirect multidimensional say state
-            unicode_eval unicode_strings
+            fc indirect multidimensional say smartmatch
+            state switch unicode_eval unicode_strings
 
   :5.20     apostrophe_as_package_separator
             bareword_filehandles current_sub evalbytes
-            fc indirect multidimensional say state
-            unicode_eval unicode_strings
+            fc indirect multidimensional say smartmatch
+            state switch unicode_eval unicode_strings
 
   :5.22     apostrophe_as_package_separator
             bareword_filehandles current_sub evalbytes
-            fc indirect multidimensional say state
-            unicode_eval unicode_strings
+            fc indirect multidimensional say smartmatch
+            state switch unicode_eval unicode_strings
 
   :5.24     apostrophe_as_package_separator
             bareword_filehandles current_sub evalbytes
             fc indirect multidimensional postderef_qq
-            say state unicode_eval unicode_strings
+            say smartmatch state switch unicode_eval
+            unicode_strings
 
   :5.26     apostrophe_as_package_separator
             bareword_filehandles current_sub evalbytes
             fc indirect multidimensional postderef_qq
-            say state unicode_eval unicode_strings
+            say smartmatch state switch unicode_eval
+            unicode_strings
 
   :5.28     apostrophe_as_package_separator
             bareword_filehandles bitwise current_sub
             evalbytes fc indirect multidimensional
-            postderef_qq say state unicode_eval
-            unicode_strings
+            postderef_qq say smartmatch state switch
+            unicode_eval unicode_strings
 
   :5.30     apostrophe_as_package_separator
             bareword_filehandles bitwise current_sub
             evalbytes fc indirect multidimensional
-            postderef_qq say state unicode_eval
-            unicode_strings
+            postderef_qq say smartmatch state switch
+            unicode_eval unicode_strings
 
   :5.32     apostrophe_as_package_separator
             bareword_filehandles bitwise current_sub
             evalbytes fc indirect multidimensional
-            postderef_qq say state unicode_eval
-            unicode_strings
+            postderef_qq say smartmatch state switch
+            unicode_eval unicode_strings
 
   :5.34     apostrophe_as_package_separator
             bareword_filehandles bitwise current_sub
             evalbytes fc indirect multidimensional
-            postderef_qq say state unicode_eval
-            unicode_strings
+            postderef_qq say smartmatch state switch
+            unicode_eval unicode_strings
 
   :5.36     apostrophe_as_package_separator
             bareword_filehandles bitwise current_sub
             evalbytes fc isa postderef_qq say signatures
-            state unicode_eval unicode_strings
+            smartmatch state unicode_eval
+            unicode_strings
 
   :5.38     apostrophe_as_package_separator bitwise
             current_sub evalbytes fc isa module_true
-            postderef_qq say signatures state
+            postderef_qq say signatures smartmatch state
             unicode_eval unicode_strings
 
   :5.40     apostrophe_as_package_separator bitwise
             current_sub evalbytes fc isa module_true
-            postderef_qq say signatures state try
-            unicode_eval unicode_strings
+            postderef_qq say signatures smartmatch state
+            try unicode_eval unicode_strings
 
   :5.42     bitwise current_sub evalbytes fc isa
+            module_true postderef_qq say signatures
+            state try unicode_eval unicode_strings
+
+  :5.44     bitwise current_sub evalbytes fc isa
             module_true postderef_qq say signatures
             state try unicode_eval unicode_strings
 
@@ -789,155 +978,5 @@ bundle.  This may change in a future release of perl.
 =back
 
 =cut
-
-sub import {
-    shift;
-
-    if (!@_) {
-        croak("No features specified");
-    }
-
-    __common(1, @_);
-}
-
-sub unimport {
-    shift;
-
-    # A bare C<no feature> should reset to the default bundle
-    if (!@_) {
-	$^H &= ~($hint_uni8bit|$hint_mask);
-	return;
-    }
-
-    __common(0, @_);
-}
-
-
-sub __common {
-    my $import = shift;
-    my $bundle_number = $^H & $hint_mask;
-    my $features = $bundle_number != $hint_mask
-      && $feature_bundle{$hint_bundles[$bundle_number >> $hint_shift]};
-    if ($features) {
-	# Features are enabled implicitly via bundle hints.
-	# Delete any keys that may be left over from last time.
-	delete @^H{ values(%feature) };
-	$^H |= $hint_mask;
-	for (@$features) {
-	    $^H{$feature{$_}} = 1;
-	    $^H |= $hint_uni8bit if $_ eq 'unicode_strings';
-	}
-    }
-    while (@_) {
-        my $name = shift;
-        if (substr($name, 0, 1) eq ":") {
-            my $v = substr($name, 1);
-            if (!exists $feature_bundle{$v}) {
-                $v =~ s/^([0-9]+)\.([0-9]+).[0-9]+$/$1.$2/;
-                if (!exists $feature_bundle{$v}) {
-                    unknown_feature_bundle(substr($name, 1));
-                }
-            }
-            unshift @_, @{$feature_bundle{$v}};
-            next;
-        }
-        if (!exists $feature{$name}) {
-            if (exists $noops{$name}) {
-                next;
-            }
-            if (!$import && exists $removed{$name}) {
-                next;
-            }
-            unknown_feature($name);
-        }
-	if ($import) {
-	    $^H{$feature{$name}} = 1;
-	    $^H |= $hint_uni8bit if $name eq 'unicode_strings';
-	} else {
-            delete $^H{$feature{$name}};
-            $^H &= ~ $hint_uni8bit if $name eq 'unicode_strings';
-        }
-    }
-}
-
-sub unknown_feature {
-    my $feature = shift;
-    croak(sprintf('Feature "%s" is not supported by Perl %vd',
-            $feature, $^V));
-}
-
-sub unknown_feature_bundle {
-    my $feature = shift;
-    croak(sprintf('Feature bundle "%s" is not supported by Perl %vd',
-            $feature, $^V));
-}
-
-sub croak {
-    require Carp;
-    Carp::croak(@_);
-}
-
-sub features_enabled {
-    my ($depth) = @_;
-
-    $depth //= 1;
-    my @frame = caller($depth+1)
-      or return;
-    my ($hints, $hinthash) = @frame[8, 10];
-
-    my $bundle_number = $hints & $hint_mask;
-    if ($bundle_number != $hint_mask) {
-        return $feature_bundle{$hint_bundles[$bundle_number >> $hint_shift]}->@*;
-    }
-    else {
-        my @features;
-        for my $feature (sort keys %feature) {
-            if ($hinthash->{$feature{$feature}}) {
-                push @features, $feature;
-            }
-        }
-        return @features;
-    }
-}
-
-sub feature_enabled {
-    my ($feature, $depth) = @_;
-
-    $depth //= 1;
-    my @frame = caller($depth+1)
-      or return;
-    my ($hints, $hinthash) = @frame[8, 10];
-
-    my $hint_feature = $feature{$feature}
-      or croak "Unknown feature $feature";
-    my $bundle_number = $hints & $hint_mask;
-    if ($bundle_number != $hint_mask) {
-        my $bundle = $hint_bundles[$bundle_number >> $hint_shift];
-        for my $bundle_feature ($feature_bundle{$bundle}->@*) {
-            return 1 if $bundle_feature eq $feature;
-        }
-        return 0;
-    }
-    else {
-        return $hinthash->{$hint_feature} // 0;
-    }
-}
-
-sub feature_bundle {
-    my $depth = shift;
-
-    $depth //= 1;
-    my @frame = caller($depth+1)
-      or return;
-    my $bundle_number = $frame[8] & $hint_mask;
-    if ($bundle_number != $hint_mask) {
-        return $hint_bundles[$bundle_number >> $hint_shift];
-    }
-    else {
-        return undef;
-    }
-}
-
-1;
 
 # ex: set ro ft=perl:

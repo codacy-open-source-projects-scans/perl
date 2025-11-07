@@ -86,15 +86,17 @@ sub testit {
             use feature 'lexical_subs';
             $code = "no warnings 'syntax'; no strict 'vars'; sub { state sub $keyword; ${vars}() = $expr }";
             $code = "use feature 'isa';\n$code" if $keyword eq "isa";
+            $code = "use feature 'switch';\n$code" if $keyword eq "break";
             $code_ref = eval $code or die "$@ in $expr";
         }
         else {
             package test;
             use subs ();
-            no warnings qw( experimental::any experimental::all );
-            import subs $keyword;
+            no warnings qw( experimental::keyword_any experimental::keyword_all );
+            subs->import($keyword);
             $code = "no warnings 'syntax'; no strict 'vars'; sub { ${vars}() = $expr }";
             $code = "use feature 'isa';\n$code" if $keyword eq "isa";
+            $code = "use feature 'switch';\n$code" if $keyword eq "break";
             $code_ref = eval $code or die "$@ in $expr";
         }
 
@@ -366,7 +368,7 @@ my %not_tested = map { $_ => 1} qw(
     UNITCHECK
     catch
     class
-    continue
+    default
     defer
     else
     elsif
@@ -375,6 +377,7 @@ my %not_tested = map { $_ => 1} qw(
     for
     foreach
     format
+    given
     if
     m
     method
@@ -392,6 +395,7 @@ my %not_tested = map { $_ => 1} qw(
     unless
     until
     use
+    when
     while
     y
 );
@@ -472,6 +476,7 @@ atan2            2     p
 bind             2     p
 binmode          12    p
 bless            1     p
+break            0     -
 caller           0     -
 chdir            01    -
 chmod            @     p1
@@ -484,6 +489,7 @@ close            01    -
 closedir         1     -
 cmp              B     -
 connect          2     p
+continue         0     -
 cos              01    $
 crypt            2     p
 # dbmopen  handled specially
@@ -541,6 +547,7 @@ getservbyport    2     p
 getservent       0     -
 getsockname      1     -
 getsockopt       3     p
+# given handled specially
 grep             123   p+ # also tested specially
 # glob handled specially
 # goto handled specially
@@ -603,7 +610,7 @@ recv             4     p
 ref              01    $
 rename           2     p
 # XXX This code prints 'Undefined subroutine &main::require called':
-#   use subs (); import subs 'require';
+#   use subs (); subs->import('require');
 #   eval q[no strict 'vars'; sub { () = require; }]; print $@;
 # so disable for now
 #require          01    $+

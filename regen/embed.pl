@@ -28,6 +28,35 @@ BEGIN {
     require './regen/embed_lib.pl';
 }
 
+# This program has historically generated compatibility macros for a few
+# functions of the form Perl_FOO(pTHX_ ...).  Those macros would be named
+# FOO(...), and would expand outside the core to Perl_FOO_nocontext(...)
+# instead of the expected value.  This was done so XS code that didn't do a
+# PERL_GET_CONTEXT would continue to work unchanged after threading was
+# introduced.  Any new API functions that came along would require an aTHX_
+# parameter; this was just to avoid breaking existing source.  Hence no new
+# functions need be added to the list of such macros.  This is the list.
+# All have varargs.
+#
+# N.B. If you change this list, update the copy in autodoc.pl.  This is likely
+# to never happen, so not worth coding automatic synchronization.
+my @have_compatibility_macros = qw(
+                                    deb
+                                    form
+                                    load_module
+                                    mess
+                                    newSVpvf
+                                    sv_catpvf
+                                    sv_catpvf_mg
+                                    sv_setpvf
+                                    sv_setpvf_mg
+                                    warn
+                                    warner
+                                  );
+my %has_compat_macro;
+$has_compat_macro{$_} = 1 for @have_compatibility_macros;
+my %perl_compats;   # Have 'perl_' prefix
+
 my $unflagged_pointers;
 my @az = ('a'..'z');
 
@@ -51,10 +80,10 @@ sub full_name ($$) { # Returns the function name with potentially the
 
     if ($flags =~ /[ps]/) {
 
-	# An all uppercase macro name gets an uppercase prefix.
-	return ($flags =~ /m/ && $flags =~ /p/ && $func !~ /[[:lower:]]/)
-	       ? "PERL_$func"
-	       : "Perl_$func";
+        # An all uppercase macro name gets an uppercase prefix.
+        return (($flags =~ tr/mp// > 1) && $func !~ /[[:lower:]]/)
+               ? "PERL_$func"
+               : "Perl_$func";
     }
 
     return "S_$func" if $flags =~ /[SIi]/;
@@ -121,44 +150,60 @@ sub generate_proto_h {
         $ind .= "  " x ($level-1) if $level>1;
         my $inner_ind= $ind ? "  " : " ";
 
-        my ($flags,$retval,$plain_func,$args) = @{$embed}{qw(flags return_type name args)};
-        if ($flags =~ / ( [^AabCDdEefFGhIiMmNnOoPpRrSsTUuvWXx;] ) /x) {
+        my ($flags, $retval, $plain_func, $args, $assertions ) =
+                        @{$embed}{qw(flags return_type name args assertions)};
+        if ($flags =~ / ( [^ AabCDdEefFhIiMmNnOoPpRrSsTUuWXx;] ) /xx) {
             die_at_end "flag $1 is not legal (for function $plain_func)";
         }
+
+        if ($flags =~ /O/) {
+            die_at_end "$plain_func: O flag requires p flag" if $flags !~ /p/;
+            die_at_end "$plain_func: O flag forbids T flag" if $flags =~ /T/;
+        }
+
         my @nonnull;
-        my $args_assert_line = ( $flags !~ /[Gm]/ );
+        my $args_assert_line = ( $flags !~ /m/ );
         my $has_depth = ( $flags =~ /W/ );
         my $has_context = ( $flags !~ /T/ );
         my $never_returns = ( $flags =~ /r/ );
         my $binarycompat = ( $flags =~ /b/ );
         my $has_mflag = ( $flags =~ /m/ );
         my $is_malloc = ( $flags =~ /a/ );
-        my $can_ignore = ( $flags !~ /R/ ) && ( $flags !~ /P/ ) && !$is_malloc;
-        my @names_of_nn;
-        my @typed_args;
+        my $can_ignore = $flags !~ /[RP]/ && !$is_malloc;
+        my $extensions_only = ( $flags =~ /E/ );
+        my @asserts;
         my $func;
 
         if (! $can_ignore && $retval eq 'void') {
             warn "It is nonsensical to require the return value of a void function ($plain_func) to be checked";
         }
 
+        my $has_E_or_X = $flags =~ /[EX]/;
+        if ($has_E_or_X + ($flags =~ tr/AC//) > 1) {
+            die_at_end "$plain_func: A, C, and either E or X flags are"
+                     . " mutually exclusive";
+        }
+
         die_at_end "$plain_func: S and p flags are mutually exclusive"
-                                            if $flags =~ /S/ && $flags =~ /p/;
-	if ($has_mflag) {
-	    if ($flags =~ /S/) {
-		die_at_end "$plain_func: m and S flags are mutually exclusive";
-	    }
-	}
-	else {
-	    die_at_end "$plain_func: u flag only usable with m" if $flags =~ /u/;
-	}
+                                                    if $flags =~ tr/Sp// > 1;
+        if ($has_mflag) {
+            if ($flags =~ /S/) {
+                die_at_end
+                          "$plain_func: m and S flags are mutually exclusive";
+            }
+        }
+        else {
+            die_at_end "$plain_func: u flag only usable with m"
+                                                            if $flags =~ /u/;
+        }
 
         my ($static_flag, @extra_static_flags)= $flags =~/([SsIi])/g;
 
         if (@extra_static_flags) {
             my $flags_str = join ", ", $static_flag, @extra_static_flags;
             $flags_str =~ s/, (\w)\z/ and $1/;
-            die_at_end "$plain_func: flags $flags_str are mutually exclusive\n";
+            die_at_end
+                     "$plain_func: flags $flags_str are mutually exclusive\n";
         }
 
         my $static_inline = 0;
@@ -181,10 +226,19 @@ sub generate_proto_h {
                 }->{$static_flag};
             }
             $retval = "$type $retval";
-            die_at_end "Don't declare static function '$plain_func' pure" if $flags =~ /P/;
+            die_at_end "Don't declare static function '$plain_func' pure"
+                                                             if $flags =~ /P/;
             $static_inline = $type =~ /^PERL_STATIC(?:_FORCE)?_INLINE/;
         }
         else {
+
+            # A publicly accessible non-static element needs to have a Perl_
+            # prefix available to call it with (in case of name conflicts).
+            die_at_end "'$plain_func' requires p flag because has A or C flag"
+                                    if $flags !~ /p/
+                                    && $flags =~ /[AC]/
+                                    && $plain_func !~ /[Pp]erl/;
+
             if ($never_returns) {
                 $retval = "PERL_CALLCONV_NO_RET $retval";
             }
@@ -199,28 +253,28 @@ sub generate_proto_h {
                                             if $flags =~ /M/ && $flags !~ /p/;
         my $C_required_flags = '[pIimbs]';
         die_at_end
-            "For '$plain_func', C flag requires one of $C_required_flags] flags"
-                                                if $flags =~ /C/
-                                                && ($flags !~ /$C_required_flags/
+          "For '$plain_func', C flag requires one of $C_required_flags] flags"
+                                             if $flags =~ /C/
+                                             && ($flags !~ /$C_required_flags/
 
-                                                   # Notwithstanding the
-                                                   # above, if the name won't
-                                                   # clash with a user name,
-                                                   # it's ok.
-                                                && $plain_func !~ /^[Pp]erl/);
+                                                # Notwithstanding the
+                                                # above, if the name won't
+                                                # clash with a user name,
+                                                # it's ok.
+                                             && $plain_func !~ /^[Pp]erl/);
 
         die_at_end "For '$plain_func', X flag requires one of [Iip] flags"
-                                            if $flags =~ /X/ && $flags !~ /[Iip]/;
+                                        if $flags =~ /X/ && $flags !~ /[Iip]/;
         die_at_end "For '$plain_func', X and m flags are mutually exclusive"
                                             if $flags =~ /X/ && $has_mflag;
         die_at_end "For '$plain_func', [Ii] with [ACX] requires p flag"
-                        if $flags =~ /[Ii]/ && $flags =~ /[ACX]/ && $flags !~ /p/;
+                    if $flags =~ /[Ii]/ && $flags =~ /[ACX]/ && $flags !~ /p/;
         die_at_end "For '$plain_func', b and m flags are mutually exclusive"
                  . " (try M flag)" if $flags =~ /b/ && $has_mflag;
         die_at_end "For '$plain_func', b flag without M flag requires D flag"
-                            if $flags =~ /b/ && $flags !~ /M/ && $flags !~ /D/;
+                        if $flags =~ /b/ && $flags !~ /M/ && $flags !~ /D/;
         die_at_end "For '$plain_func', I and i flags are mutually exclusive"
-                                            if $flags =~ /I/ && $flags =~ /i/;
+                                            if $flags =~ tr/Ii// > 1;
 
         $ret = "";
         $ret .= "$retval\n";
@@ -229,11 +283,15 @@ sub generate_proto_h {
             $ret .= @$args ? "pTHX_ " : "pTHX";
         }
         if (@$args) {
-            die_at_end "n flag is contradicted by having arguments"
-                                                                if $flags =~ /n/;
+            die_at_end
+                    "$plain_func: n flag is contradicted by having arguments"
+                                                            if $flags =~ /n/;
             my $n;
+            my @bounded_strings;
+
             for my $arg ( @$args ) {
                 ++$n;
+
                 if ($arg =~ / ^ " (.+) " $ /x) {    # Handle literal string
                     my $name = $1;
 
@@ -243,44 +301,239 @@ sub generate_proto_h {
                     $name =~ s/\W/_/ag;
 
                     $arg = "const char * const $name";
-                    die_at_end 'm flag required for "literal" argument'
-							    unless $has_mflag;
+                    die_at_end "$plain_func: func: m flag required for"
+                             . '"literal" argument' unless $has_mflag;
                 }
-                elsif (   $args_assert_line
-                       && $arg =~ /\*/
-                       && $arg !~ /\b(NN|NULLOK)\b/ )
+                else {  # Look for constraints about this argument
+
+                    my $ptr_type;   # E, M, and S are the three types
+                                    # corresponding respectively to EPTR(Q)?,
+                                    # MPTR, and SPTR
+                    my $equal = ""; # EPTRQ is just an EPTR with this set to
+                                    # "="
+                    if ($arg =~ s/ \b ( [EMS] ) PTR (Q)? \b //x) {;
+                        $ptr_type = $1;
+                        if (defined $2) {
+                            die_at_end ": $func: Q only valid with EPTR"
+                                                          if $ptr_type ne 'E';
+                            $equal = "=";
+                        }
+                        elsif ($ptr_type eq 'M') {
+                            # A middle position always is <=
+                            $equal = "=";
+                        }
+                    }
+
+                    # A $ptr_type is a specialized 'nn'
+                    my $nn =  (defined $ptr_type) + ( $arg =~ s/\bNN\b// );
+
+                    my $nz =      ( $arg =~ s/\bNZ\b// );
+                    my $nullok =  ( $arg =~ s/\bNULLOK\b// );
+                    my $nocheck = ( $arg =~ s/\bNOCHECK\b// );
+
+                    # Trim $arg and remove multiple blanks
+                    $arg =~ s/^\s+//;
+                    $arg =~ s/\s+$//;
+                    $arg =~ s/\s{2,}/ /g;
+
+                    # Note that we don't care if you say e.g., 'NN' multiple
+                    # times
+                    die_at_end
+                           ":$func: $arg Use only one of NN (including"
+                         . " EPTR, EPTRQ, MPTR, SPTR), NULLOK, or NZ"
+                                               if 0 + $nn + $nz + $nullok > 1;
+
+                    push( @nonnull, $n ) if $nn;
+
+                    # A non-pointer shouldn't have a pointer-related modifier.
+                    # But typedefs may be pointers without our knowing it, so
+                    # we can't check for non-pointer issues.  We can only
+                    # check for the case where the argument is definitely a
+                    # pointer.
+                    if ($args_assert_line && $arg =~ /\*/) {
+                        if ($nn + $nullok == 0) {
+                            warn "$func: $arg needs one of: NN, EPTR, EPTRQ,"
+                               . " MPTR, SPTR, or NULLOK\n";
+                            ++$unflagged_pointers;
+                        }
+
+                        warn "$func: $arg should not have NZ\n" if $nz;
+                    }
+
+                    # Make sure each arg has at least a type and a var name.
+                    # An arg of "int" is valid C, but want it to be "int foo".
+                    my $argtype = ( $arg =~ m/^(\w+(?:\s*\*+)?)/ )[0];
+                    defined $argtype and $argtype =~ s/\s+//g;
+
+                    my $temp_arg = $arg;
+                    $temp_arg =~ s/\*//g;
+                    $temp_arg =~ s/\s*\bstruct\b\s*/ /g;
+                    if ( ($temp_arg ne "...")
+                        && ($temp_arg !~ /\w+\s+(\w+)(?:\[\d+\])?\s*$/) ) {
+                        die_at_end "$func: $arg ($n) doesn't have a name\n";
+                    }
+                    my $argname = $1;
+
+                    if (defined $argname && (! $has_mflag || $binarycompat)) {
+                        if ($nn||$nz) {
+                            push @asserts, "assert($argname)";
+                        }
+
+                        if (   ! $nocheck
+                            && defined $argtype
+                            && exists $type_asserts{$argtype})
+                        {
+                            my $type_assert =
+                             $type_asserts{$argtype} =~ s/__arg__/$argname/gr;
+                            $type_assert = "!$argname || $type_assert"
+                                                                   if $nullok;
+                            push @asserts, "assert($type_assert)";
+                        }
+
+                        # If this is a pointer to a character string argument,
+                        # we need extra work.
+                        if ($ptr_type) {
+
+                            # For these, not only does the parameter have to
+                            # be non-NULL, but every dereference of it has to
+                            # too.
+                            #
+                            # First, get all the '*" derefs, except one.
+                            my $derefs = "*" x (($arg =~ tr/*//) - 1);
+
+                            # Then add the asserts that each dereferenced
+                            # layer is non-NULL.
+                            for (my $i = 1; $i <= length $derefs; $i++) {
+                                push @asserts, "assert("
+                                             . substr($derefs, 0, $i)
+                                             . "$argname)";
+                            }
+
+                            # Save the data we need later
+                            my %entry = (
+                                          argname => $argname,
+                                          equal   => $equal,
+                                          deref   => $derefs,
+                                        );
+
+                            # The motivation for all this is that some string
+                            # pointer parameters have constraints, such as
+                            # that the starting position can't be beyond the
+                            # ending one.  Unfortunately, the function's
+                            # parameters can be positioned in its prototype so
+                            # that the pointer to the ending position comes
+                            # before the pointer to the starting one, and this
+                            # can't be changed because they are API.  To cope
+                            # with this, we use the array below to save just
+                            # the crucial information about each while parsing
+                            # the parameters.  After all information is
+                            # gathered, we go through and handle it.  An entry
+                            # looks like this after all the parameters are
+                            # parsed:
+                            #   {
+                            #       'M' => {
+                            #               'equal' => '=',
+                            #               'argname' => 'curpos',
+                            #               'deref' => ''
+                            #               },
+                            #       'E' => {
+                            #               'equal' => '',
+                            #               'argname' => 'strend',
+                            #               'deref' => ''
+                            #               },
+                            #       'S' => {
+                            #               'equal' => '',
+                            #               'deref' => '',
+                            #               'argname' => 'strbeg'
+                            #               }
+                            #   }
+                            #
+                            # Only two of the keys need be present.
+                            # If the function has multiple string parameters,
+                            # the [0] entry in @bounded_strings will be for
+                            # the first string, [1] for the second, and so on.
+                            #
+                            # Here, we are in the middle of parsing the
+                            # parameters.  We add this parameter to the
+                            # current string's boundary constraints hash,
+                            # or create a new string if necessary.  The new
+                            # string's data is pushed as a new element onto
+                            # the array.
+                            #
+                            # A new element is created if the array is empty,
+                            # or if there is already an existing hash element
+                            # for the new key.  For example, you can't have
+                            # two EPTRs for the same string, so the second
+                            # must be for a new string.
+                            #
+                            # Otherwise we presume this hash value is for the
+                            # most recent string in the array.  If we have an
+                            # EPTR, and an MPTR comes along, assume that it is
+                            # for the same string as the EPTR.
+                            #
+                            # This hack works as long as all parameters for the
+                            # current string come before any of the next
+                            # string, which is the case for all existing
+                            # function calls, and any new ones can be
+                            # fashioned to conform.
+                            if (   @bounded_strings
+                                && ! defined $bounded_strings[-1]{$ptr_type})
+                            {
+                                $bounded_strings[-1]{$ptr_type} = \%entry;
+                            }
+                            else {
+                                push @bounded_strings,
+                                     { $ptr_type => \%entry };
+                            }
+                        }   # End of special handling of string bounds
+                    }
+                }   # End of this argument
+            }   # End of loop through all arguments
+
+            # We have looped through all arguments, and for any bounded string
+            # ones, we have saved the information needed to generate things
+            # like
+            #   assert(s < e)
+            foreach my $string (@bounded_strings) {
+
+                # We need at least two bounds
+                if (1 == (  (defined $string->{S})
+                          + (defined $string->{M})
+                          + (defined $string->{E})))
                 {
-                    warn "$func: $arg needs NN or NULLOK\n";
-                    ++$unflagged_pointers;
+                    my ($type, $object) = each %$string;
+                    die_at_end
+                           "$func: Missing PTR constraint for string given by "
+                         . $object->{argname};
+                    next;
                 }
-                my $nn = ( $arg =~ s/\s*\bNN\b\s+// );
-                push( @nonnull, $n ) if $nn;
-                my $nz = ( $arg =~ s/\s*\bNZ\b\s+// );
 
-                my $nullok = ( $arg =~ s/\s*\bNULLOK\b\s+// ); # strip NULLOK with no effect
+                # But three or any two bounds work.  We may need to generate
+                # two asserts, so loop to do so, skipping any missing one.
+                for my $i (["S", "E"], ["S", "M"], ["M", "E"]) {
 
-                my $nocheck = ( $arg =~ s/\s*\bNOCHECK\b\s+// );
+                    # We don't need an assert for the whole span if we have an
+                    # intermediate one.
+                    next if defined $string->{M} &&    $i->[0] eq 'S'
+                                                    && $i->[1] eq 'E';
 
-                # Make sure each arg has at least a type and a var name.
-                # An arg of "int" is valid C, but want it to be "int foo".
-                my $argtype = ( $arg =~ m/^(\w+(?:\s*\*+)?)/ )[0];
-                defined $argtype and $argtype =~ s/\s+//g;
+                    my $lower = $string->{$i->[0]} or next;
+                    my $upper = $string->{$i->[1]} or next;
 
-                my $temp_arg = $arg;
-                $temp_arg =~ s/\*//g;
-                $temp_arg =~ s/\s*\bstruct\b\s*/ /g;
-                if ( ($temp_arg ne "...")
-                     && ($temp_arg !~ /\w+\s+(\w+)(?:\[\d+\])?\s*$/) ) {
-                    die_at_end "$func: $arg ($n) doesn't have a name\n";
-                }
-                my $argname = $1;
-                if (!$nocheck and defined $argtype and exists $type_asserts{$argtype}) {
-                    push @typed_args, [ $argtype, $argname ];
-                }
-                if (defined $argname && ($nn||$nz) && !($has_mflag && !$binarycompat)) {
-                    push @names_of_nn, $argname;
+                    # This reduces to either;
+                    #   assert(lower < upper);
+                    # or
+                    #   assert(lower <= upper);
+                    #
+                    # There might also be some derefences, like **lower
+                    push @asserts, "assert("
+                                        . "$lower->{deref}$lower->{argname}"
+                                        . " <$upper->{equal} "
+                                        . "$upper->{deref}$upper->{argname}"
+                                        . ")";
                 }
             }
+
             $ret .= join ", ", @$args;
         }
         else {
@@ -288,6 +541,9 @@ sub generate_proto_h {
         }
         $ret .= " comma_pDEPTH" if $has_depth;
         $ret .= ")";
+
+        push @asserts, @$assertions if $assertions;
+
         my @attrs;
         if ( $flags =~ /r/ ) {
             push @attrs, "__attribute__noreturn__";
@@ -329,7 +585,8 @@ sub generate_proto_h {
                 $argc = 0;
                 my @fmts = grep $args->[$_] =~ /\b(f|pat|fmt)$/, 0..$#$args;
                 if (@fmts != 1) {
-                    die "embed.pl: '$plain_func': can't determine pattern arg\n";
+                    die
+                    "embed.pl: '$plain_func': can't determine pattern arg\n";
                 }
                 $pat = $fmts[0] + 1;
             }
@@ -337,7 +594,8 @@ sub generate_proto_h {
                                 ? '__attribute__format__'
                                 : '__attribute__format__null_ok__';
             if ($plain_func =~ /strftime/) {
-                push @attrs, sprintf "%s(__strftime__,%s1,0)", $macro, $prefix;
+                push @attrs, sprintf "%s(__strftime__,%s1,0)",
+                                     $macro, $prefix;
             }
             else {
                 push @attrs, sprintf "%s(__printf__,%s%d,%s)", $macro,
@@ -355,24 +613,21 @@ sub generate_proto_h {
         $ret .= ";";
         $ret = "/* $ret */" if $has_mflag;
 
-        if ($args_assert_line || @names_of_nn) {
-            $ret .= "\n#${ind}define PERL_ARGS_ASSERT_\U$plain_func\E";
-            if (@names_of_nn) {
-                $ret .= " \\\n";
+        # Hide the prototype from non-authorized code.  This acts kind of like
+        # __attribute__visibility__("hidden") for cases where that can't be
+        # used.
+        $ret = "#${ind}if defined(PERL_CORE) || defined(PERL_EXT)\n"
+             . $ret
+             . " \n#${ind}endif"
+          if $extensions_only;
 
-                my @asserts;
-                foreach my $ix (0..$#names_of_nn) {
-                    push @asserts, "assert($names_of_nn[$ix])";
-                }
-                foreach (@typed_args) {
-                    my ($argtype, $argname) = @$_;
-                    my $nullok = !grep { $_ eq $argname } @names_of_nn;
-                    my $type_assert =
-                        $type_asserts{$argtype} =~ s/__arg__/$argname/gr;
-                    push @asserts,
-                        $nullok ? "assert(!$argname || $type_assert)"
-                                : "assert($type_assert)";
-                }
+        # We don't hide the ARGS_ASSERT macro; having that defined does no
+        # harm, and otherwise some inline functions that are looking for it
+        # would fail to compile.
+        if ($args_assert_line || @asserts) {
+            $ret .= "\n#${ind}define PERL_ARGS_ASSERT_\U$plain_func\E";
+            if (@asserts) {
+                $ret .= " \\\n";
 
                 my $line = "";
                 while(@asserts) {
@@ -433,7 +688,8 @@ sub generate_proto_h {
             # re-align defines so that the definitions line up at the 48th col
             # as much as possible.
             if ($line_data->{sub_type} eq "#define") {
-                $line_data->{line}=~s/^(\s*#\s*define\s+\S+?(?:\([^()]*\))?\s)(\s*)(\S+)/
+                $line_data->{line} =~
+                        s/^(\s*#\s*define\s+\S+?(?:\([^()]*\))?\s)(\s*)(\S+)/
                     sprintf "%-48s%s", $1, $3/e;
             }
         };
@@ -495,7 +751,11 @@ sub multon {
 }
 
 sub embed_h {
-    my ($em, $guard, $funcs) = @_;
+    my (
+        $em,    # file handle
+        $guard, # ifdef text
+        $funcs  # functions to go into this text
+       ) = @_;
 
     my $lines;
     foreach (@$funcs) {
@@ -505,26 +765,68 @@ sub embed_h {
         }
         my $level= $_->{level};
         my $embed= $_->{embed} or next;
-        my ($flags,$retval,$func,$args) = @{$embed}{qw(flags return_type name args)};
+        my ($flags,$retval,$func,$args) =
+                                   @{$embed}{qw(flags return_type name args)};
+        my $full_name = full_name($func, $flags);
+        next if $full_name eq $func;    # Don't output a no-op.
+
         my $ret = "";
         my $ind= $level ? " " : "";
         $ind .= "  " x ($level-1) if $level>1;
         my $inner_ind= $ind ? "  " : " ";
-        if ($flags !~ /[omM]/ or ($flags =~ /m/ && $flags =~ /p/)) {
+
+        if ($flags =~ tr/mp// > 1) {    # Has both m and p
+
+            # Yields
+            #   #define Perl_func  func
+            # which works when there is no thread context.
+            $ret = indent_define($full_name, $func, $ind);
+
+            if ($flags !~ /[T]/) {
+
+                # But when there is the possibility of a thread context
+                # parameter, $ret works only on non-threaded builds
+                my $no_thread_full_define = $ret;
+
+                # And we have to do more when there are threads.  First,
+                # convert the input argument list to 'a', 'b' ....  This keeps
+                # us from having to worry about all the extra stuff in the
+                # input list; stuff like the type declarations, things like
+                # NULLOK, and pointers '*'.
+                my $argname = 'a';
+                my @stripped_args;
+                push @stripped_args, $argname++ for $args->@*;
+                my $arglist = join ",", @stripped_args;
+
+                # In the threaded case, the Perl_ form is expecting an aTHX
+                # first argument.  Use mTHX to match that, which isn't passed
+                # on to the short form name, as that is expecting an implicit
+                # aTHX.  The non-threaded case just uses what we generated
+                # above for the /T/ flag case.
+                my $mTHX_ = "mTHX";
+                $mTHX_ .= ',' if $arglist ne "";
+                $ret = "#${ind}ifdef USE_THREADS\n"
+                     . "#${ind}  define $full_name($mTHX_$arglist)"
+                     .           "  $func($arglist)\n"
+                     . "#${ind}else\n"
+                     . "$ind  $no_thread_full_define" # No \n because no chomp
+                     . "#${ind}endif\n";
+            }
+        }
+        elsif ($flags !~ /[omM]/) {
             my $argc = scalar @$args;
             if ($flags =~ /[T]/) {
-                my $full_name = full_name($func, $flags);
-                next if $full_name eq $func;    # Don't output a no-op.
                 $ret = indent_define($func, $full_name, $ind);
             }
             else {
                 my $use_va_list = $argc && $args->[-1] =~ /\.\.\./;
 
                 if($use_va_list) {
-                    # CPP has trouble with empty __VA_ARGS__ and comma joining,
-                    # so we'll have to eat an extra params here.
+                    # CPP has trouble with empty __VA_ARGS__ and comma
+                    # joining, so we'll have to eat an extra params here.
                     if($argc < 2) {
-                        die "Cannot use ... as the only parameter to a macro ($func)\n";
+                        die "Cannot use ... as the only parameter to a macro"
+                          . " ($func)\n";
                     }
                     $argc -= 2;
                 }
@@ -535,7 +837,7 @@ sub embed_h {
                     $use_va_list ? ("__VA_ARGS__") : ());
                 $ret = "#${ind}define $func($paramlist) ";
                 add_indent($ret,full_name($func, $flags) . "(aTHX");
-		if ($replacelist) {
+                if ($replacelist) {
                     $ret .= ($flags =~ /m/) ? "," : "_ ";
                     $ret .= $replacelist;
                 }
@@ -547,17 +849,34 @@ sub embed_h {
                         die "Can't use W without other args (currently)";
                     }
                 }
-                $ret .= ")\n";
-                if($use_va_list and $flags =~ /v/) {
-                    # Make older ones available only when !MULTIPLICITY or PERL_CORE or PERL_WANT_VARARGS
-                    # These should not be done uncondtionally because existing
-                    # code might call e.g. warn() without aTHX in scope.
-                    $ret = "#${ind}if !defined(MULTIPLICITY) || defined(PERL_CORE) || defined(PERL_WANT_VARARGS)\n" .
-                           $ret .
-                           "#${ind}endif\n";
+                $ret .= ")";
+
+                # For functions that have an old 'perl_' name, create an entry
+                # here while we have all the information, for output later
+                # (when not under NO_SHORT_NAMES)
+                if ($flags =~ /O/) {
+                    my $extra_entry = $ret;
+                    $extra_entry =~ s/define /define perl_/;
+                    $perl_compats{$extra_entry} = 1;
                 }
+
+                $ret .= "\n";
+
+                if($has_compat_macro{$func}) {
+                    # Make older ones available only when !MULTIPLICITY or
+                    # PERL_CORE or PERL_WANT_VARARGS.  These should not be
+                    # done unconditionally because existing code might call
+                    # e.g.  warn() without aTHX in scope.
+                    $ret = "#${ind}if !defined(MULTIPLICITY)"
+                         . " || defined(PERL_CORE)"
+                         . " || defined(PERL_WANT_VARARGS)\n"
+                         . $ret
+                         . "#${ind}endif\n";
+                }
+
             }
-            $ret = "#${ind}ifndef NO_MATHOMS\n$ret#${ind}endif\n" if $flags =~ /b/;
+            $ret = "#${ind}ifndef NO_MATHOMS\n$ret#${ind}endif\n"
+                                                             if $flags =~ /b/;
         }
         $lines .= $ret;
     }
@@ -605,45 +924,20 @@ sub generate_embed_h {
      * disable them.
      */
     #  define sv_setptrobj(rv,ptr,name) sv_setref_iv(rv,name,PTR2IV(ptr))
-    #  define sv_setptrref(rv,ptr)              sv_setref_iv(rv,NULL,PTR2IV(ptr))
+    #  define sv_setptrref(rv,ptr)      sv_setref_iv(rv,NULL,PTR2IV(ptr))
     #endif
 
     #if !defined(PERL_CORE) && !defined(PERL_NOCOMPAT)
 
-    /* Compatibility for various misnamed functions.  All functions
-       in the API that begin with "perl_" (not "Perl_") take an explicit
-       interpreter context pointer.
-       The following are not like that, but since they had a "perl_"
-       prefix in previous versions, we provide compatibility macros.
-     */
-    #  define perl_atexit(a,b)          call_atexit(a,b)
+    /* Compatibility for this renamed function. */
+    #  define perl_atexit(a,b)          Perl_call_atexit(aTHX_ a,b)
+
+    /* Compatibility for these functions that had a 'perl_' prefix before
+     * 'Perl_' became the standard */
     END
 
-    foreach (@$all) {
-        my $embed= $_->{embed} or next;
-        my ($flags, $retval, $func, $args) = @{$embed}{qw(flags return_type name args)};
-        next unless $flags =~ /O/;
-
-        my $alist = join ",", @az[0..$#$args];
-        my $ret = "#  define perl_$func($alist) ";
-        print $em add_indent($ret,"$func($alist)\n");
-    }
-
-    my @nocontext;
-    {
-        my (%has_va, %has_nocontext);
-        foreach (@$all) {
-            my $embed= $_->{embed}
-                or next;
-            ++$has_va{$embed->{name}} if @{$embed->{args}} and $embed->{args}[-1] =~ /\.\.\./;
-            ++$has_nocontext{$1} if $embed->{name} =~ /(.*)_nocontext/;
-        }
-
-        @nocontext = sort grep {
-            $has_nocontext{$_}
-                && !/printf/ # Not clear to me why these are skipped but they are.
-        } keys %has_va;
-    }
+    # These have been saved up for now
+    print $em map { "$_\n" } sort keys %perl_compats;
 
     print $em <<~'END';
 
@@ -651,10 +945,12 @@ sub generate_embed_h {
        provides a set of compatibility functions that don't take an
        extra argument but grab the context pointer using the macro dTHX.
      */
-    #if defined(MULTIPLICITY) && !defined(PERL_NO_SHORT_NAMES)
+    #if defined(MULTIPLICITY)           \
+     && !defined(PERL_NO_SHORT_NAMES)   \
+     && !defined(PERL_WANT_VARARGS)
     END
 
-    foreach (@nocontext) {
+    foreach (@have_compatibility_macros) {
         print $em indent_define($_, "Perl_${_}_nocontext", "  ");
     }
 
@@ -667,7 +963,7 @@ sub generate_embed_h {
     /* undefined symbols, point them back at the usual ones */
     END
 
-    foreach (@nocontext) {
+    foreach (@have_compatibility_macros) {
         print $em indent_define("Perl_${_}_nocontext", "Perl_$_", "  ");
     }
 
@@ -712,7 +1008,8 @@ sub generate_embedvar_h {
 sub update_headers {
     my ($all, $api, $ext, $core) = setup_embed(); # see regen/embed_lib.pl
     generate_proto_h($all);
-    die_at_end "$unflagged_pointers pointer arguments to clean up\n" if $unflagged_pointers;
+    die_at_end "$unflagged_pointers pointer arguments to clean up\n"
+                                                       if $unflagged_pointers;
     generate_embed_h($all, $api, $ext, $core);
     generate_embedvar_h();
     die "$error_count errors found" if $error_count;
@@ -720,4 +1017,4 @@ sub update_headers {
 
 update_headers() unless caller;
 
-# ex: set ts=8 sts=4 sw=4 noet:
+# ex: set ts=8 sts=4 sw=4 et:

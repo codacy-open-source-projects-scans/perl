@@ -36,9 +36,14 @@ while (<DATA>) {
 # If this hash changes, make sure the equivalent hash in
 # lib/B/Deparse.pm (%feature_keywords) is also updated.
 my %feature_kw = (
+    # keyword => feature name
     state     => 'state',
     say       => 'say',
+    given     => 'switch',
+    when      => 'switch',
+    default   => 'switch',
     # continue is already a keyword
+    break     => 'switch',
     evalbytes => 'evalbytes',
     __SUB__   => '__SUB__',
     fc        => 'fc',
@@ -52,8 +57,8 @@ my %feature_kw = (
     method    => 'class',
     ADJUST    => 'class',
     __CLASS__ => 'class',
-    any       => 'any',
-    all       => 'all',
+    any       => 'keyword_any',
+    all       => 'keyword_all',
 );
 
 my %pos = map { ($_ => 1) } @{$by_strength{'+'}};
@@ -93,7 +98,7 @@ sub perl_keyword
 
   if ($k eq 'elseif') {
     return <<END;
-Perl_ck_warner_d(aTHX_ packWARN(WARN_SYNTAX), "elseif should be elsif");
+ck_warner_d(packWARN(WARN_SYNTAX), "elseif should be elsif");
 END
   }
   elsif (my $feature = $feature_kw{$k}) {
@@ -110,27 +115,24 @@ END
 read_only_bottom_close_and_rename($_, [$0]) foreach $c, $h;
 
 
-# coresub_op in op.c expects __FILE__, __LINE__ and __PACKAGE__ to be the
-# first three.
-
 __END__
 
  NULL
--__FILE__
--__LINE__
--__PACKAGE__
 -__CLASS__
 +__DATA__
 +__END__
+-__FILE__
+-__LINE__
+-__PACKAGE__
 -__SUB__
 +ADJUST
 +AUTOLOAD
 +BEGIN
-+UNITCHECK
++CHECK
 +DESTROY
 +END
 +INIT
-+CHECK
++UNITCHECK
 -abs
 -accept
 -alarm
@@ -141,6 +143,7 @@ __END__
 -bind
 -binmode
 -bless
+-break
 -caller
 +catch
 -chdir
@@ -160,6 +163,7 @@ __END__
 -crypt
 -dbmclose
 -dbmopen
++default
 +defer
 +defined
 +delete
@@ -221,6 +225,7 @@ __END__
 -getservent
 -getsockname
 -getsockopt
++given
 +glob
 -gmtime
 +goto
@@ -353,8 +358,8 @@ __END__
 -time
 -times
 +tr
-+try
 -truncate
++try
 -uc
 -ucfirst
 -umask
@@ -373,6 +378,7 @@ __END__
 -waitpid
 -wantarray
 -warn
++when
 +while
 -write
 -x

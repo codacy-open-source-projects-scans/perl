@@ -101,7 +101,7 @@ chop		chop			ck_spair	mts%	L
 schop		scalar chop		ck_null		stu%	S?
 chomp		chomp			ck_spair	mTs%	L
 schomp		scalar chomp		ck_null		sTu%	S?
-defined		defined operator	ck_defined	isu%	S?
+defined		defined operator	ck_defined	ifsu%	S?
 undef		undef operator		ck_fun		s%	R?
 study		study			ck_fun		su%	S?
 pos		match position		ck_fun		stu%	R?
@@ -178,6 +178,8 @@ complement	1's complement (~)	ck_bitop	fst1	S
 ncomplement	numeric 1's complement (~)	ck_bitop	fsT1	S
 scomplement	string 1's complement (~)	ck_null	fsT1	S
 
+smartmatch	smart match		ck_smartmatch	s2
+
 # High falutin' math.
 
 atan2		atan2			ck_fun		fsT@	S S
@@ -200,6 +202,7 @@ abs		abs			ck_fun		fsTu%	S?
 
 length		length			ck_length	ifsTu%	S?
 substr		substr			ck_substr	st@	S S S? S?
+substr_left	substr left		ck_substr	sT@	S S S? S?
 vec		vec			ck_fun		ist@	S S S
 
 index		index			ck_index	isT@	S S S?
@@ -331,6 +334,13 @@ method_named	method with known name	ck_null		d.
 method_super	super with known name	ck_null		d.
 method_redir	redirect method with known name	ck_null	d.
 method_redir_super	redirect super method with known name	ck_null	d.
+
+entergiven	given()			ck_null		d|
+leavegiven	leave given block	ck_null		1
+enterwhen	when()			ck_null		d|
+leavewhen	leave when block	ck_null		1
+break		break			ck_null		0
+continue	continue		ck_null		0
 
 # I/O.
 
@@ -601,3 +611,7 @@ methstart	method start		ck_null		+
 initfield	initialise field	ck_null		+
 
 classname	class name		ck_classname		0t
+
+multiparam	signature processing	ck_null		+
+paramtest	signature argument value test	ck_null	|
+paramstore	signature parameter default expression	ck_null	1

@@ -1034,15 +1034,15 @@ package My::Pod::Checker {      # Extend Pod::Checker
         return unless defined $running_CFL_text{$addr};
 
         while ($running_CFL_text{$addr} =~ m{
-                                ( (?: \w+ \s+ )* )  # The phrase before, if any
-                                \b [Ss]ee \s+
-                                ( ( [^L] )
-                                  <
-                                  ( [^<]*? )  # The not < excludes nested C<L<...
-                                  >
-                                )
-                                ( \s+ (?: under | in ) \s+ L< )?
-                            }xg)
+                ( (?: \w+ (?: ' (?: d | ll | m | re | s | ve ) )? \s+ )* )  # The phrase before, if any
+                \b [Ss]ee \s+
+                ( ( [^L] )
+                <
+                ( [^<]*? )  # The not < excludes nested C<L<...
+                >
+                )
+                ( \s+ (?: under | in ) \s+ L< )?
+            }xg)
         {
             my $prefix = $1 // "";
             my $construct = $2;     # The whole thing, like C<...>
@@ -1531,7 +1531,7 @@ if ($add_link) {
     }
     my_safer_print($copy_fh, $HEADER);
     foreach (sort { lc $a cmp lc $b } keys %valid_modules) {
-        my_safer_print($copy_fh, $_, "\n");
+        my_safer_print($copy_fh, $_, "\n") if $valid_modules{$_} > 0;
     }
 
     # The rest of the db file is output unchanged.
@@ -1769,7 +1769,14 @@ sub is_pod_file {
                     $checker->name($name);
                     $id_to_checker{$name} = $checker
                         if $filename =~ m{^cpan/};
-                    $valid_modules{$name} = 1;
+
+                    # This file is a pod with a NAME, so it is ok to link to
+                    # it.  We don't need any other confirmation to know this.
+                    # So indicate that to the rest of the program.  But, use a
+                    # negative value to indicate to not save this file in the
+                    # db.  Otherwise we get lots of unnecessary entries there.
+                    # See GH #23231
+                    $valid_modules{$name} = -1;
                 }
             }
             elsif ($filename =~ m{^cpan/}) {
@@ -1810,6 +1817,9 @@ else { # No input files -- go find all the possibilities.
 
     # Add ourselves to the test
     push @files, "t/porting/podcheck.t";
+
+    # and the test.pl documentation
+    push @files, "t/test_pl.pod";
 }
 
 # Now we know how many tests there will be.
@@ -2146,7 +2156,7 @@ if (! $has_input_files) {   # No xref unless processing all files
 # changes.
 if ($regen) {
     foreach (sort { lc $a cmp lc $b } keys %valid_modules) {
-        my_safer_print($copy_fh, $_, "\n");
+        my_safer_print($copy_fh, $_, "\n") if $valid_modules{$_} > 0;
     }
 }
 

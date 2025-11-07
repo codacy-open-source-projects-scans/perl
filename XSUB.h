@@ -53,12 +53,12 @@ XSUB's aliases was used to invoke it.  See L<perlxs/"The ALIAS: Keyword">.
 =for apidoc Am|SV*|ST|int ix
 Used to access elements on the XSUB's stack.
 
-=for apidoc Ay||XS|name
+=for apidoc Am||XS|name
 Macro to declare an XSUB and its C parameter list.  This is handled by
 C<xsubpp>.  It is the same as using the more explicit C<XS_EXTERNAL> macro; the
 latter is preferred.
 
-=for apidoc Ayu||XS_INTERNAL|name
+=for apidoc Amu||XS_INTERNAL|name
 Macro to declare an XSUB and its C parameter list without exporting the symbols.
 This is handled by C<xsubpp> and generally preferable over exporting the XSUB
 symbols unnecessarily.
@@ -67,10 +67,10 @@ symbols unnecessarily.
 XS_INTERNAL marked 'u' because declaring a function static within our test
 function doesn't work
 
-=for apidoc Ay||XS_EXTERNAL|name
+=for apidoc Am||XS_EXTERNAL|name
 Macro to declare an XSUB and its C parameter list explicitly exporting the symbols.
 
-=for apidoc Ay||XSPROTO|name
+=for apidoc Am||XSPROTO|name
 Macro used by C<L</XS_INTERNAL>> and C<L</XS_EXTERNAL>> to declare a function
 prototype.  You probably shouldn't be using this directly yourself.
 
@@ -122,9 +122,6 @@ is a lexical C<$_> in scope.
  *     typedef SwigPerlWrapper *SwigPerlWrapperPtr;
  *
  * This code needs to be compilable under both C and C++.
- *
- * Don't forget to change the __attribute__unused__ version of XS()
- * below too if you change XSPROTO() here.
  */
 
 /* XS_INTERNAL is the explicit static-linkage variant of the default
@@ -141,17 +138,12 @@ is a lexical C<$_> in scope.
 #undef XS_INTERNAL
 #if defined(__CYGWIN__) && defined(USE_DYNAMIC_LOADING)
 #  define XS_EXTERNAL(name) __declspec(dllexport) XSPROTO(name)
-#  define XS_INTERNAL(name) STATIC XSPROTO(name)
 #elif defined(__cplusplus)
 #  define XS_EXTERNAL(name) extern "C" XSPROTO(name)
-#  define XS_INTERNAL(name) static XSPROTO(name)
-#elif defined(HASATTRIBUTE_UNUSED)
-#  define XS_EXTERNAL(name) void name(pTHX_ CV* cv __attribute__unused__)
-#  define XS_INTERNAL(name) STATIC void name(pTHX_ CV* cv __attribute__unused__)
 #else
 #  define XS_EXTERNAL(name) XSPROTO(name)
-#  define XS_INTERNAL(name) STATIC XSPROTO(name)
 #endif
+#define XS_INTERNAL(name) STATIC XSPROTO(name)
 
 /* We do export xsub symbols by default for the public XS macro.
  * Try explicitly using XS_INTERNAL/XS_EXTERNAL instead, please. */

@@ -63,10 +63,6 @@
         ++PL_sv_count;                                  \
     } STMT_END
 
-/* Perl_more_sv lives in sv.c, we don't want to inline it.
- * but the function declaration seems to be needed. */
-SV* Perl_more_sv(pTHX);
-
 /* new_SV(): return a new, empty SV head */
 PERL_STATIC_INLINE SV*
 Perl_new_sv(pTHX_ const char *file, int line, const char *func)
@@ -179,6 +175,14 @@ ALIGNED_TYPE(XPVOBJ);
 #define copy_length(type, last_member) \
         STRUCT_OFFSET(type, last_member) \
         + sizeof (((type*)SvANY((const SV *)0))->last_member)
+
+static const struct body_details fake_hv_with_aux =
+    /* The SVt_IV arena is used for (larger) PVHV bodies.  */
+    { sizeof(ALIGNED_TYPE_NAME(XPVHV_WITH_AUX)),
+      copy_length(XPVHV, xhv_max),
+      0,
+      SVt_PVHV, TRUE, NONV, HASARENA,
+      FIT_ARENA(0, sizeof(ALIGNED_TYPE_NAME(XPVHV_WITH_AUX))) };
 
 static const struct body_details bodies_by_type[] = {
     /* HEs use this offset for their arena.  */
@@ -299,6 +303,8 @@ static const struct body_details bodies_by_type[] = {
 #if !(NVSIZE <= IVSIZE)
 #  define new_XNV()    safemalloc(sizeof(XPVNV))
 #endif
+#define new_XPV()    safemalloc(sizeof(XPV))
+#define new_XPVIV()    safemalloc(sizeof(XPVIV))
 #define new_XPVNV()    safemalloc(sizeof(XPVNV))
 #define new_XPVMG()    safemalloc(sizeof(XPVMG))
 
@@ -309,6 +315,8 @@ static const struct body_details bodies_by_type[] = {
 #if !(NVSIZE <= IVSIZE)
 #  define new_XNV()    new_body_allocated(SVt_NV)
 #endif
+#define new_XPV()    new_body_allocated(SVt_PV)
+#define new_XPVIV()    new_body_allocated(SVt_PVIV)
 #define new_XPVNV()    new_body_allocated(SVt_PVNV)
 #define new_XPVMG()    new_body_allocated(SVt_PVMG)
 
@@ -328,13 +336,11 @@ static const struct body_details bodies_by_type[] = {
 #ifndef PURIFY
 
 /* grab a new thing from the arena's free list, allocating more if necessary. */
-#define new_body_from_arena(xpv, root_index, type_meta) \
+#define new_body_from_arena(xpv, root_index) \
     STMT_START { \
         void ** const r3wt = &PL_body_roots[root_index]; \
         xpv = (PTR_TBL_ENT_t*) (*((void **)(r3wt))      \
-          ? *((void **)(r3wt)) : Perl_more_bodies(aTHX_ root_index, \
-                                             type_meta.body_size,\
-                                             type_meta.arena_size)); \
+          ? *((void **)(r3wt)) : Perl_more_bodies(aTHX_ root_index)); \
         *(r3wt) = *(void**)(xpv); \
     } STMT_END
 
@@ -342,7 +348,7 @@ PERL_STATIC_INLINE void *
 S_new_body(pTHX_ const svtype sv_type)
 {
     void *xpv;
-    new_body_from_arena(xpv, sv_type, bodies_by_type[sv_type]);
+    new_body_from_arena(xpv, sv_type);
     return xpv;
 }
 
@@ -350,14 +356,6 @@ S_new_body(pTHX_ const svtype sv_type)
 
 static const struct body_details fake_rv =
     { 0, 0, 0, SVt_IV, FALSE, NONV, NOARENA, 0 };
-
-static const struct body_details fake_hv_with_aux =
-    /* The SVt_IV arena is used for (larger) PVHV bodies.  */
-    { sizeof(ALIGNED_TYPE_NAME(XPVHV_WITH_AUX)),
-      copy_length(XPVHV, xhv_max),
-      0,
-      SVt_PVHV, TRUE, NONV, HASARENA,
-      FIT_ARENA(0, sizeof(ALIGNED_TYPE_NAME(XPVHV_WITH_AUX))) };
 
 /*
 =for apidoc newSV_type
@@ -1001,6 +999,30 @@ Perl_sv_setpv_freshbuf(pTHX_ SV *const sv)
                                    functions use it */
     SvTAINT(sv);
     return SvPVX(sv);
+}
+
+/*
+=for apidoc newSVsv
+=for apidoc_item newSVsv_flags
+=for apidoc_item newSVsv_nomg
+
+These create a new SV which is an exact duplicate of the original SV
+(using C<newSVsv_flags_NN>.)
+
+They differ only in that C<newSVsv> performs 'get' magic; C<newSVsv_nomg> skips
+any magic; and C<newSVsv_flags> allows you to explicitly set a C<flags>
+parameter.
+
+=cut
+*/
+
+PERL_STATIC_INLINE SV *
+Perl_newSVsv_flags(pTHX_ SV *const old, I32 flags)
+{
+    if (!old)
+        return NULL;
+
+    return newSVsv_flags_NN(old, flags);
 }
 
 /*

@@ -234,7 +234,7 @@ use strict;
                             # substr starts off with 4 bits set in
                             # ck_fun(), but since it never has more than 7
                             # args, bit 3 is later stolen
-                            qw(substr);
+                            qw(substr substr_left);
 
     $args4{$_} = 1 for  keys %maxarg,
                         grep !$args0{$_} && !$args1{$_}
@@ -804,7 +804,7 @@ addbits('coreargs',
    #2 reserved for OPpDONT_INIT_GV in rv2gv
    #4 reserved for OPpALLOW_FAKE   in rv2gv
     6 => qw(OPpCOREARGS_SCALARMOD $MOD  ), # \$ rather than \[$@%*]
-    7 => qw(OPpCOREARGS_PUSHMARK  MARK  ), # Call pp_pushmark
+    7 => qw(OPpCOREARGS_PUSHMARK  MARK  ), # Call PUSHMARK
 );
 
 
@@ -925,12 +925,19 @@ addbits('argdefelem',
     6 => qw(OPpARG_IF_FALSE  IF_FALSE),
 );
 
+# These paramtest bits must be in the same place as argdefelem
+addbits('paramtest',
+    7 => qw(OPpPARAM_IF_UNDEF  IF_UNDEF),
+    6 => qw(OPpPARAM_IF_FALSE  IF_FALSE),
+);
+
 addbits('helemexistsor',
     7 => qw(OPpHELEMEXISTSOR_DELETE DELETE),
 );
 
 addbits('methstart',
-    7 => qw(OPpINITFIELDS INITFIELDS),
+    7 => qw(OPpINITFIELDS  INITFIELDS),
+    6 => qw(OPpSELF_IN_PAD SELF_IN_PAD), # $self has already been set up in pad
 );
 
 addbits('initfield',

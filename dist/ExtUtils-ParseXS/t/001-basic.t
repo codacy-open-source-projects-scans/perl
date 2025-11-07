@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use Test::More tests => 472;
+use Test::More;
 use Config;
 use DynaLoader;
 use ExtUtils::CBuilder;
@@ -91,18 +91,24 @@ sub test_many {
 
         tie *FH, 'Capture';
         my $pxs = ExtUtils::ParseXS->new;
+        my $err;
         my $stderr = PrimitiveCapture::capture_stderr(sub {
             eval {
                 $pxs->process_file( filename => \$text, output => \*FH);
-            }
+            };
+            $err = $@;
         });
+        if (defined $err and length $err) {
+            $stderr = "" unless defined $stderr;
+            $stderr = $err . $stderr;
+        }
 
         my $out = tied(*FH)->content;
         untie *FH;
 
         # trim the output to just the function in question to make
         # test diagnostics smaller.
-        if ($out =~ /\S/) {
+        if (defined($prefix) and !length($err) and $out =~ /\S/) {
             $out =~ s/\A.*? (^\w+\(${prefix} .*? ^}).*\z/$1/xms
                 or do {
                     # print STDERR $out;
@@ -299,7 +305,7 @@ tie *FH, 'Capture';
 my $stderr = PrimitiveCapture::capture_stderr(sub {
   $pxs->process_file(filename => 'XSBroken.xs', output => \*FH);
 });
-like $stderr, '/No INPUT definition/', "Exercise typemap error";
+like $stderr, '/Error: no INPUT definition/', "Exercise typemap error";
 }
 #####################################################################
 
@@ -354,28 +360,35 @@ like $stderr, '/No INPUT definition/', "Exercise typemap error";
 { # Alias check
   my $pxs = ExtUtils::ParseXS->new;
   tie *FH, 'Capture';
+  my $erred;
   my $stderr = PrimitiveCapture::capture_stderr(sub {
-    $pxs->process_file(
-      filename => 'XSAlias.xs',
-      output => \*FH,
-      prototypes => 1);
-  });
+      eval {
+        $pxs->process_file(
+          filename => 'XSAlias.xs',
+          output => \*FH,
+          prototypes => 1);
+      };
+      $erred = 1 if $@;
+      print STDERR "got eval err [$@]\n" if $@;
+    });
+  die $stderr if $erred; # don't hide stderr if code errors out
+
   my $content = tied(*FH)->{buf};
   my $count = 0;
   $count++ while $content=~/^XS_EUPXS\(XS_My_do\)\n\{/mg;
   is $stderr,
-    "Warning: Aliases 'pox' and 'dox', 'lox' have"
+    "Warning: aliases 'pox' and 'dox', 'lox' have"
     . " identical values of 1 in XSAlias.xs, line 9\n"
     . "    (If this is deliberate use a symbolic alias instead.)\n"
-    . "Warning: Conflicting duplicate alias 'pox' changes"
+    . "Warning: conflicting duplicate alias 'pox' changes"
     . " definition from '1' to '2' in XSAlias.xs, line 10\n"
-    . "Warning: Aliases 'docks' and 'dox', 'lox' have"
+    . "Warning: aliases 'docks' and 'dox', 'lox' have"
     . " identical values of 1 in XSAlias.xs, line 11\n"
-    . "Warning: Aliases 'xunx' and 'do' have identical values"
+    . "Warning: aliases 'xunx' and 'do' have identical values"
     . " of 0 - the base function in XSAlias.xs, line 13\n"
-    . "Warning: Aliases 'do' and 'xunx', 'do' have identical values"
+    . "Warning: aliases 'do' and 'xunx', 'do' have identical values"
     . " of 0 - the base function in XSAlias.xs, line 14\n"
-    . "Warning: Aliases 'xunx2' and 'do', 'xunx' have"
+    . "Warning: aliases 'xunx2' and 'do', 'xunx' have"
     . " identical values of 0 - the base function in XSAlias.xs, line 15\n"
     ,
     "Saw expected warnings from XSAlias.xs in AUTHOR_WARNINGS mode";
@@ -418,7 +431,7 @@ EOF_CONTENT
   my $count = 0;
   $count++ while $content=~/^XS_EUPXS\(XS_My_do\)\n\{/mg;
   is $stderr,
-    "Warning: Conflicting duplicate alias 'pox' changes"
+    "Warning: conflicting duplicate alias 'pox' changes"
     . " definition from '1' to '2' in XSAlias.xs, line 10\n",
     "Saw expected warnings from XSAlias.xs";
 
@@ -705,7 +718,7 @@ EOF
         $pxs->process_file( filename => \$text, output => \*FH);
     });
 
-    like($stderr, qr/No INPUT definition for type 'Foo::Bar'/,
+    like($stderr, qr/Error: no INPUT definition for type 'Foo::Bar'/,
                     "No INPUT definition");
 }
 
@@ -992,13 +1005,13 @@ EOF
         }
     });
 
-    like $stderr, qr{\Qparameter type not allowed under -noargtypes},
+    like $stderr, qr{\QError: parameter type not allowed under -noargtypes},
                  "no type under -noargtypes";
-    like $stderr, qr{\Qlength() pseudo-parameter not allowed under -noargtypes},
+    like $stderr, qr{\QError: length() pseudo-parameter not allowed under -noargtypes},
                  "no length under -noargtypes";
-    like $stderr, qr{\Qparameter IN/OUT modifier not allowed under -noinout},
+    like $stderr, qr{\QError: parameter IN/OUT modifier not allowed under -noinout},
                  "no IN/OUT under -noinout";
-    like $stderr, qr{\QUnparseable XSUB parameter: '+++'},
+    like $stderr, qr{\QError: unparseable XSUB parameter: '+++'},
                  "unparseable parameter";
 }
 
@@ -1054,7 +1067,7 @@ EOF
         }
     });
 
-    like $stderr, qr{\Qfurther XSUB parameter seen after ellipsis},
+    like $stderr, qr{\QError: further XSUB parameter seen after ellipsis},
                  "further XSUB parameter seen after ellipsis";
 }
 
@@ -1119,7 +1132,7 @@ EOF
             ],
             [ 0, 0, qr/usage\(cv,\s+"aaa"\)/,                "usage"    ],
             [ 0, 0, qr/\Qnew(aaa)/,                          "autocall" ],
-            [ 1, 0, qr/Ignoring 'static' type modifier/,     "warning"  ],
+            [ 1, 0, qr/Warning: ignoring 'static' type modifier:/, "warning" ],
         ],
 
         [
@@ -1131,7 +1144,7 @@ EOF
             ],
             [ 0, 0, qr/usage\(cv,\s+"aaa"\)/,                "usage"    ],
             [ 0, 0, qr/\Qfoo(aaa)/,                          "autocall" ],
-            [ 1, 0, qr/Ignoring 'static' type modifier/,     "warning"  ],
+            [ 1, 0, qr/Warning: ignoring 'static' type modifier:/, "warning" ],
         ],
 
         [
@@ -1187,6 +1200,58 @@ EOF
             [ 0, 0, qr/usage\(cv,\s+"THIS, ddd"\)/,          "usage"    ],
             [ 0, 0, qr/const X__Y\s*\*\s*THIS\s*=\s*my_in/,  "var decl" ],
             [ 0, 0, qr/\QTHIS->hhh(ddd)/,                    "autocall" ],
+        ],
+
+        [
+            "C++: only const",
+            [
+                'void',
+                'foo() const',
+            ],
+            [ 1, 0, qr/\Qconst modifier only allowed on XSUBs which are C++ methods/,
+                "got expected err" ],
+        ],
+
+        # autocall variants with const
+
+        [
+            "C++: static const",
+            [ Q(<<'EOF') ],
+                |static int
+                |X::Y::foo() const
+EOF
+            [ 0, 0, qr/\QRETVAL = X::Y::foo()/,
+                "autocall doesn't have const" ],
+        ],
+
+        [
+            "C++: static new const",
+            [ Q(<<'EOF') ],
+                |static int
+                |X::Y::new() const
+EOF
+            [ 0, 0, qr/\QRETVAL = X::Y()/,
+                "autocall doesn't have const" ],
+        ],
+
+        [
+            "C++: const",
+            [ Q(<<'EOF') ],
+                |int
+                |X::Y::foo() const
+EOF
+            [ 0, 0, qr/\QRETVAL = THIS->foo()/,
+                "autocall doesn't have const" ],
+        ],
+
+        [
+            "C++: new const",
+            [ Q(<<'EOF') ],
+                |int
+                |X::Y::new() const
+EOF
+            [ 0, 0, qr/\QRETVAL = new X::Y()/,
+                "autocall doesn't have const" ],
         ],
 
         [
@@ -1346,6 +1411,130 @@ EOF
     test_many($preamble, 'XS_Foo_', \@test_fns);
 }
 
+
+{
+    # Test return type declarations
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES: DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "NO_OUTPUT",
+            [ Q(<<'EOF') ],
+                |NO_OUTPUT int
+                |foo()
+EOF
+            [ 0, 0, qr/\QRETVAL = foo();/, "has autocall"     ],
+            [ 0, 1, qr/\bTARG/,            "no setting TARG"  ],
+            [ 0, 1, qr/\QST(0)/,           "no setting ST(0)" ],
+        ],
+        [
+            "xsub decl on one line",
+            [ Q(<<'EOF') ],
+                | int foo(A, int  B )
+                |    char *A
+EOF
+            [ 0, 0, qr/^\s+char \*\s+A\s+=/m,  "has A decl"    ],
+            [ 0, 0, qr/^\s+int\s+B\s+=/m,      "has B decl"    ],
+            [ 0, 0, qr/\QRETVAL = foo(A, B);/, "has autocall"  ],
+        ],
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
+
+{
+    # Test XSUB declarations declarations
+    # Generates errors which don't result in an XSUB being emitted,
+    # so use 'undef' in the test_many() call to not strip down output
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES: DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "extern C",
+            [ Q(<<'EOF') ],
+                |extern "C"   int
+                |foo()
+EOF
+            [ 0, 0, qr/^extern "C"\nXS_EUPXS\(XS_Foo_foo\);/m,
+                    "has extern decl" ],
+        ],
+        [
+            "defn too short",
+            [ Q(<<'EOF') ],
+                |int
+EOF
+            [ 1, 0, qr/Error: function definition too short 'int'/, "got err" ],
+        ],
+        [
+            "defn not parseable 1",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(aaa
+                |    CODE:
+                |        AAA
+EOF
+            [ 1, 0, qr/\QError: cannot parse function definition from 'foo(aaa' in\E.*line 6/,
+                    "got err" ],
+        ],
+        [
+            "defn not parseable 2",
+            [ Q(<<'EOF') ],
+                |int
+                |fo o(aaa)
+EOF
+            [ 1, 0, qr/\QError: cannot parse function definition from 'fo o(aaa)' in\E.*line 6/,
+                    "got err" ],
+        ],
+
+        # note that  issuing this warning is somewhat controversial:
+        # see GH 19661. But while we continue to warn, test that we get a
+        # warning.
+        [
+            "dup fn warning",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(aaa)
+                |
+                |int
+                |foo(aaa)
+EOF
+            [ 1, 0, qr/\QWarning: duplicate function definition 'foo' detected in\E.*line 9/,
+                    "got warn" ],
+        ],
+        [
+            "dup fn warning",
+            [ Q(<<'EOF') ],
+                |#if X
+                |int
+                |foo(aaa)
+                |
+                |#else
+                |int
+                |foo(aaa)
+                |#endif
+EOF
+            [ 1, 1, qr/\QWarning: duplicate function definition/,
+                    "no warning" ],
+        ],
+    );
+
+    test_many($preamble, undef, \@test_fns);
+}
+
+
 {
     # check that suitable "usage: " error strings are generated
 
@@ -1366,6 +1555,58 @@ EOF
             ],
             [ 0, 0, qr/usage\(cv,\s+"a, b, d=  999, ..."\)/,     ""    ],
         ]
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
+{
+    # misc checks for length() pseudo-parameter
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES: DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "length() basic",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(char *s, int length(s))
+EOF
+            [ 0, 0, qr{^\s+STRLEN\s+STRLEN_length_of_s;}m,  "decl STRLEN" ],
+            [ 0, 0, qr{^\s+int\s+XSauto_length_of_s;}m,     "decl int"    ],
+
+            [ 0, 0, qr{^ \s+ \Qchar *\E \s+
+                        \Qs = (char *)SvPV(ST(0), STRLEN_length_of_s);}xm,
+                                                            "decl s"      ],
+
+            [ 0, 0, qr{^\s+\QXSauto_length_of_s = STRLEN_length_of_s}m,
+                                                            "assign"     ],
+
+            [ 0, 0, qr{^\s+\Qfoo(s, XSauto_length_of_s);}m, "autocall"   ],
+        ],
+        [
+            "length() default value",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(char *s, length(s) = 0)
+EOF
+            [ 1, 0, qr{\QError: default value not allowed on length() parameter 's'\E.*line 6},
+                   "got expected error" ],
+        ],
+        [
+            "length() no matching var",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(length(s))
+EOF
+            [ 1, 0, qr{\QError: length() on non-parameter 's'\E.*line 6},
+                   "got expected error" ],
+        ],
     );
 
     test_many($preamble, 'XS_Foo_', \@test_fns);
@@ -1416,6 +1657,16 @@ EOF
         ],
 
         [
+            "autocall args empty C_ARGS",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(int  a)
+                |    C_ARGS:
+EOF
+            [ 0, 0, qr/\Qfoo()/,  "" ],
+        ],
+
+        [
             # Whether this is sensible or not is another matter.
             # For now, just check that it works as-is.
             "autocall args C_ARGS multi-line",
@@ -1444,6 +1695,13 @@ EOF
         |
         |PROTOTYPES: DISABLE
         |
+        |TYPEMAP: <<EOF
+        |mybool        T_MYBOOL
+        |
+        |OUTPUT
+        |T_MYBOOL
+        |    ${"$var" eq "RETVAL" ? \"$arg = boolSV($var);" : \"sv_setsv($arg, boolSV($var));"}
+        |EOF
 EOF
 
     my @test_fns = (
@@ -1468,10 +1726,321 @@ EOF
             [ 0, 0, qr/sv_setiv.*ST\(2\).*\bC\b/,      "set C"    ],
             [ 0, 0, qr/\QSvSETMAGIC(ST(2))/,           "set magic C" ],
 
-            [ 0, 0, qr/\QEXTEND(SP,2)/,                "extend"   ],
+            [ 0, 1, qr/\bEXTEND\b/,                    "NO extend"       ],
 
-            [ 0, 0, qr/sv_setiv.*ST\(0\).*\bD\b/,      "set D"    ],
-            [ 0, 0, qr/sv_setiv.*ST\(1\).*\bE\b/,      "set E"    ],
+            [ 0, 0, qr/\b\QTARGi((IV)D, 1);\E\s+\QST(0) = TARG;\E\s+\}\s+\Q++SP;/, "set D"    ],
+            [ 0, 0, qr/\b\Qsv_setiv(RETVALSV, (IV)E);\E\s+\QST(1) = RETVALSV;\E\s+\}\s+\Q++SP;/, "set E"    ],
+        ],
+
+        # Various types of OUTLIST where the param is the only value to
+        # be returned. Includes some types which might be optimised.
+
+        [
+            "OUTLIST void/bool",
+            [
+                'void',
+                'foo(OUTLIST bool A)',
+            ],
+            [ 0, 0, qr/\bXSprePUSH;/,                    "XSprePUSH"       ],
+            [ 0, 1, qr/\bEXTEND\b/,                      "NO extend"       ],
+            [ 0, 0, qr/\b\QRETVALSV = sv_newmortal();/ , "create new mortal" ],
+            [ 0, 0, qr/\b\Qsv_setsv(RETVALSV, boolSV(A));/, "set RETVALSV"   ],
+            [ 0, 0, qr/\b\QST(0) = RETVALSV;\E\s+\}\s+\Q++SP;/, "store RETVALSV"],
+            [ 0, 0, qr/\b\QXSRETURN(1);/,                "XSRETURN(1)"     ],
+        ],
+        [
+            "OUTLIST void/mybool",
+            [
+                'void',
+                'foo(OUTLIST mybool A)',
+            ],
+            [ 0, 0, qr/\bXSprePUSH;/,                    "XSprePUSH"       ],
+            [ 0, 1, qr/\bEXTEND\b/,                      "NO extend"       ],
+            [ 0, 0, qr/\b\QRETVALSV = sv_newmortal();/ , "create new mortal" ],
+            [ 0, 0, qr/\b\Qsv_setsv(RETVALSV, boolSV(A));/, "set RETVALSV"   ],
+            [ 0, 0, qr/\b\QST(0) = RETVALSV;\E\s+\}\s+\Q++SP;/, "store RETVALSV"],
+            [ 0, 0, qr/\b\QXSRETURN(1);/,                "XSRETURN(1)"     ],
+        ],
+        [
+            "OUTLIST void/int",
+            [
+                'void',
+                'foo(OUTLIST int A)',
+            ],
+            [ 0, 0, qr/\bXSprePUSH;/,                    "XSprePUSH"       ],
+            [ 0, 1, qr/\bEXTEND\b/,                      "NO extend"       ],
+            [ 0, 1, qr/\bsv_newmortal\b;/,               "NO new mortal"   ],
+            [ 0, 0, qr/\bdXSTARG;/,                      "dXSTARG"         ],
+            [ 0, 0, qr/\b\QTARGi((IV)A, 1);/,            "set TARG"        ],
+            [ 0, 0, qr/\b\QST(0) = TARG;\E\s+\}\s+\Q++SP;/, "store TARG"   ],
+            [ 0, 0, qr/\b\QXSRETURN(1);/,                "XSRETURN(1)"     ],
+        ],
+        [
+            "OUTLIST void/char*",
+            [
+                'void',
+                'foo(OUTLIST char* A)',
+            ],
+            [ 0, 0, qr/\bXSprePUSH;/,                    "XSprePUSH"       ],
+            [ 0, 1, qr/\bEXTEND\b/,                      "NO extend"       ],
+            [ 0, 1, qr/\bsv_newmortal\b;/,               "NO new mortal"   ],
+            [ 0, 0, qr/\bdXSTARG;/,                      "dXSTARG"         ],
+            [ 0, 0, qr/\b\Qsv_setpv((SV*)TARG, A);/,     "set TARG"        ],
+            [ 0, 0, qr/\b\QST(0) = TARG;\E\s+\}\s+\Q++SP;/, "store TARG"   ],
+            [ 0, 0, qr/\b\QXSRETURN(1);/,                "XSRETURN(1)"     ],
+        ],
+
+        # Various types of OUTLIST where the param is the second value to
+        # be returned. Includes some types which might be optimised.
+
+        [
+            "OUTLIST int/bool",
+            [
+                'int',
+                'foo(OUTLIST bool A)',
+            ],
+            [ 0, 0, qr/\bXSprePUSH;/,                    "XSprePUSH"       ],
+            [ 0, 0, qr/\b\QEXTEND(SP,2);/,               "extend 2"        ],
+            [ 0, 0, qr/\b\QTARGi((IV)RETVAL, 1);/,       "TARGi RETVAL"    ],
+            [ 0, 0, qr/\b\QST(0) = TARG;\E\s+\Q++SP;/,   "store RETVAL,SP++" ],
+            [ 0, 0, qr/\b\QRETVALSV = sv_newmortal();/ , "create new mortal" ],
+            [ 0, 0, qr/\b\Qsv_setsv(RETVALSV, boolSV(A));/, "set RETVALSV"   ],
+            [ 0, 0, qr/\b\QST(1) = RETVALSV;\E\s+\}\s+\Q++SP;/, "store RETVALSV"],
+            [ 0, 0, qr/\b\QXSRETURN(2);/,                "XSRETURN(2)"     ],
+        ],
+        [
+            "OUTLIST int/mybool",
+            [
+                'int',
+                'foo(OUTLIST mybool A)',
+            ],
+            [ 0, 0, qr/\bXSprePUSH;/,                    "XSprePUSH"       ],
+            [ 0, 0, qr/\b\QEXTEND(SP,2);/,               "extend 2"        ],
+            [ 0, 0, qr/\b\QTARGi((IV)RETVAL, 1);/,       "TARGi RETVAL"    ],
+            [ 0, 0, qr/\b\QST(0) = TARG;\E\s+\Q++SP;/,   "store RETVAL,SP++" ],
+            [ 0, 0, qr/\b\QRETVALSV = sv_newmortal();/ , "create new mortal" ],
+            [ 0, 0, qr/\b\Qsv_setsv(RETVALSV, boolSV(A));/, "set RETVALSV"   ],
+            [ 0, 0, qr/\b\QST(1) = RETVALSV;\E\s+\}\s+\Q++SP;/, "store RETVALSV"],
+            [ 0, 0, qr/\b\QXSRETURN(2);/,                "XSRETURN(2)"     ],
+        ],
+        [
+            "OUTLIST int/int",
+            [
+                'int',
+                'foo(OUTLIST int A)',
+            ],
+            [ 0, 0, qr/\bXSprePUSH;/,                    "XSprePUSH"       ],
+            [ 0, 0, qr/\b\QEXTEND(SP,2);/,               "extend 2"        ],
+            [ 0, 0, qr/\b\QTARGi((IV)RETVAL, 1);/,       "TARGi RETVAL"    ],
+            [ 0, 0, qr/\b\QST(0) = TARG;\E\s+\Q++SP;/,   "store RETVAL,SP++" ],
+            [ 0, 0, qr/\b\QRETVALSV = sv_newmortal();/ , "create new mortal" ],
+            [ 0, 0, qr/\b\Qsv_setiv(RETVALSV, (IV)A);/,  "set RETVALSV"   ],
+            [ 0, 0, qr/\b\QST(1) = RETVALSV;\E\s+\}\s+\Q++SP;/, "store RETVALSV"],
+            [ 0, 0, qr/\b\QXSRETURN(2);/,                "XSRETURN(2)"     ],
+        ],
+        [
+            "OUTLIST int/char*",
+            [
+                'int',
+                'foo(OUTLIST char* A)',
+            ],
+            [ 0, 0, qr/\bXSprePUSH;/,                    "XSprePUSH"       ],
+            [ 0, 0, qr/\b\QEXTEND(SP,2);/,               "extend 2"        ],
+            [ 0, 0, qr/\b\QTARGi((IV)RETVAL, 1);/,       "TARGi RETVAL"    ],
+            [ 0, 0, qr/\b\QST(0) = TARG;\E\s+\Q++SP;/,   "store RETVAL,SP++" ],
+            [ 0, 0, qr/\b\QRETVALSV = sv_newmortal();/ , "create new mortal" ],
+            [ 0, 0, qr/\b\Qsv_setpv((SV*)RETVALSV, A);/, "set RETVALSV"   ],
+            [ 0, 0, qr/\b\QST(1) = RETVALSV;\E\s+\}\s+\Q++SP;/, "store RETVALSV"],
+            [ 0, 0, qr/\b\QXSRETURN(2);/,                "XSRETURN(2)"     ],
+        ],
+        [
+            "OUTLIST int/opt int",
+            [
+                'int',
+                'foo(IN_OUTLIST int A = 0)',
+            ],
+            [ 0, 0, qr/\bXSprePUSH;/,                    "XSprePUSH"       ],
+            [ 0, 0, qr/\b\QEXTEND(SP,2);/,               "extend 2"        ],
+            [ 0, 0, qr/\b\QTARGi((IV)RETVAL, 1);/,       "TARGi RETVAL"    ],
+            [ 0, 0, qr/\b\QST(0) = TARG;\E\s+\Q++SP;/,   "store RETVAL,SP++" ],
+            [ 0, 0, qr/\b\QRETVALSV = sv_newmortal();/ , "create new mortal" ],
+            [ 0, 0, qr/\b\Qsv_setiv(RETVALSV, (IV)A);/,  "set RETVALSV"   ],
+            [ 0, 0, qr/\b\QST(1) = RETVALSV;\E\s+\}\s+\Q++SP;/, "store RETVALSV"],
+            [ 0, 0, qr/\b\QXSRETURN(2);/,                "XSRETURN(2)"     ],
+        ],
+        [
+            "OUTLIST with OUTPUT override",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(IN_OUTLIST int A)
+                |    OUTPUT:
+                |        A    setA(ST[99], A);
+EOF
+            [ 0, 1, qr/\bEXTEND\b/,                      "NO extend"       ],
+            [ 0, 0, qr/\b\QsetA(ST[99], A);/,            "set ST[99]"      ],
+            [ 0, 0, qr/\b\QTARGi((IV)A, 1);/,            "set ST[0]"       ],
+            [ 0, 0, qr/\b\QXSRETURN(1);/,                "XSRETURN(1)"     ],
+        ],
+        [
+            "OUTLIST with multiple CASES",
+            [ Q(<<'EOF') ],
+                 |void
+                 |foo(OUTLIST int a, OUTLIST int b)
+                 |    CASE: A
+                 |        CODE:
+                 |            AAA
+                 |    CASE: B
+                 |        CODE:
+                 |            BBB
+EOF
+            [ 0, 0, qr{\bdXSTARG; .* \bdXSTARG;}xs,       "two dXSTARG"    ],
+            [ 0, 0, qr{   \b\QEXTEND(SP,2);\E
+                       .* \b\QEXTEND(SP,2);\E }xs,        "two EXTEND(2)"  ],
+            [ 0, 0, qr{\b\QST(0) = \E .* \b\QST(0) = }xs, "two ST(0)"      ],
+            [ 0, 0, qr{\b\QST(1) = \E .* \b\QST(1) = }xs, "two ST(1)"      ],
+            [ 0, 0, qr/\b\QXSRETURN(2);/,                 "XSRETURN(2)"    ],
+            [ 0, 1, qr{XSRETURN.*XSRETURN}xs,             "<2 XSRETURNs"   ],
+        ],
+        [
+            "OUTLIST with multiple CASES and void hack",
+            [ Q(<<'EOF') ],
+                 |void
+                 |foo(OUTLIST int a, OUTLIST int b)
+                 |    CASE: A
+                 |        CODE:
+                 |            ST(0) = 1;
+                 |    CASE: B
+                 |        CODE:
+                 |            ST(0) = 2;
+EOF
+            [ 0, 0, qr{\bdXSTARG; .* \bdXSTARG;}xs,       "two dXSTARG"    ],
+            [ 0, 0, qr{   \b\QEXTEND(SP,3);\E
+                       .* \b\QEXTEND(SP,3);\E }xs,        "two EXTEND(3)"  ],
+            [ 0, 0, qr{\b\QST(0) = 1\E .* \QST(0) = 2}xs, "two ST(0)"      ],
+            [ 0, 0, qr{   \b\QST(1) = TARG\E
+                       .* \b\QST(1) = TARG}xs,            "two ST(1)"      ],
+            [ 0, 0, qr{   \b\QST(2) = RETVAL\E
+                       .* \b\QST(2) = RETVAL}xs,          "two ST(2)"      ],
+            [ 0, 0, qr/\b\QXSRETURN(3);/,                 "XSRETURN(3)"    ],
+            [ 0, 1, qr{XSRETURN.*XSRETURN}xs,             "<2 XSRETURNs"   ],
+        ],
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
+{
+    # Test OUTLIST on 'assign' format typemaps.
+    #
+    # Test code for returning the value of OUTLIST vars for typemaps of
+    # the form
+    #
+    #   $arg = $val;
+    # or
+    #   $arg = newFoo($arg);
+    #
+    # Includes whether RETVALSV ha been optimised away.
+    #
+    # Some of the typemaps don't expand to the 'assign' form yet for
+    # OUTLIST vars; we test those too.
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES: DISABLE
+        |
+        |TYPEMAP: <<EOF
+        |
+        |svref_fix   T_SVREF_REFCOUNT_FIXED
+        |mysvref_fix T_MYSVREF_REFCOUNT_FIXED
+        |mybool      T_MYBOOL
+        |
+        |OUTPUT
+        |T_SV
+        |    $arg = $var;
+        |
+        |T_MYSVREF_REFCOUNT_FIXED
+        |    $arg = newRV_noinc((SV*)$var);
+        |
+        |T_MYBOOL
+        |    $arg = boolSV($var);
+        |
+        |EOF
+EOF
+
+    my @test_fns = (
+        [
+            # This uses 'SV*' (handled specially by EU::PXS) but with the
+            # output code overridden to use the direct $arg = $var assign,
+            # which is normally only used for RETVAL return
+            "OUTLIST T_SV",
+            [
+                'int',
+                'foo(OUTLIST SV * A)',
+            ],
+            [ 0, 1, qr/\bRETVALSV\b/,                        "NO RETVALSV"    ],
+            [ 0, 0, qr/\b\QA = sv_2mortal(A);/,              "mortalise A"    ],
+            [ 0, 0, qr/\b\QST(1) = A;/,                      "store A"        ],
+        ],
+
+        [
+            "OUTLIST T_SVREF",
+            [
+                'int',
+                'foo(OUTLIST SVREF A)',
+            ],
+            [ 0, 0, qr/SV\s*\*\s*RETVALSV;/,                 "RETVALSV"       ],
+            [ 0, 0, qr/\b\QRETVALSV = newRV((SV*)A)/,        "newREF(A)"      ],
+            [ 0, 0, qr/\b\QRETVALSV = sv_2mortal(RETVALSV);/,"mortalise RSV"  ],
+            [ 0, 0, qr/\b\QST(1) = RETVALSV;/,               "store RETVALSV" ],
+        ],
+
+        [
+            # this one doesn't use assign for OUTLIST
+            "OUTLIST T_SVREF_REFCOUNT_FIXED",
+            [
+                'int',
+                'foo(OUTLIST svref_fix A)',
+            ],
+            [ 0, 0, qr/SV\s*\*\s*RETVALSV;/,                 "RETVALSV"       ],
+            [ 0, 0, qr/\b\QRETVALSV = sv_newmortal();/ ,     "new mortal"     ],
+            [ 0, 0, qr/\b\Qsv_setrv_noinc(RETVALSV, (SV*)A);/,"setrv()"       ],
+            [ 0, 0, qr/\b\QST(1) = RETVALSV;/,               "store RETVALSV" ],
+        ],
+        [
+            # while this one uses assign
+            "OUTLIST T_MYSVREF_REFCOUNT_FIXED",
+            [
+                'int',
+                'foo(OUTLIST mysvref_fix A)',
+            ],
+            [ 0, 0, qr/SV\s*\*\s*RETVALSV;/,                 "RETVALSV"       ],
+            [ 0, 0, qr/\b\QRETVALSV = newRV_noinc((SV*)A)/,  "newRV(A)"       ],
+            [ 0, 0, qr/\b\QRETVALSV = sv_2mortal(RETVALSV);/,"mortalise RSV"  ],
+            [ 0, 0, qr/\b\QST(1) = RETVALSV;/,               "store RETVALSV" ],
+        ],
+
+        [
+            # this one doesn't use assign for OUTLIST
+            "OUTLIST T_BOOL",
+            [
+                'int',
+                'foo(OUTLIST bool A)',
+            ],
+            [ 0, 0, qr/SV\s*\*\s*RETVALSV;/,                 "RETVALSV"       ],
+            [ 0, 0, qr/\b\QRETVALSV = sv_newmortal();/ ,     "new mortal"     ],
+            [ 0, 0, qr/\b\Qsv_setsv(RETVALSV, boolSV(A));/,  "setsv(boolSV())"],
+            [ 0, 0, qr/\b\QST(1) = RETVALSV;/,               "store RETVALSV" ],
+        ],
+        [
+            # while this one uses assign
+            "OUTLIST T_MYBOOL",
+            [
+                'int',
+                'foo(OUTLIST mybool A)',
+            ],
+            [ 0, 1, qr/\bRETVALSV\b/,                        "NO RETVALSV"    ],
+            [ 0, 0, qr/\b\QST(1) = boolSV(A)/,               "store boolSV(A)"],
         ],
     );
 
@@ -1492,6 +2061,9 @@ EOF
         |
         |P::Q *        T_OBJECT @
         |const P::Q *  T_OBJECT %
+        |
+        |foo_t         T_IV @
+        |bar_t         T_IV %
         |
         |INPUT
         |T_OBJECT
@@ -1588,6 +2160,16 @@ EOF
         ],
 
         [
+            "explicit prototype with whitespace",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(int a, int b, int c)
+                |    PROTOTYPE:     $   $    @   
+EOF
+            [ 0, 0, qr/"\$\$\@"/, "" ],
+        ],
+
+        [
             "explicit prototype with backslash etc",
             [
                 'void',
@@ -1603,6 +2185,29 @@ EOF
         ],
 
         [
+            # XXX The parsing code for the PROTOTYPE keyword treats the
+            # keyword as multi-line and uses the last seen value.
+            # Almost certainly a coding error, but preserve the behaviour
+            # for now.
+            "explicit multiline prototype",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(int a, int b, int c)
+                |    PROTOTYPE:
+                |           
+                |       DISABLE
+                |
+                |       %%%%%%
+                |
+                |       $$@
+                |
+                |    C_ARGS: x,y,z
+EOF
+            [ 0, 0, qr/"\$\$\@"/, "" ],
+        ],
+
+
+        [
             "explicit empty prototype",
             [
                 'void',
@@ -1610,6 +2215,47 @@ EOF
                 '    PROTOTYPE:'
             ],
             [ 0, 0, qr/newXS.*, ""/, "" ],
+        ],
+
+        [
+            "explicit ENABLE prototype",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(int a, int b, int c)
+                |    PROTOTYPE: ENABLE
+EOF
+            [ 0, 0, qr/"\$\$\$"/, "" ],
+        ],
+
+        [
+            "explicit DISABLE prototype",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(int a, int b, int c)
+                |    PROTOTYPE: DISABLE
+EOF
+            [ 0, 1, qr/"\$\$\$"/, "" ],
+        ],
+
+        [
+            "multiple prototype",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(int a, int b, int c)
+                |    PROTOTYPE: $$$
+                |    PROTOTYPE: $$$
+EOF
+            [ 1, 0, qr/Error: only one PROTOTYPE definition allowed per xsub/, "" ],
+        ],
+
+        [
+            "explicit invalid prototype",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(int a, int b, int c)
+                |    PROTOTYPE: ab
+EOF
+            [ 1, 0, qr/Error: invalid prototype 'ab'/, "" ],
         ],
 
         [
@@ -1649,6 +2295,24 @@ EOF
             ],
             [ 0, 0, qr/"\$\$;\$"/, ""  ],
         ],
+        [
+            "CASE with variant prototype char",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(abc)
+                |    CASE: X
+                |       foo_t abc
+                |    CASE: Y
+                |       int   abc
+                |    CASE: Z
+                |       bar_t abc
+EOF
+            [ 0, 0, qr/newXS.*"%"/, "has %" ],
+            [ 1, 0, qr/Warning: prototype for 'abc' varies: '\@' versus '\$' .*line 28/,
+                    "got 'varies' warning 1" ],
+            [ 1, 0, qr/Warning: prototype for 'abc' varies: '\$' versus '%' .*line 30/,
+                    "got 'varies' warning 2" ],
+        ],
     );
 
     test_many($preamble, 'boot_Foo', \@test_fns);
@@ -1668,6 +2332,9 @@ EOF
         |TYPEMAP: <<EOF
         |const int     T_IV
         |const long    T_MYIV
+        |const short   T_MYSHORT
+        |undef_t       T_MYUNDEF
+        |ivmg_t        T_MYIVMG
         |
         |INPUT
         |T_MYIV
@@ -1676,6 +2343,15 @@ EOF
         |OUTPUT
         |T_OBJECT
         |    sv_setiv($arg, (IV)$var);
+        |
+        |T_MYSHORT
+        |    ${ "$var" eq "RETVAL" ? \"$arg = $var;" : \"sv_setiv($arg, $var);" }
+        |
+        |T_MYUNDEF
+        |    sv_set_undef($arg);
+        |
+        |T_MYIVMG
+        |    sv_setiv_mg($arg, (IV)RETVAL);
         |EOF
 EOF
 
@@ -1687,7 +2363,7 @@ EOF
                 'foo()',
             ],
             [ 0, 0, qr/\bdXSTARG;/,   "has targ def" ],
-            [ 0, 0, qr/\bPUSHi\b/,    "has PUSHi" ],
+            [ 0, 0, qr/\bTARGi\b/,    "has TARGi" ],
             [ 0, 1, qr/sv_newmortal/, "doesn't have newmortal" ],
         ],
 
@@ -1699,7 +2375,7 @@ EOF
                 'foo()',
             ],
             [ 0, 0, qr/\bdXSTARG;/,   "has targ def" ],
-            [ 0, 0, qr/\bPUSHi\b/,    "has PUSHi" ],
+            [ 0, 0, qr/\bTARGi\b/,    "has TARGi" ],
             [ 0, 1, qr/sv_newmortal/, "doesn't have newmortal" ],
         ],
 
@@ -1711,7 +2387,7 @@ EOF
                 'foo()',
             ],
             [ 0, 0, qr/\bdXSTARG;/,   "has targ def" ],
-            [ 0, 0, qr/\bPUSHi\b/,    "has PUSHi" ],
+            [ 0, 0, qr/\bTARGi\b/,    "has TARGi" ],
             [ 0, 1, qr/sv_newmortal/, "doesn't have newmortal" ],
         ],
 
@@ -1722,7 +2398,7 @@ EOF
                 'foo()',
             ],
             [ 0, 0, qr/\bdXSTARG;/,   "has targ def" ],
-            [ 0, 0, qr/\bPUSHu\b/,    "has PUSHu" ],
+            [ 0, 0, qr/\bTARGu\b/,    "has TARGu" ],
             [ 0, 1, qr/sv_newmortal/, "doesn't have newmortal" ],
         ],
 
@@ -1733,7 +2409,7 @@ EOF
                 'foo()',
             ],
             [ 0, 0, qr/\bdXSTARG;/,   "has targ def" ],
-            [ 0, 0, qr/\bPUSHn\b/,    "has PUSHn" ],
+            [ 0, 0, qr/\bTARGn\b/,    "has TARGn" ],
             [ 0, 1, qr/sv_newmortal/, "doesn't have newmortal" ],
         ],
 
@@ -1744,7 +2420,7 @@ EOF
                 'foo()',
             ],
             [ 0, 0, qr/\bdXSTARG;/,   "has targ def" ],
-            [ 0, 0, qr/\bPUSHp\b/,    "has PUSHp" ],
+            [ 0, 0, qr/\bsv_setpvn\b/,"has sv_setpvn()" ],
             [ 0, 1, qr/sv_newmortal/, "doesn't have newmortal" ],
         ],
 
@@ -1756,7 +2432,7 @@ EOF
             ],
             [ 0, 0, qr/\bdXSTARG;/,   "has targ def" ],
             [ 0, 0, qr/\bsv_setpv\b/, "has sv_setpv" ],
-            [ 0, 0, qr/\bPUSHTARG\b/, "has PUSHTARG" ],
+            [ 0, 0, qr/\QST(0) = TARG;/, "has ST(0) = TARG" ],
             [ 0, 1, qr/sv_newmortal/, "doesn't have newmortal" ],
         ],
 
@@ -1771,9 +2447,9 @@ EOF
             [ 0, 1, qr/\bXSprePUSH\b.+\bXSprePUSH\b/s,
                                          "has only one XSprePUSH" ],
 
-            [ 0, 0, qr/\bPUSHi\b/,       "has PUSHi" ],
-            [ 0, 0, qr/\bPUSHs\b.+\bPUSHs\b/s,
-                                         "has two PUSHs" ],
+            [ 0, 0, qr/\bTARGi\b/,       "has TARGi" ],
+            [ 0, 0, qr/\bsv_setiv\(RETVALSV.*sv_setiv\(RETVALSV/s,
+                                         "has two setiv(RETVALSV,...)" ],
 
             [ 0, 0, qr/\bXSRETURN\(3\)/, "has XSRETURN(3)" ],
         ],
@@ -1803,10 +2479,92 @@ EOF
             [ 0, 0, qr/\bsv_setiv\b/,   "has sv_setiv" ],
         ],
 
+        [
+            "dXSTARG with variant typemap",
+            [
+                'void',
+                'foo(OUTLIST const short a)',
+            ],
+            [ 0, 0, qr/\bdXSTARG;/,      "has targ def" ],
+            [ 0, 0, qr/\bTARGi\b/,       "has TARGi" ],
+            [ 0, 1, qr/\bsv_setiv\(/,    "has NO sv_setiv" ],
+            [ 0, 0, qr/\bXSRETURN\(1\)/, "has XSRETURN(1)" ],
+        ],
+
+        [
+            "dXSTARG with sv_set_undef",
+            [
+                'void',
+                'foo(OUTLIST undef_t a)',
+            ],
+            [ 0, 0, qr/\bdXSTARG;/,          "has targ def" ],
+            [ 0, 0, qr/\bsv_set_undef\(/,    "has sv_set_undef" ],
+        ],
+
+        [
+            "dXSTARG with sv_setiv_mg",
+            [
+                'ivmg_t',
+                'foo()',
+            ],
+            [ 0, 0, qr/\bdXSTARG;/,          "has targ def" ],
+            [ 0, 0, qr/\bTARGi\(/,           "has TARGi" ],
+        ],
     );
 
     test_many($preamble, 'XS_Foo_', \@test_fns);
 }
+
+{
+    # Test INPUT: keyword
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "INPUT bad line",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(abc)
+                |    int +
+EOF
+            [ 1, 0, qr/^\QError: invalid parameter declaration '    int +'\E.* line 7\n/,   "got expected error" ],
+        ],
+        [
+            "INPUT no length()",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(abc)
+                |    int length(abc)
+EOF
+            [ 1, 0, qr/^\QError: length() not permitted in INPUT section\E.* line 7\n/,   "got expected error" ],
+        ],
+        [
+            "INPUT dup",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(abc, int def)
+                |    int abc
+                |    int abc
+                |    int def
+EOF
+            [ 1, 0, qr/^\QError: duplicate definition of parameter 'abc' ignored in\E.* line 8\n/m,
+                                        "abc: got expected error" ],
+
+            [ 1, 0, qr/^\QError: duplicate definition of parameter 'def' ignored in\E.* line 9\n/m,
+                                        "def: got expected error" ],
+        ],
+
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
 
 {
     # Test OUTPUT: keyword
@@ -1815,6 +2573,10 @@ EOF
         |MODULE = Foo PACKAGE = Foo
         |
         |PROTOTYPES:  DISABLE
+        |
+        |TYPEMAP: <<EOF
+        |blah T_BLAH
+        |EOF
         |
 EOF
 
@@ -1830,7 +2592,7 @@ EOF
                 |      RETVAL
 EOF
             [ 0, 1, qr/\bSvSETMAGIC\b/,   "no set magic" ],
-            [ 0, 0, qr/\bPUSHi\b/,        "has PUSHi" ],
+            [ 0, 0, qr/\bTARGi\b/,        "has TARGi" ],
             [ 0, 0, qr/\QXSRETURN(1)/,    "has XSRETURN" ],
         ],
 
@@ -1846,7 +2608,7 @@ EOF
                 |      RETVAL
 EOF
             [ 0, 1, qr/\bSvSETMAGIC\b/,   "no set magic" ],
-            [ 0, 0, qr/\bPUSHi\b/,        "has PUSHi" ],
+            [ 0, 0, qr/\bTARGi\b/,        "has TARGi" ],
             [ 0, 0, qr/\QXSRETURN(1)/,    "has XSRETURN" ],
         ],
 
@@ -1860,6 +2622,57 @@ EOF
                 |    OUTPUT:
                 |      RETVAL PUSHs(my_newsviv(RETVAL));
 EOF
+            [ 0, 0, qr/\QPUSHs(my_newsviv(RETVAL));/,   "uses code" ],
+            [ 0, 0, qr/\QXSRETURN(1)/,                  "has XSRETURN" ],
+        ],
+
+        [
+            "OUTPUT RETVAL with code and template-like syntax",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(int a)
+                |    CODE:
+                |      RETVAL = 99
+                |    OUTPUT:
+                |      RETVAL baz($arg,$val);
+EOF
+            # Check that the override code is *not* template-expanded.
+            # This was probably originally an implementation error, but
+            # keep that behaviour for now for backwards compatibility.
+            [ 0, 0, qr'baz\(\$arg,\$val\);',            "vars not expanded" ],
+        ],
+
+        [
+            "OUTPUT RETVAL with code on IN_OUTLIST param",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(IN_OUTLIST int abc)
+                |    CODE:
+                |      RETVAL = 99
+                |    OUTPUT:
+                |      RETVAL
+                |      abc  my_set(ST[0], RETVAL);
+EOF
+            [ 0, 0, qr/\Qmy_set(ST[0], RETVAL)/,      "code used for st(0)" ],
+            [ 0, 0, qr/\bXSprePUSH;/,                 "XSprePUSH" ],
+            [ 0, 1, qr/\bEXTEND\b/,                   "NO extend"       ],
+            [ 0, 0, qr/\QTARGi((IV)RETVAL, 1);/,      "push RETVAL" ],
+            [ 0, 0, qr/\QRETVALSV = sv_newmortal();/, "create mortal" ],
+            [ 0, 0, qr/\Qsv_setiv(RETVALSV, (IV)abc);/, "code not used for st(1)" ],
+            [ 0, 0, qr/\QXSRETURN(2)/,                "has XSRETURN" ],
+        ],
+
+        [
+            "OUTPUT RETVAL with code and unknown type",
+            [ Q(<<'EOF') ],
+                |blah
+                |foo(int a)
+                |    CODE:
+                |      RETVAL = 99
+                |    OUTPUT:
+                |      RETVAL PUSHs(my_newsviv(RETVAL));
+EOF
+            [ 0, 0, qr/blah\s+RETVAL;/,                 "decl" ],
             [ 0, 0, qr/\QPUSHs(my_newsviv(RETVAL));/,   "uses code" ],
             [ 0, 0, qr/\QXSRETURN(1)/,                  "has XSRETURN" ],
         ],
@@ -1890,8 +2703,46 @@ EOF
             [ 0, 0, qr/\b\Qsv_setiv(ST(2),\E.*ccc/,  "setiv(ccc)" ],
             [ 0, 1, qr/\b\Qsv_setiv(ST(3)/,          "no setiv(ddd)" ],
             [ 0, 0, qr/\b\Qmy_set(xyz)/,             "myset" ],
-            [ 0, 0, qr/\bPUSHi\b.*RETVAL/,           "has PUSHi(RETVAL)" ],
+            [ 0, 0, qr/\bTARGi\b.*RETVAL/,           "has TARGi(RETVAL,1)" ],
             [ 0, 0, qr/\QXSRETURN(1)/,               "has XSRETURN" ],
+        ],
+
+        [
+            "OUTPUT vars with set magic mixture per-CASE",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(int a, int b)
+                |   CASE: X
+                |    OUTPUT:
+                |        a
+                |        SETMAGIC: DISABLE
+                |        b
+                |   CASE: Y
+                |    OUTPUT:
+                |        a
+                |        SETMAGIC: DISABLE
+                |        b
+EOF
+            [ 0, 0, qr{\Qif (X)\E
+                       .*
+                       \QSvSETMAGIC(ST(0));\E
+                       .*
+                       \Qelse if (Y)\E
+                       }sx,                          "X: set magic ST(0)" ],
+            [ 0, 1, qr{\Qif (X)\E
+                       .*
+                       \QSvSETMAGIC(ST(1));\E
+                       .*
+                       \Qelse if (Y)\E
+                       }sx,                          "X: no magic ST(1)" ],
+            [ 0, 0, qr{\Qelse if (Y)\E
+                       .*
+                       \QSvSETMAGIC(ST(0));\E
+                       }sx,                          "Y: set magic ST(0)" ],
+            [ 0, 1, qr{\Qelse if (Y)\E
+                       .*
+                       \QSvSETMAGIC(ST(1));\E
+                       }sx,                          "Y: no magic ST(1)" ],
         ],
 
         [
@@ -1931,7 +2782,7 @@ EOF
                 |    CODE:
                 |      RETVAL = 99
 EOF
-            [ 1, 0, qr/Warning: Found a 'CODE' section which seems to be using 'RETVAL' but no 'OUTPUT' section/, "" ],
+            [ 1, 0, qr/Warning: found a 'CODE' section which seems to be using 'RETVAL' but no 'OUTPUT' section/, "" ],
         ],
 
         [
@@ -1946,7 +2797,7 @@ EOF
                 |    CODE:
                 |      RETVAL = 99
 EOF
-            [ 1, 1, qr/Warning: Found a 'CODE' section which seems to be using 'RETVAL' but no 'OUTPUT' section/, "no warn" ],
+            [ 1, 1, qr/Warning: found a 'CODE' section which seems to be using 'RETVAL' but no 'OUTPUT' section/, "no warn" ],
         ],
 
         [
@@ -1959,7 +2810,24 @@ EOF
                 |    OUTPUT:
                 |      aaa
 EOF
-            [ 1, 0, qr/Warning: Found a 'CODE' section which seems to be using 'RETVAL' but no 'OUTPUT' section/, "" ],
+            [ 1, 0, qr/Warning: found a 'CODE' section which seems to be using 'RETVAL' but no 'OUTPUT' section/, "" ],
+        ],
+
+        [
+            "RETVAL in CODE without OUTPUT section, multiple CASEs",
+            [ Q(<<'EOF') ],
+                |int
+                |foo()
+                |  CASE: X
+                |    CODE:
+                |      RETVAL = 99
+                |    OUTPUT:
+                |      RETVAL
+                |  CASE: Y
+                |    CODE:
+                |      RETVAL = 99
+EOF
+            [ 1, 0, qr/Warning: found a 'CODE' section which seems to be using 'RETVAL' but no 'OUTPUT' section/, "" ],
         ],
 
         [
@@ -2030,19 +2898,31 @@ EOF
             [ 0, 0, qr/\b\QSvSETMAGIC(ST(0))/,       "set magic ST(0)" ],
             # prepare stack for OUTLIST
             [ 0, 0, qr/\bXSprePUSH\b/,               "XSprePUSH" ],
-            [ 0, 0, qr/\b\QEXTEND(SP,2)/,            "EXTEND(SP,2)" ],
+            [ 0, 1, qr/\bEXTEND\b/,                  "NO extend"       ],
             # OUTPUT: RETVAL: push return value on stack
-            [ 0, 0, qr/\bsv_setpv\(TARG,\s*RETVAL\)/,"sv_setpv(TARG, RETVAL)" ],
-            [ 0, 0, qr/\bPUSHTARG\b/,                "PUSHTARG" ],
+            [ 0, 0, qr/\bsv_setpv\(\(SV\*\)TARG,\s*RETVAL\)/,"sv_setpv(TARG, RETVAL)" ],
+            [ 0, 0, qr/\QST(0) = TARG;/,             "has ST(0) = TARG" ],
             # OUTLIST: push abc on stack
-            [ 0, 0, qr/\b\QPUSHs(sv_newmortal())/,   "PUSHs(sv_newmortal())" ],
-            [ 0, 0, qr/\b\Qsv_setiv(ST(1),\E.*abc\)/,"sv_setiv(ST1, abc)" ],
-            # and return TETVAL and abc
+            [ 0, 0, qr/\QRETVALSV = sv_newmortal();/, "create mortal" ],
+            [ 0, 0, qr/\b\Qsv_setiv(RETVALSV, (IV)abc);/,"sv_setiv(RETVALSV, abc)" ],
+            [ 0, 0, qr/\b\QST(1) = RETVALSV;\E\s+\}\s+\Q++SP;/, "store RETVALSV"],
+            # and return RETVAL and abc
             [ 0, 0, qr/\QXSRETURN(2)/,               "has XSRETURN" ],
 
-            # should only be one PUSHs and one SvSETMAGI
-            [ 0, 1, qr/\bPUSHs\b.*\bPUSHs\b/s,          "only one PUSHs" ],
+            # should only be one SvSETMAGIC
             [ 0, 1, qr/\bSvSETMAGIC\b.*\bSvSETMAGIC\b/s,"only one SvSETMAGIC" ],
+        ],
+
+        [
+            "OUTPUT with no output typemap entry",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(blah a)
+                |    OUTPUT:
+                |      a
+EOF
+            [ 1, 1, qr/\QError: no OUTPUT definition for type 'blah', typekind 'T_BLAH'\E.*line 11/,
+                    "got expected error" ],
         ],
     );
 
@@ -2227,7 +3107,7 @@ EOF
             [ 0, 0, qr/\bint\s+RETVAL\s*=.*\QST(0)/,     "int  decl and init" ],
             [ 0, 0, qr/short\s+abc\s*=.*\QST(1)/,        "abc is ST1" ],
             [ 0, 0, qr/\bRETVAL\s*=\s*foo\(RETVAL, abc\)/,"autocall" ],
-            [ 0, 0, qr/\b\QPUSHi((IV)RETVAL)/,           "PUSHi" ],
+            [ 0, 0, qr/\b\QTARGi((IV)RETVAL, 1)/,        "TARGi" ],
             [ 0, 0, qr/\b\QXSRETURN(1)/,                 "ret 1" ],
         ],
 
@@ -2243,7 +3123,7 @@ EOF
             [ 0, 0, qr/\bint\s+RETVAL\s*=.*\QST(0)/,     "int  decl and init" ],
             [ 0, 0, qr/short\s+abc\s*=.*\QST(1)/,        "abc is ST1" ],
             [ 0, 0, qr/\bRETVAL\s*=\s*foo\(RETVAL, abc\)/,"autocall" ],
-            [ 0, 0, qr/\b\QPUSHi((IV)RETVAL)/,            "PUSHi" ],
+            [ 0, 0, qr/\b\QTARGi((IV)RETVAL, 1)/,         "TARGi" ],
             [ 0, 0, qr/\b\QXSRETURN(1)/,                  "ret 1" ],
         ],
 
@@ -2259,7 +3139,7 @@ EOF
             [ 0, 0, qr/\bint\s+RETVAL\s*=.*\QST(1)/,     "int  decl and init" ],
             [ 0, 0, qr/short\s+abc\s*=.*\QST(0)/,        "abc is ST0" ],
             [ 0, 0, qr/\bRETVAL\s*=\s*foo\(abc, RETVAL\)/,"autocall" ],
-            [ 0, 0, qr/\b\QPUSHi((IV)RETVAL)/,            "PUSHi" ],
+            [ 0, 0, qr/\b\QTARGi((IV)RETVAL, 1)/,         "TARGi" ],
             [ 0, 0, qr/\b\QXSRETURN(1)/,                  "ret 1" ],
         ],
 
@@ -2280,7 +3160,7 @@ EOF
 
             [ 0, 0, qr/\bint\s+RETVAL\s*=.*\QST(0)/,  "int  decl and init" ],
             [ 0, 0, qr/short\s+abc\s*=.*\QST(1)/,     "abc is ST1" ],
-            [ 0, 0, qr/\b\QPUSHi((IV)RETVAL)/,        "PUSHi" ],
+            [ 0, 0, qr/\b\QTARGi((IV)RETVAL, 1)/,     "TARGi" ],
             [ 0, 0, qr/\b\QXSRETURN(1)/,              "ret 1" ],
         ],
 
@@ -2299,7 +3179,7 @@ EOF
             [ 0, 1, qr/long\s+RETVAL/,                "no long declare" ],
             [ 0, 0, qr/\bint\s+RETVAL\s*=.*\QST(0)/,  "int  declare and init" ],
             [ 0, 0, qr/short\s+abc\s*=.*\QST(1)/,     "abc is ST1" ],
-            [ 0, 0, qr/\b\QPUSHi((IV)RETVAL)/,        "PUSHi" ],
+            [ 0, 0, qr/\b\QTARGi((IV)RETVAL, 1)/,     "TARGi" ],
             [ 0, 0, qr/\b\QXSRETURN(1)/,              "ret 1" ],
         ],
 
@@ -2672,6 +3552,231 @@ EOF
             [ 0, 0, qr/\b\QXSRETURN(1)/,           "ret 1" ],
             [ 0, 1, qr/\bXSRETURN\b.*\bXSRETURN/s, "only a single XSRETURN" ],
         ],
+        [
+            "CASE with unconditional else",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    CASE: CCC1
+                |        CODE:
+                |            YYY1
+                |    CASE: CCC2
+                |        CODE:
+                |            YYY2
+                |    CASE:
+                |        CODE:
+                |            YYY3
+EOF
+            [ 0, 0, qr/
+                       ^ \s+ if \s+ \(CCC1\) \n
+                       ^ \s+ \{   \n
+                       .*
+                       ^\s+ YYY1  \n
+                       .*
+                       ^ \s+ \}   \n
+                       ^ \s+ else \s+ if \s+ \(CCC2\) \n
+                       ^ \s+ \{   \n
+                       .*
+                       ^\s+ YYY2  \n
+                       .*
+                       ^ \s+ \}   \n
+                       ^ \s+ else \n
+                       ^ \s+ \{   \n
+                       .*
+                       ^\s+ YYY3  \n
+                       .*
+                       ^ \s+ \}   \n
+                       ^ \s+ XSRETURN_EMPTY;\n
+
+                      /xms,                       "all present in order" ],
+        ],
+        [
+            "CASE with dup alien var",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(abc)
+                |    CASE: X
+                |            int abc
+                |            int def
+                |    CASE: Y
+                |            long abc
+                |            long def
+EOF
+            [ 0, 0, qr/
+                       if \s* \(X\)
+                       .*
+                       int \s+ def \s*;
+                       .*
+                       else \s+ if \s* \(Y\)
+                       .*
+                       long \s+ def \s*;
+                      /xs,                       "two alien declarations" ],
+        ],
+        [
+            "CASE with variant keywords",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    CASE: X
+                |       C_ARGS: x,y
+                |    CASE: Y
+                |       C_ARGS: y,x
+EOF
+            [ 0, 0, qr/\(x,y\).*\(y,x\)/s, "C_ARGS" ],
+        ],
+        [
+            "CASE with variant THIS type",
+            [ Q(<<'EOF') ],
+                |void
+                |A::B::foo()
+                |    CASE: X
+                |       int THIS
+                |    CASE: Y
+                |       long THIS
+                |    CASE:
+                |       short THIS
+EOF
+            [ 0, 0, qr/int   \s+ THIS .*
+                       long  \s+ THIS .*
+                       short \s+ THIS/sx, "has three types" ],
+        ],
+        [
+            "CASE with variant RETVAL type",
+            [ Q(<<'EOF') ],
+                |int
+                |foo()
+                |    CASE: X
+                |       long RETVAL
+                |    CASE: Y
+                |       double RETVAL
+                |    CASE: Z
+                |       char * RETVAL
+EOF
+            [ 0, 0, qr/long        \s+ RETVAL .*
+                       double      \s+ RETVAL .*
+                       char \s* \* \s+ RETVAL/sx, "has three decl types" ],
+            [ 0, 0, qr/X .* TARGi .*
+                       Y .* TARGi .*
+                       Z .* TARGi .*/sx, "has one setting type" ],
+        ],
+        [
+            "CASE with variant autocall RETVAL",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(int a)
+                |    CASE: X
+                |
+                |    CASE: Y
+                |        CODE:
+                |            YYY
+EOF
+            [ 0, 0, qr{\Qif (X)\E
+                       .*
+                       dXSTARG;
+                       .*
+                       \QTARGi((IV)RETVAL, 1);\E
+                       .*
+                       \Qelse if (Y)\E
+                       }sx,                 "branch X returns RETVAL" ],
+
+            [ 0, 1, qr{\Qelse if (Y)\E
+                       .*
+                       \QPUSHi((IV)RETVAL);\E
+                       }sx,                 "branch Y doesn't return RETVAL" ],
+        ],
+        [
+            "CASE with variant deferred var inits",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(abc)
+                |    CASE: X
+                |     AV *abc
+                |
+                |    CASE: Y
+                |     HV *abc
+EOF
+            [ 0, 0, qr{\Qif (X)\E
+                       .*
+                       croak.*\Qnot an ARRAY reference\E
+                       .*
+                       \Qelse if (Y)\E
+                       .*
+                       croak.*\Qnot a HASH reference\E
+                       }sx,                 "differing croaks" ],
+
+        ],
+
+        [
+            "CASE: case follows unconditional CASE",
+            [ Q(<<'EOF') ],
+                |int
+                |foo()
+                |    CASE: X
+                |        CODE:
+                |            AAA
+                |    CASE:
+                |        CODE:
+                |            BBB
+                |    CASE: Y
+                |        CODE:
+                |            CCC
+EOF
+            [ 1, 0, qr/\QError: 'CASE:' after unconditional 'CASE:'/,
+                    "expected err" ],
+        ],
+        [
+            "CASE: not at top of function",
+            [ Q(<<'EOF') ],
+                |int
+                |foo()
+                |    CODE:
+                |        AAA
+                |    CASE: X
+                |        CODE:
+EOF
+            [ 1, 0, qr/\QError: no 'CASE:' at top of function/,
+                    "expected err" ],
+        ],
+        [
+            "CASE: junk",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(a)
+                |CASE: X
+                |    SCOPE: ENABLE
+                |    INPUTx:
+EOF
+            [ 1, 0, qr/\QError: junk at end of function: "    INPUTx:" in /,
+                    "expected err" ],
+        ],
+        [
+            "keyword after end of xbody",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |  CODE:
+                |     abc
+                |  C_ARGS:
+EOF
+            [ 1, 0, qr{\QError: misplaced 'C_ARGS:' in\E.*line 8},
+                                                    "got expected error"  ],
+        ],
+
+        [
+            "CASE: setting ST(0)",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(a)
+                |CASE: X
+                |    CODE:
+                |      ST(0) = 1;
+                |CASE: Y
+                |    CODE:
+                |      blah
+EOF
+            [ 1, 0, qr/\QWarning: ST(0) isn't consistently set in every CASE's CODE block/,
+                    "expected err" ],
+        ],
 
 
     );
@@ -2747,7 +3852,7 @@ EOF
                 |   CODE:
                 |      XYZ;
 EOF
-            [ 1, 0, qr/Can't determine output type for 'BBB'/, "got type err" ],
+            [ 1, 0, qr/Error: can't determine output type for 'BBB'/, "got type err" ],
         ],
 
         [
@@ -2758,7 +3863,7 @@ EOF
                 |   CODE:
                 |      XYZ;
 EOF
-            [ 1, 0, qr/Can't determine output type for 'BBB'/, "got type err" ],
+            [ 1, 0, qr/Error: can't determine output type for 'BBB'/, "got type err" ],
         ],
 
         [
@@ -2769,7 +3874,7 @@ EOF
                 |   CODE:
                 |      XYZ;
 EOF
-            [ 1, 0, qr/Can't determine output type for 'BBB'/, "got type err" ],
+            [ 1, 0, qr/Error: can't determine output type for 'BBB'/, "got type err" ],
         ],
 
         [
@@ -2834,3 +3939,1298 @@ EOF
 
     test_many($preamble, 'XS_Foo_', \@test_fns);
 }
+
+{
+    # Test weird packing facility: return type array(type,nitems)
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+EOF
+
+    my @test_fns = (
+
+        [
+            "array(int,5)",
+            [ Q(<<'EOF') ],
+                |array(int,5)
+                |foo()
+EOF
+            [ 0, 0, qr/int\s*\*\s+RETVAL;/,      "RETVAL is int*" ],
+            [ 0, 0, qr/sv_setpvn\(.*,\s*5\s*\*\s*\Qsizeof(int));/,
+                                                 "return packs 5 ints" ],
+            [ 0, 0, qr/\bdXSTARG\b/,             "declares TARG" ],
+            [ 0, 0, qr/sv_setpvn\(TARG\b/,       "uses TARG" ],
+
+        ],
+
+        [
+            "array(int*, expr)",
+            [ Q(<<'EOF') ],
+                |array(int*, FOO_SIZE)
+                |foo()
+EOF
+            [ 0, 0, qr/int\s*\*\s*\*\s+RETVAL;/, "RETVAL is int**" ],
+            [ 0, 0, qr/sv_setpvn\(.*,\s*FOO_SIZE\s*\*\s*sizeof\(int\s*\*\s*\)\);/,
+                                                "return packs FOO_SIZE int*s" ],
+        ],
+
+        [
+            "array() as param type",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(abc)
+                |    array(int,5) abc
+EOF
+            [ 1, 0, qr/Could not find a typemap for C type/, " no find type" ],
+        ],
+
+        [
+            "array() can be overriden by OUTPUT",
+            [ Q(<<'EOF') ],
+                |array(int,5)
+                |foo()
+                |    OUTPUT:
+                |        RETVAL my_setintptr(ST(0), RETVAL);
+EOF
+            [ 0, 0, qr/int\s*\*\s+RETVAL;/,             "RETVAL is int*" ],
+            [ 0, 0, qr/\Qmy_setintptr(ST(0), RETVAL);/, "override honoured" ],
+        ],
+
+        [
+            "array() in output override isn't special",
+            [ Q(<<'EOF') ],
+                |short
+                |foo()
+                |    OUTPUT:
+                |        RETVAL array(int,5)
+EOF
+            [ 0, 0, qr/short\s+RETVAL;/,      "RETVAL is short" ],
+            [ 0, 0, qr/\Qarray(int,5)/,       "return expression is unchanged" ],
+        ],
+
+        [
+            "array() OUT",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(OUT array(int,5) AAA)
+EOF
+            [ 1, 0, qr/\QError: can't use array(type,nitems) type for OUT parameter/,
+                        "got err" ],
+        ],
+
+        [
+            "array() OUTLIST",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(OUTLIST array(int,5) AAA)
+EOF
+            [ 1, 0, qr/\QError: can't use array(type,nitems) type for OUTLIST parameter/,
+                    "got err" ],
+        ],
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
+{
+    # Test weird packing facility: DO_ARRAY_ELEM
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+        |TYPEMAP: <<EOF
+        |intArray *        T_ARRAY
+        |longArray *       T_ARRAY
+        |
+        |myiv              T_IV
+        |myivArray *       T_ARRAY
+        |
+        |blah              T_BLAH
+        |blahArray *       T_ARRAY
+        |
+        |nosuchtypeArray * T_ARRAY
+        |
+        |shortArray *      T_DAE
+        |NoInputArray *    T_DAE
+        |NoInput           T_Noinput
+        |
+        |NooutputArray *   T_ARRAY
+        |Nooutput          T_Nooutput
+        |
+        |INPUT
+        |T_BLAH
+        |   $var = my_get_blah($arg);
+        |
+        |T_DAE
+        |   IN($var,$type,$ntype,$subtype,$arg,$argoff){DO_ARRAY_ELEM}
+        |
+        |OUTPUT
+        |T_BLAH
+        |   my_set_blah($arg, $var);
+        |
+        |T_DAE
+        |   OUT($var,$type,$ntype,$subtype,$arg){DO_ARRAY_ELEM}
+        |
+        |EOF
+EOF
+
+    my @test_fns = (
+
+        [
+            "T_ARRAY long input",
+            [ Q(<<'EOF') ],
+                |char *
+                |foo(longArray * abc)
+EOF
+            [ 0, 0, qr/longArray\s*\*\s*abc;/,      "abc is longArray*" ],
+            [ 0, 0, qr/abc\s*=\s*longArrayPtr\(/,   "longArrayPtr called" ],
+            [ 0, 0, qr/abc\[ix_abc.*\]\s*=\s*.*\QSvIV(ST(ix_abc))/,
+                                                    "abc[i] set" ],
+            [ 0, 1, qr/DO_ARRAY_ELEM/,              "no DO_ARRAY_ELEM" ],
+        ],
+        [
+            "T_ARRAY long output",
+            [ Q(<<'EOF') ],
+                |longArray *
+                |foo()
+EOF
+            [ 0, 0, qr/longArray\s*\*\s*RETVAL;/,   "RETVAL is longArray*" ],
+            [ 0, 1, qr/longArrayPtr/,               "longArrayPtr NOT called" ],
+            [ 0, 0, qr/\Qsv_setiv(ST(ix_RETVAL), (IV)RETVAL[ix_RETVAL]);/,
+                                                    "ST(i) set" ],
+            [ 0, 1, qr/DO_ARRAY_ELEM/,              "no DO_ARRAY_ELEM" ],
+        ],
+
+        [
+            "T_ARRAY myiv input",
+            [ Q(<<'EOF') ],
+                |char *
+                |foo(myivArray * abc)
+EOF
+            [ 0, 0, qr/myivArray\s*\*\s*abc;/,      "abc is myivArray*" ],
+            [ 0, 0, qr/abc\s*=\s*myivArrayPtr\(/,   "myivArrayPtr called" ],
+            [ 0, 0, qr/abc\[ix_abc.*\]\s*=\s*.*\QSvIV(ST(ix_abc))/,
+                                                    "abc[i] set" ],
+            [ 0, 1, qr/DO_ARRAY_ELEM/,              "no DO_ARRAY_ELEM" ],
+        ],
+        [
+            "T_ARRAY myiv output",
+            [ Q(<<'EOF') ],
+                |myivArray *
+                |foo()
+EOF
+            [ 0, 0, qr/myivArray\s*\*\s*RETVAL;/,   "RETVAL is myivArray*" ],
+            [ 0, 1, qr/myivArrayPtr/,               "myivArrayPtr NOT called" ],
+            [ 0, 0, qr/\Qsv_setiv(ST(ix_RETVAL), (IV)RETVAL[ix_RETVAL]);/,
+                                                    "ST(i) set" ],
+            [ 0, 1, qr/DO_ARRAY_ELEM/,              "no DO_ARRAY_ELEM" ],
+        ],
+
+        [
+            "T_ARRAY blah input",
+            [ Q(<<'EOF') ],
+                |char *
+                |foo(blahArray * abc)
+EOF
+            [ 0, 0, qr/blahArray\s*\*\s*abc;/,      "abc is blahArray*" ],
+            [ 0, 0, qr/abc\s*=\s*blahArrayPtr\(/,   "blahArrayPtr called" ],
+            [ 0, 0, qr/abc\[ix_abc.*\]\s*=\s*.*\Qmy_get_blah(ST(ix_abc))/,
+                                                    "abc[i] set" ],
+            [ 0, 1, qr/DO_ARRAY_ELEM/,              "no DO_ARRAY_ELEM" ],
+        ],
+        [
+            "T_ARRAY blah output",
+            [ Q(<<'EOF') ],
+                |blahArray *
+                |foo()
+EOF
+            [ 0, 0, qr/blahArray\s*\*\s+RETVAL;/,   "RETVAL is blahArray*" ],
+            [ 0, 1, qr/blahArrayPtr/,               "blahArrayPtr NOT called" ],
+            [ 0, 0, qr/\Qmy_set_blah(ST(ix_RETVAL), RETVAL[ix_RETVAL]);/,
+                                                    "ST(i) set" ],
+            [ 0, 1, qr/DO_ARRAY_ELEM/,              "no DO_ARRAY_ELEM" ],
+        ],
+
+        [
+            "T_ARRAY nosuchtype input",
+            [ Q(<<'EOF') ],
+                |char *
+                |foo(nosuchtypeArray * abc)
+EOF
+            [ 1, 0, qr/Could not find a typemap for C type 'nosuchtype'/,
+                                                    "no such type" ],
+        ],
+        [
+            "T_ARRAY nosuchtype output",
+            [ Q(<<'EOF') ],
+                |nosuchtypeArray *
+                |foo()
+EOF
+            [ 1, 0, qr/Could not find a typemap for C type 'nosuchtype'/,
+                                                    "no such type" ],
+        ],
+
+        # test DO_ARRAY_ELEM in a typemap other than T_ARRAY.
+        #
+        # XXX It's not clear whether DO_ARRAY_ELEM should be processed
+        # in typemap definitions generally, rather than just in the
+        # T_ARRAY definition. Currently it is, but DO_ARRAY_ELEM isn't
+        # documented, and was clearly put into place as a hack to make
+        # T_ARRAY work. So these tests represent the *current*
+        # behaviour, but don't necessarily endorse that behaviour. These
+        # tests ensure that any change in behaviour is deliberate rather
+        # than accidental.
+        [
+            "T_DAE input",
+            [ Q(<<'EOF') ],
+                |char *
+                |foo(shortArray * abc)
+EOF
+            [ 0, 0, qr/shortArray\s*\*\s*abc;/,      "abc is shortArray*" ],
+            # calling fooArrayPtr() is part of the T_ARRAY typemap,
+            # not part of the general mechanism
+            [ 0, 1, qr/shortArrayPtr\(/,             "no shortArrayPtr call" ],
+            [ 0, 0, qr/\{\s*abc\[ix_abc.*\]\s*=\s*.*\QSvIV(ST(ix_abc))\E\s*\n?\s*\}/,
+                                                    "abc[i] set" ],
+            [ 0, 0, qr/\QIN(abc,shortArray *,shortArrayPtr,short,ST(0),0)/,
+                                                    "template vars ok" ],
+            [ 0, 1, qr/DO_ARRAY_ELEM/,              "no DO_ARRAY_ELEM" ],
+        ],
+        [
+            "T_DAE output",
+            [ Q(<<'EOF') ],
+                |shortArray *
+                |foo()
+EOF
+            [ 0, 0, qr/shortArray\s*\*\s*RETVAL;/,  "RETVAL is shortArray*" ],
+            [ 0, 1, qr/shortArrayPtr\(/,            "shortArrayPtr NOT called" ],
+            [ 0, 0, qr/\Qsv_setiv(ST(ix_RETVAL), (IV)RETVAL[ix_RETVAL]);/,
+                                                    "ST(i) set" ],
+            [ 0, 0, qr/\QOUT(RETVAL,shortArray *,shortArrayPtr,short,ST(0))/,
+                                                    "template vars ok" ],
+            [ 0, 1, qr/DO_ARRAY_ELEM/,              "no DO_ARRAY_ELEM" ],
+        ],
+        [
+            "T_DAE bad input",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(NoInputArray * abc)
+EOF
+            [ 1, 0, qr/\QError: no INPUT definition for subtype 'NoInput', typekind 'T_Noinput' found in\E.*line 40/,
+                                                    "got expected error" ],
+        ],
+
+        # Use overridden return code with an OUTPUT line.
+        [
+            "T_ARRAY override output",
+            [ Q(<<'EOF') ],
+                |intArray *
+                |foo()
+                |    OUTPUT:
+                |      RETVAL my_intptr_set(ST(0), RETVAL[0]);
+EOF
+            [ 0, 0, qr/intArray\s*\*\s*RETVAL;/,   "RETVAL is intArray*" ],
+            [ 0, 1, qr/intArrayPtr/,               "intArrayPtr NOT called" ],
+            [ 0, 0, qr/\Qmy_intptr_set(ST(0), RETVAL[0]);/, "ST(0) set" ],
+            [ 0, 1, qr/DO_ARRAY_ELEM/,              "no DO_ARRAY_ELEM" ],
+        ],
+
+        # for OUT and OUTLIST arguments, don't process DO_ARRAY_ELEM
+        [
+            "T_ARRAY OUT",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(OUT intArray * abc)
+EOF
+            [ 1, 0, qr/Error: can't use typemap containing DO_ARRAY_ELEM for OUT parameter/,
+                    "gives err" ],
+        ],
+        [
+            "T_ARRAY OUT",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(OUTLIST intArray * abc)
+EOF
+            [ 1, 0, qr/Error: can't use typemap containing DO_ARRAY_ELEM for OUTLIST parameter/,
+                    "gives err" ],
+        ],
+
+        [
+            "T_ARRAY no output typemap entry",
+            [ Q(<<'EOF') ],
+                |NooutputArray *
+                |foo()
+EOF
+            [ 1, 0, qr/\QError: no OUTPUT definition for subtype 'Nooutput', typekind 'T_Nooutput'\E.*line 40/,
+                    "gives expected error" ],
+        ],
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
+{
+    # Test valid syntax of global-effect ENABLE/DISABLE keywords
+    #
+    # Check that disallowed variants give errors and allowed variants
+    # get as far as generating a boot XSUB
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "VERSIONCHECK: long word",
+            [ Q(<<'EOF') ],
+                |VERSIONCHECK: ENABLEblah
+EOF
+            [ 1, 0, qr{Error: VERSIONCHECK: ENABLE/DISABLE}, "should die" ],
+        ],
+        [
+            "VERSIONCHECK: trailing text",
+            [ Q(<<'EOF') ],
+                |VERSIONCHECK: DISABLE blah # bloo +$%
+EOF
+            [ 1, 0, qr{Error: VERSIONCHECK: ENABLE/DISABLE}, "should die" ],
+        ],
+        [
+            "VERSIONCHECK: lower case",
+            [ Q(<<'EOF') ],
+                |VERSIONCHECK: disable
+EOF
+            [ 1, 0, qr{Error: VERSIONCHECK: ENABLE/DISABLE}, "should die" ],
+        ],
+        [
+            "VERSIONCHECK: semicolon",
+            [ Q(<<'EOF') ],
+                |VERSIONCHECK: DISABLE;
+EOF
+            [ 1, 0, qr{Error: VERSIONCHECK: ENABLE/DISABLE}, "should die" ],
+        ],
+
+        [
+            "EXPORT_XSUB_SYMBOLS: long word",
+            [ Q(<<'EOF') ],
+                |EXPORT_XSUB_SYMBOLS: ENABLEblah
+EOF
+            [ 1, 0, qr{Error: EXPORT_XSUB_SYMBOLS: ENABLE/DISABLE}, "should die" ],
+        ],
+        [
+            "EXPORT_XSUB_SYMBOLS: trailing text",
+            [ Q(<<'EOF') ],
+                |EXPORT_XSUB_SYMBOLS: diSAble blah # bloo +$%
+EOF
+            [ 1, 0, qr{Error: EXPORT_XSUB_SYMBOLS: ENABLE/DISABLE}, "should die" ],
+        ],
+        [
+            "EXPORT_XSUB_SYMBOLS: lower case",
+            [ Q(<<'EOF') ],
+                |EXPORT_XSUB_SYMBOLS: disable
+EOF
+            [ 1, 0, qr{Error: EXPORT_XSUB_SYMBOLS: ENABLE/DISABLE}, "should die" ],
+        ],
+
+        [
+            "file SCOPE: long word",
+            [ Q(<<'EOF') ],
+                |SCOPE: ENABLEblah
+                |void
+                |foo()
+EOF
+            [ 1, 0, qr{Error: SCOPE: ENABLE/DISABLE}, "should die" ],
+        ],
+        [
+            "file SCOPE: lower case",
+            [ Q(<<'EOF') ],
+                |SCOPE: enable
+                |void
+                |foo()
+EOF
+            [ 1, 0, qr{Error: SCOPE: ENABLE/DISABLE}, "should die" ],
+        ],
+
+    );
+
+    test_many($preamble, 'boot_Foo', \@test_fns);
+}
+
+
+{
+    # Test PROTOTYPES keyword. Note that there is a lot of
+    # backwards-compatibility oddness in the keyword's value
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "PROTOTYPES: ENABLE",
+            [ Q(<<'EOF') ],
+                |PROTOTYPES: ENABLE
+                |
+                |void
+                |foo(int a, int b)
+EOF
+            [ 0, 0, qr{newXSproto_portable.*"\$\$"}, "has proto" ],
+        ],
+        [
+            "PROTOTYPES: ENABLED",
+            [ Q(<<'EOF') ],
+                |PROTOTYPES: ENABLED
+                |
+                |void
+                |foo(int a, int b)
+EOF
+            [ 0, 0, qr{newXSproto_portable.*"\$\$"}, "has proto" ],
+            [ 1, 0, qr{Warning: invalid PROTOTYPES value 'ENABLED' interpreted as ENABLE},
+                    "got warning" ],
+        ],
+        [
+            "PROTOTYPES: ENABLE;",
+            [ Q(<<'EOF') ],
+                |PROTOTYPES: ENABLE;
+                |
+                |void
+                |foo(int a, int b)
+EOF
+            [ 0, 0, qr{newXSproto_portable.*"\$\$"}, "has proto" ],
+            [ 1, 0, qr{Warning: invalid PROTOTYPES value 'ENABLE;' interpreted as ENABLE},
+                    "got warning" ],
+        ],
+
+        [
+            "PROTOTYPES: DISABLE",
+            [ Q(<<'EOF') ],
+                |PROTOTYPES: DISABLE
+                |
+                |void
+                |foo(int a, int b)
+EOF
+            [ 0, 1, qr{"\$\$"}, "doesn't have proto" ],
+        ],
+        [
+            "PROTOTYPES: DISABLED",
+            [ Q(<<'EOF') ],
+                |PROTOTYPES: DISABLED
+                |
+                |void
+                |foo(int a, int b)
+EOF
+            [ 0, 1, qr{"\$\$"}, "doesn't have proto" ],
+            [ 1, 0, qr{Warning: invalid PROTOTYPES value 'DISABLED' interpreted as DISABLE},
+                    "got warning" ],
+        ],
+        [
+            "PROTOTYPES: DISABLE;",
+            [ Q(<<'EOF') ],
+                |PROTOTYPES: DISABLE;
+                |
+                |void
+                |foo(int a, int b)
+EOF
+            [ 0, 1, qr{"\$\$"}, "doesn't have proto" ],
+            [ 1, 0, qr{Warning: invalid PROTOTYPES value 'DISABLE;' interpreted as DISABLE},
+                    "got warning" ],
+        ],
+
+        [
+            "PROTOTYPES: long word",
+            [ Q(<<'EOF') ],
+                |PROTOTYPES: ENABLEblah
+                |
+                |void
+                |foo(int a, int b)
+EOF
+            [ 1, 0, qr{Error: PROTOTYPES: ENABLE/DISABLE}, "should die" ],
+        ],
+        [
+            "PROTOTYPES: trailing text",
+            [ Q(<<'EOF') ],
+                |PROTOTYPES: ENABLE blah
+                |
+                |void
+                |foo(int a, int b)
+EOF
+            [ 1, 0, qr{Error: PROTOTYPES: ENABLE/DISABLE}, "should die" ],
+        ],
+        [
+            "PROTOTYPES: trailing text and comment)",
+            [ Q(<<'EOF') ],
+                |PROTOTYPES: DISABLE blah # bloo +$%
+                |
+                |void
+                |foo(int a, int b)
+EOF
+            [ 1, 0, qr{Error: PROTOTYPES: ENABLE/DISABLE}, "should die" ],
+        ],
+
+
+    );
+
+    test_many($preamble, 'boot_Foo', \@test_fns);
+}
+
+
+{
+    # Test per-XSUB ENABLE/DISABLE keywords except PROTOTYPES
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+        |TYPEMAP: <<EOF
+        |MyScopeInt        T_MYINT
+        |
+        |INPUT
+        |T_MYINT
+        |   $var = my_int($arg); /* SCOPE */
+        |EOF
+EOF
+
+    my @test_fns = (
+        [
+            "file SCOPE: trailing text",
+            [ Q(<<'EOF') ],
+                |SCOPE: EnAble blah # bloo +$%
+                |void
+                |foo()
+EOF
+            [ 1, 0, qr{Error: SCOPE: ENABLE/DISABLE}, "should die" ],
+        ],
+        [
+            "xsub SCOPE: trailing text",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |SCOPE: EnAble blah # bloo +$%
+EOF
+            [ 1, 0, qr{Error: SCOPE: ENABLE/DISABLE}, "should die" ],
+        ],
+        [
+            "xsub SCOPE: lower case",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |SCOPE: enable
+EOF
+            [ 1, 0, qr{Error: SCOPE: ENABLE/DISABLE}, "should die" ],
+        ],
+        [
+            "xsub SCOPE: semicolon",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |SCOPE: ENABLE;
+EOF
+            [ 1, 0, qr{Error: SCOPE: ENABLE/DISABLE}, "should die" ],
+        ],
+
+        [
+            "SCOPE: as file-scoped keyword",
+            [ Q(<<'EOF') ],
+                |SCOPE: ENABLE
+                |void
+                |foo()
+                |C_ARGS: a,b,c
+EOF
+            [ 0, 0, qr{ENTER;\s+{\s+\Qfoo(a,b,c);\E\s+}\s+LEAVE;},
+                    "has ENTER/LEAVE" ],
+        ],
+        [
+            "SCOPE: as xsub-scoped keyword",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |C_ARGS: a,b,c
+                |SCOPE: ENABLE
+EOF
+            [ 0, 0, qr{ENTER;\s+{\s+\Qfoo(a,b,c);\E\s+}\s+LEAVE;},
+                    "has ENTER/LEAVE" ],
+        ],
+        [
+            "/* SCOPE */ in typemap",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(i)
+                | MyScopeInt i
+EOF
+            [ 0, 0, qr{ENTER;\s+{.+\s+}\s+LEAVE;}s, "has ENTER/LEAVE" ],
+        ],
+        [
+            "xsub duplicate SCOPE",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |SCOPE: ENABLE
+                |SCOPE: ENABLE
+EOF
+            [ 1, 0, qr{\QError: only one SCOPE declaration allowed per XSUB},
+                    "got expected error"],
+        ],
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
+
+{
+    # Test ALIAS keyword - boot code
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "ALIAS basic",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    ALIAS: foo = 1
+                |           bar = 2
+                |           Baz::baz = 3
+                |           boz = BOZ_VAL
+                |           buz => foo
+                |           biz => Baz::baz
+EOF
+            [ 0, 0, qr{"Foo::foo",.*\n.*= 1;},
+                   "has Foo::foo" ],
+            [ 0, 0, qr{"Foo::bar",.*\n.*= 2;},
+                   "has Foo::bar" ],
+            [ 0, 0, qr{"Baz::baz",.*\n.*= 3;},
+                   "has Baz::baz" ],
+            [ 0, 0, qr{"Foo::boz",.*\n.*= BOZ_VAL;},
+                   "has Foo::boz" ],
+            [ 0, 0, qr{"Foo::buz",.*\n.*= 1;},
+                   "has Foo::buz" ],
+            [ 0, 0, qr{"Foo::biz",.*\n.*= 3;},
+                   "has Foo::biz" ],
+            [ 0, 0, qr{\QCV * cv;}, "has cv declaration" ],
+        ],
+
+        [
+            "ALIAS with main as default of 0",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    ALIAS:
+                |           bar = 2
+EOF
+            [ 0, 0, qr{"Foo::foo",.*\n.*= 0;},
+                   "has Foo::foo" ],
+            [ 0, 0, qr{"Foo::bar",.*\n.*= 2;},
+                   "has Foo::bar" ],
+        ],
+
+        [
+            "ALIAS multi-perl-line, blank lines",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    ALIAS:            foo   =    1       bar  =  2   
+                |
+                | Baz::baz  =  3      boz = BOZ_VAL
+                |       buz =>                          foo
+                |           biz => Baz::baz
+                |   
+                |
+EOF
+            [ 0, 0, qr{"Foo::foo",.*\n.*= 1;},
+                   "has Foo::foo" ],
+            [ 0, 0, qr{"Foo::bar",.*\n.*= 2;},
+                   "has Foo::bar" ],
+            [ 0, 0, qr{"Baz::baz",.*\n.*= 3;},
+                   "has Baz::baz" ],
+            [ 0, 0, qr{"Foo::boz",.*\n.*= BOZ_VAL;},
+                   "has Foo::boz" ],
+            [ 0, 0, qr{"Foo::buz",.*\n.*= 1;},
+                   "has Foo::buz" ],
+            [ 0, 0, qr{"Foo::biz",.*\n.*= 3;},
+                   "has Foo::biz" ],
+        ],
+
+        [
+            "ALIAS no colon",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    ALIAS: bar = X::Y
+EOF
+            [ 1, 0, qr{\QError: in alias definition for 'bar' the value may not contain ':' unless it is symbolic.\E.*line 7},
+                   "got expected error" ],
+        ],
+
+        [
+            "ALIAS unknown alias",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    ALIAS: Foo::bar => blurt
+EOF
+            [ 1, 0, qr{\QError: unknown alias 'Foo::blurt' in symbolic definition for 'Foo::bar'\E.*line 7},
+                   "got expected error" ],
+        ],
+
+        [
+            "ALIAS warn duplicate",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    ALIAS: bar = 1
+                |           bar = 1
+EOF
+            [ 1, 0, qr{\QWarning: ignoring duplicate alias 'bar'\E.*line 8},
+                   "got expected warning" ],
+        ],
+        [
+            "ALIAS warn conflict duplicate",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    ALIAS: bar = 1
+                |           bar = 2
+EOF
+            [ 1, 0, qr{\QWarning: conflicting duplicate alias 'bar'\E.*line 8},
+                   "got expected warning" ],
+        ],
+
+        [
+            "ALIAS warn identical values",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    ALIAS: bar = 1
+                |           baz = 1
+EOF
+            [ 1, 0, qr{\QWarning: aliases 'baz' and 'bar' have identical values of 1\E.*line 8},
+                   "got expected warning" ],
+        ],
+
+        [
+            "ALIAS unparseable entry",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    ALIAS: bar = 
+EOF
+            [ 1, 0, qr{\QError: cannot parse ALIAS definitions from 'bar ='\E.*line 7},
+                   "got expected error" ],
+        ],
+    );
+
+    test_many($preamble, 'boot_Foo', \@test_fns);
+}
+
+{
+    # Test ALIAS keyword  - XSUB body
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            'ALIAS with $ALIAS used in typemap entry',
+            [ Q(<<'EOF') ],
+                |void
+                |foo(AV *av)
+                |    ALIAS: bar = 1
+EOF
+            [ 0, 0, qr{croak.*\n.*\QGvNAME(CvGV(cv))},
+                   "got alias variant of croak message" ],
+        ],
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
+
+{
+    # Test INTERFACE keyword - boot code
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "INTERFACE basic boot",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    INTERFACE: f1 f2
+EOF
+            [ 0, 0, qr{   \QnewXS_deffile("Foo::f1", XS_Foo_foo);\E\n
+                       \s+\QXSINTERFACE_FUNC_SET(cv,f1);\E
+                      }x,
+                   "got f1 entries" ],
+            [ 0, 0, qr{   \QnewXS_deffile("Foo::f2", XS_Foo_foo);\E\n
+                       \s+\QXSINTERFACE_FUNC_SET(cv,f2);\E
+                      }x,
+                   "got f2 entries" ],
+            [ 0, 0, qr{\QCV * cv;}, "has cv declaration" ],
+        ],
+    );
+
+    test_many($preamble, 'boot_Foo', \@test_fns);
+}
+
+{
+    # Test INTERFACE keyword  - XSUB body
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+        |TYPEMAP: <<EOTM
+        |X::Y T_IV
+        |EOTM
+        |
+EOF
+
+    my @test_fns = (
+        [
+            'INTERFACE basic body',
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    INTERFACE: f1 f2
+EOF
+            [ 0, 0, qr{\b\QdXSFUNCTION(void)},
+                   "got XSFUNCTION declaration" ],
+            [ 0, 0, qr{\QXSFUNCTION = XSINTERFACE_FUNC(void,cv,XSANY.any_dptr);},
+                   "got XSFUNCTION assign" ],
+            [ 0, 0, qr{\Q((void (*)())(XSFUNCTION))();},
+                   "got XSFUNCTION call" ],
+        ],
+        [
+            'INTERFACE with perl package name',
+            [ Q(<<'EOF') ],
+                |X::Y
+                |foo(X::Y a, char *b)
+                |    INTERFACE: f1
+EOF
+            [ 0, 0, qr{\b\QdXSFUNCTION(X__Y)},
+                   "got XSFUNCTION declaration" ],
+            [ 0, 0, qr{\QXSFUNCTION = XSINTERFACE_FUNC(X__Y,cv,XSANY.any_dptr);},
+                   "got XSFUNCTION assign" ],
+            [ 0, 0, qr{\QRETVAL = ((X__Y (*)(X__Y, char *))(XSFUNCTION))(a, b);},
+                   "got XSFUNCTION call" ],
+        ],
+        [
+            'INTERFACE with C_ARGS',
+            [ Q(<<'EOF') ],
+                |char *
+                |foo(X::Y a, int b, char *c)
+                |    INTERFACE: f1
+                |    C_ARGS:  a,  c
+EOF
+            [ 0, 0, qr{\b\QdXSFUNCTION(char *)},
+                   "got XSFUNCTION declaration" ],
+            [ 0, 0, qr{\QXSFUNCTION = XSINTERFACE_FUNC(char *,cv,XSANY.any_dptr);},
+                   "got XSFUNCTION assign" ],
+            [ 0, 0, qr{\QRETVAL = ((char * (*)(X__Y, char *))(XSFUNCTION))(a,  c);},
+                   "got XSFUNCTION call" ],
+        ],
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
+
+{
+    # Test ATTRS keyword
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "ATTRS basic",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    ATTRS: a
+                |           b     c(x)
+                |    C_ARGS: foo
+                |    ATTRS: d(y(  z))  
+EOF
+            [ 0, 0, qr{\QCV * cv;}, "has cv declaration" ],
+            [ 0, 0, qr{\Qapply_attrs_string("Foo", cv, "a\E\s+b\s+c\(x\)\s+\Qd(y(  z))", 0);},
+                   "has correct attrs arg" ],
+        ],
+
+    );
+
+    test_many($preamble, 'boot_Foo', \@test_fns);
+}
+
+
+{
+    # Test OVERLOAD keyword
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "OVERLOAD basic",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |    OVERLOAD:   cmp   <=>
+                |                  + - *    /
+                |    OVERLOAD:   >   <  >=
+EOF
+            [ 0, 0, qr{\Q"Foo::(*"},   "has Foo::(* method"   ],
+            [ 0, 0, qr{\Q"Foo::(+"},   "has Foo::(+ method"   ],
+            [ 0, 0, qr{\Q"Foo::(-"},   "has Foo::(- method"   ],
+            [ 0, 0, qr{\Q"Foo::(/"},   "has Foo::(/ method"   ],
+            [ 0, 0, qr{\Q"Foo::(<"},   "has Foo::(< method"   ],
+            [ 0, 0, qr{\Q"Foo::(<=>"}, "has Foo::(<=> method" ],
+            [ 0, 0, qr{\Q"Foo::(>"},   "has Foo::(> method"   ],
+            [ 0, 0, qr{\Q"Foo::(>="},  "has Foo::(>= method"  ],
+            [ 0, 0, qr{\Q"Foo::(cmp"}, "has Foo::(cmp method" ],
+        ],
+
+    );
+
+    test_many($preamble, 'boot_Foo', \@test_fns);
+}
+
+
+{
+    # Test INIT: keyword
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "INIT basic",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(aaa, short bbb)
+                |    int aaa
+                |  INIT:
+                |     XXX
+                |     YYY
+                |  CODE:
+                |     ZZZ
+EOF
+            [ 0, 0, qr{\bint\s+aaa},             "has aaa decl"   ],
+            [ 0, 0, qr{\bshort\s+bbb},           "has bbb decl"   ],
+            [ 0, 0, qr{^\s+XXX\n\s+YYY\n}m,      "has XXX, YYY"   ],
+            [ 0, 0, qr{^\s+ZZZ\n}m,              "has ZZZ"        ],
+            [ 0, 0, qr{aaa.*bbb.*XXX.*YYY.*ZZZ}s,"in sequence"    ],
+        ],
+
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
+
+{
+    # Test NOT_IMPLEMENTED_YET pseudo-keyword
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+        |TYPEMAP: <<EOF
+        |INPUT
+        |T_UV
+        |    set_uint($var, $arg)
+        |EOF
+EOF
+
+    my @test_fns = (
+        [
+            "NOT_IMPLEMENTED_YET basic",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(int aaa, bbb, ccc)
+                |    short bbb
+                |    unsigned ccc
+                |  NOT_IMPLEMENTED_YET
+EOF
+            [ 0, 0, qr{\QPerl_croak(aTHX_ "Foo::foo: not implemented yet");},
+                    "has croak"   ],
+            [ 0, 0, qr{\bint\s+aaa},             "has aaa decl"   ],
+            [ 0, 0, qr{\bshort\s+bbb},           "has bbb decl"   ],
+            [ 0, 0, qr{\bunsigned\s+ccc},        "has ccc decl"   ],
+            [ 0, 0, qr{\Qset_uint(ccc, ST(2))},  "has ccc init"   ],
+        ],
+        [
+            "NOT_IMPLEMENTED_YET no input part",
+            [ Q(<<'EOF') ],
+                |void
+                |foo()
+                |  NOT_IMPLEMENTED_YET
+EOF
+            [ 0, 0, qr{\QPerl_croak(aTHX_ "Foo::foo: not implemented yet");},
+                    "has croak"   ],
+            [ 0, 1, qr{NOT_IMPLEMENTED_YET},     "no NIY"         ],
+        ],
+        [
+            "NOT_IMPLEMENTED_YET not special after C_ARGS",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(aaa)
+                |    int aaa
+                |  C_ARGS: a,b,
+                |  NOT_IMPLEMENTED_YET
+EOF
+            [ 0, 1, qr{\QPerl_croak(aTHX_ "Foo::foo: not implemented yet");},
+                    "doesn't has croak"   ],
+            [ 0, 0, qr{\bint\s+aaa},                  "has aaa decl"         ],
+            [ 0, 0, qr{a,b,\n\s+NOT_IMPLEMENTED_YET}, "NIY is part of C_ARGS"],
+        ],
+        [
+            "NOT_IMPLEMENTED_YET not special after INIT",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(aaa)
+                |    int aaa
+                |  INIT:
+                |    ZZZ
+                |  NOT_IMPLEMENTED_YET
+EOF
+            [ 0, 1, qr{\QPerl_croak(aTHX_ "Foo::foo: not implemented yet");},
+                    "doesn't has croak"   ],
+            [ 0, 0, qr{\bint\s+aaa},                 "has aaa decl"     ],
+            [ 0, 0, qr{ZZZ\n\s+NOT_IMPLEMENTED_YET}, "NIY is part of init code"          ],
+        ],
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
+{
+    # Test CLEANUP keyword
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "CLEANUP basic",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(int aaa)
+                |  CLEANUP:
+                |     YYY
+EOF
+            [ 0, 0, qr{\bint\s+aaa},                  "has aaa decl"      ],
+            [ 0, 0, qr{^\s+\QRETVAL = foo(aaa);}m,    "has code body"     ],
+            [ 0, 0, qr{^\s+YYY\n}m,                   "has cleanup body" ],
+            [ 0, 0, qr{aaa.*foo\(aaa\).*TARGi.*YYY}s, "in sequence"       ],
+            [ 0, 0, qr{\#line 8 .*\n\s+YYY},          "correct #line"     ],
+        ],
+        [
+             "CLEANUP empty",
+             [ Q(<<'EOF') ],
+                 |void
+                 |foo(int aaa)
+                 |  CLEANUP:
+EOF
+            [ 0, 0, qr{\bint\s+aaa},                  "has aaa decl"      ],
+            [ 0, 0, qr{^\s+\Qfoo(aaa);}m,             "has code body"     ],
+            [ 0, 0, qr{\Qfoo(aaa);\E\n\#line 8 },     "correct #line"     ],
+         ],
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
+
+
+{
+    # Test CODE keyword
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "CODE basic",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(int aaa)
+                |  CODE:
+                |     YYY
+EOF
+            [ 0, 0, qr{\bint\s+aaa},           "has aaa decl"   ],
+            [ 0, 0, qr{YYY},                   "has code body"  ],
+            [ 0, 0, qr{aaa.*YYY}s,             "in sequence"    ],
+            [ 0, 0, qr{\#line 8 .*\n\s+YYY},   "correct #line"  ],
+        ],
+        [
+            "CODE empty",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(int aaa)
+                |  CODE:
+EOF
+            [ 0, 0, qr{\bint\s+aaa},               "has aaa decl"   ],
+            [ 0, 0, qr{aaa.*\n\s*;\s*\n\#line 8 }, "correct #line"  ],
+        ],
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
+
+{
+    # Test PPCODE keyword
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "PPCODE basic",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(int aaa)
+                |  PPCODE:
+                |     YYY
+EOF
+            [ 0, 0, qr{\bint\s+aaa},           "has aaa decl"   ],
+            [ 0, 0, qr{YYY},                   "has code body"  ],
+            [ 0, 0, qr{aaa.*YYY}s,             "in sequence"    ],
+            [ 0, 0, qr{\#line 8 .*\n\s+YYY},   "correct #line"  ],
+        ],
+        [
+            "PPCODE empty",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(int aaa)
+                |  PPCODE:
+EOF
+            [ 0, 0, qr{\bint\s+aaa},               "has aaa decl"   ],
+            [ 0, 0, qr{aaa.*\n\s*;\s*\n\#line 8 }, "correct #line"  ],
+        ],
+        [
+            "PPCODE trailing keyword",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(int aaa)
+                |  PPCODE:
+                |     YYY
+                |  OUTPUT:
+                |     blah
+EOF
+            [ 1, 0, qr{Error: PPCODE must be the last thing}, "got expected err"  ],
+        ],
+        [
+            "PPCODE code tweaks",
+            [ Q(<<'EOF') ],
+                |void
+                |foo(int aaa)
+                |  PPCODE:
+                |     YYY
+EOF
+            [ 0, 0, qr{\QPERL_UNUSED_VAR(ax);},   "got PERL_UNUSED_VAR"    ],
+            [ 0, 0, qr{\QSP -= items;},           "got SP -= items"        ],
+            [ 0, 1, qr{\QXSRETURN},               "no XSRETURN"            ],
+            [ 0, 0, qr{\bPUTBACK\b.*\breturn\b}s, "got PUTBACK and return" ],
+        ],
+
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
+
+{
+    # Test POSTCALL keyword
+
+    my $preamble = Q(<<'EOF');
+        |MODULE = Foo PACKAGE = Foo
+        |
+        |PROTOTYPES:  DISABLE
+        |
+EOF
+
+    my @test_fns = (
+        [
+            "POSTCALL basic",
+            [ Q(<<'EOF') ],
+                |int
+                |foo(int aaa)
+                |  POSTCALL:
+                |     YYY
+EOF
+            [ 0, 0, qr{\bint\s+aaa},                  "has aaa decl"      ],
+            [ 0, 0, qr{^\s+\QRETVAL = foo(aaa);}m,    "has code body"     ],
+            [ 0, 0, qr{^\s+YYY\n}m,                   "has postcall body" ],
+            [ 0, 0, qr{aaa.*foo\(aaa\).*YYY.*TARGi}s, "in sequence"       ],
+            [ 0, 0, qr{\#line 8 .*\n\s+YYY},          "correct #line"     ],
+        ],
+        [
+             "POSTCALL empty",
+             [ Q(<<'EOF') ],
+                 |void
+                 |foo(int aaa)
+                 |  POSTCALL:
+EOF
+            [ 0, 0, qr{\bint\s+aaa},                  "has aaa decl"      ],
+            [ 0, 0, qr{^\s+\Qfoo(aaa);}m,             "has code body"     ],
+            [ 0, 0, qr{\Qfoo(aaa);\E\n\#line 8 },     "correct #line"     ],
+         ],
+    );
+
+    test_many($preamble, 'XS_Foo_', \@test_fns);
+}
+
+
+done_testing;

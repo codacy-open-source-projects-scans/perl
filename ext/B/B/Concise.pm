@@ -3,18 +3,12 @@ package B::Concise;
 # This program is free software; you can redistribute and/or modify it
 # under the same terms as Perl itself.
 
-# Note: we need to keep track of how many use declarations/BEGIN
-# blocks this module uses, so we can avoid printing them when user
-# asks for the BEGIN blocks in her program. Update the comments and
-# the count in concise_specials if you add or delete one. The
-# -MO=Concise counts as use #1.
+use strict;
+use warnings;
 
-use strict; # use #2
-use warnings; # uses #3 and #4, since warnings uses Carp
+use Exporter 'import';
 
-use Exporter 'import'; # use #5
-
-our $VERSION   = "1.007";
+our $VERSION   = "1.009";
 our @EXPORT_OK = qw( set_style set_style_standard add_callback
 		     concise_subref concise_cv concise_main
 		     add_style walk_output compile reset_sequence );
@@ -24,7 +18,6 @@ our %EXPORT_TAGS =
       cb	=> [qw( add_callback )],
       mech	=> [qw( concise_subref concise_cv concise_main )],  );
 
-# use #6
 use B qw(class ppname main_start main_root main_cv cstring svref_2object
 	 SVf_IOK SVf_NOK SVf_POK SVf_IVisUV SVf_FAKE OPf_KIDS OPf_SPECIAL
          OPf_STACKED
@@ -83,6 +76,7 @@ our @callbacks;		# allow external management
 
 set_style_standard("concise");
 
+my $begin_count;
 my $curcv;
 my $cop_seq_base;
 
@@ -228,8 +222,9 @@ sub concise_main {
 sub concise_specials {
     my($name, $order, @cv_s) = @_;
     my $i = 1;
+
     if ($name eq "BEGIN") {
-	splice(@cv_s, 0, 8); # skip 7 BEGIN blocks in this file. NOW 8 ??
+	splice(@cv_s, 0, $begin_count); # skip our BEGIN blocks from this file
     } elsif ($name eq "CHECK") {
 	pop @cv_s; # skip the CHECK block that calls us
     }
@@ -406,7 +401,7 @@ my %opclass = ('OP' => "0", 'UNOP' => "1", 'BINOP' => "2", 'LOGOP' => "|",
 	       'PVOP' => '"', 'LOOP' => "{", 'COP' => ";", 'PADOP' => "#",
 	       'METHOP' => '.', UNOP_AUX => '+');
 
-no warnings 'qw'; # "Possible attempt to put comments..."; use #7
+no warnings 'qw'; # "Possible attempt to put comments..."
 my @linenoise =
   qw'#  () sc (  @? 1  $* gv *{ m$ m@ m% m? p/ *$ $  $# & a& pt \\ s\\ rf bl
      `  *? <> ?? ?/ r/ c/ // qr s/ /c y/ =  @= C  sC Cp sp df un BM po +1 +I
@@ -1086,6 +1081,10 @@ sub tree {
     return("$name$lead" . shift @lines,
            map(" " x (length($name)+$size) . $_, @lines));
 }
+
+# Count how many BEGIN blocks have been used to avoid printing them when a
+# user asks for the BEGIN blocks in their program. Must be our last BEGIN.
+BEGIN { $begin_count =()= B::begin_av->isa('B::AV') ? B::begin_av->ARRAY : () }
 
 # *** Warning: fragile kludge ahead ***
 # Because the B::* modules run in the same interpreter as the code

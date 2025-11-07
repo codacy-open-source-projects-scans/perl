@@ -22,6 +22,7 @@
 #define NEED_newCONSTSUB
 #define NEED_newSVpvn_flags
 #define NEED_newRV_noinc
+#define NEED_sv_vstring_get
 #include "ppport.h"             /* handle old perls */
 
 #ifdef DEBUGGING
@@ -1355,11 +1356,11 @@ static SV *retrieve(pTHX_ stcxt_t *cxt, const char *cname);
 
 static int store_ref(pTHX_ stcxt_t *cxt, SV *sv);
 static int store_scalar(pTHX_ stcxt_t *cxt, SV *sv);
-static int store_array(pTHX_ stcxt_t *cxt, AV *av);
-static int store_hash(pTHX_ stcxt_t *cxt, HV *hv);
+static int store_array(pTHX_ stcxt_t *cxt, SV *av);
+static int store_hash(pTHX_ stcxt_t *cxt, SV *hv);
 static int store_tied(pTHX_ stcxt_t *cxt, SV *sv);
 static int store_tied_item(pTHX_ stcxt_t *cxt, SV *sv);
-static int store_code(pTHX_ stcxt_t *cxt, CV *cv);
+static int store_code(pTHX_ stcxt_t *cxt, SV *cv);
 static int store_regexp(pTHX_ stcxt_t *cxt, SV *sv);
 static int store_other(pTHX_ stcxt_t *cxt, SV *sv);
 static int store_blessed(pTHX_ stcxt_t *cxt, SV *sv, int type, HV *pkg);
@@ -1367,15 +1368,15 @@ static int store_blessed(pTHX_ stcxt_t *cxt, SV *sv, int type, HV *pkg);
 typedef int (*sv_store_t)(pTHX_ stcxt_t *cxt, SV *sv);
 
 static const sv_store_t sv_store[] = {
-    (sv_store_t)store_ref,      /* svis_REF */
-    (sv_store_t)store_scalar,   /* svis_SCALAR */
-    (sv_store_t)store_array,    /* svis_ARRAY */
-    (sv_store_t)store_hash,     /* svis_HASH */
-    (sv_store_t)store_tied,     /* svis_TIED */
-    (sv_store_t)store_tied_item,/* svis_TIED_ITEM */
-    (sv_store_t)store_code,     /* svis_CODE */
-    (sv_store_t)store_regexp,   /* svis_REGEXP */
-    (sv_store_t)store_other,    /* svis_OTHER */
+    store_ref,      /* svis_REF */
+    store_scalar,   /* svis_SCALAR */
+    store_array,    /* svis_ARRAY */
+    store_hash,     /* svis_HASH */
+    store_tied,     /* svis_TIED */
+    store_tied_item,/* svis_TIED_ITEM */
+    store_code,     /* svis_CODE */
+    store_regexp,   /* svis_REGEXP */
+    store_other,    /* svis_OTHER */
 };
 
 #define SV_STORE(x)     (*sv_store[x])
@@ -2583,7 +2584,8 @@ static int store_scalar(pTHX_ stcxt_t *cxt, SV *sv)
 
     } else if (flags & (SVp_POK | SVp_NOK | SVp_IOK)) {
 #ifdef SvVOK
-        MAGIC *mg;
+        const char *vstr_pv;
+        STRLEN vstr_len;
 #endif
         UV wlen; /* For 64-bit machines */
 
@@ -2597,18 +2599,14 @@ static int store_scalar(pTHX_ stcxt_t *cxt, SV *sv)
     string:
 
 #ifdef SvVOK
-        if (SvMAGICAL(sv) && (mg = mg_find(sv, 'V'))) {
-            /* The macro passes this by address, not value, and a lot of
-               called code assumes that it's 32 bits without checking.  */
-            const SSize_t len = mg->mg_len;
+        if ((vstr_pv = SvVSTRING(sv, vstr_len))) {
             /* we no longer accept vstrings over I32_SIZE-1, so don't emit
                them, also, older Storables handle them badly.
             */
-            if (len >= I32_MAX) {
+            if (vstr_len >= I32_MAX) {
                 CROAK(("vstring too large to freeze"));
             }
-            STORE_PV_LEN((const char *)mg->mg_ptr,
-                         len, SX_VSTRING, SX_LVSTRING);
+            STORE_PV_LEN(vstr_pv, vstr_len, SX_VSTRING, SX_LVSTRING);
         }
 #endif
 
@@ -2636,8 +2634,9 @@ static int store_scalar(pTHX_ stcxt_t *cxt, SV *sv)
  * Layout is SX_ARRAY <size> followed by each item, in increasing index order.
  * Each item is stored as <object>.
  */
-static int store_array(pTHX_ stcxt_t *cxt, AV *av)
+static int store_array(pTHX_ stcxt_t *cxt, SV *xsv)
 {
+    AV *av = (AV *)xsv;
     SV **sav;
     UV len = av_len(av) + 1;
     UV i;
@@ -2762,8 +2761,9 @@ sortcmp(const void *a, const void *b)
  * Currently the only hash flag is "restricted"
  * Key flags are as for hv.h
  */
-static int store_hash(pTHX_ stcxt_t *cxt, HV *hv)
+static int store_hash(pTHX_ stcxt_t *cxt, SV *xsv)
 {
+    HV *hv = (HV *)xsv;
     dVAR;
     UV len = (UV)HvTOTALKEYS(hv);
     Size_t i;
@@ -2960,6 +2960,19 @@ static int store_hash(pTHX_ stcxt_t *cxt, HV *hv)
             keyval = SvPV(key, keylen_tmp);
             keylen = keylen_tmp;
             if (SvUTF8(key)) {
+
+#ifdef utf8_to_bytes_overwrite
+
+                /* If we are able to downgrade here; that means that we have a
+                 * key which only had chars 0-255, but was utf8 encoded.  */
+                if (utf8_to_bytes_overwrite( (U8**) &keyval, &keylen_tmp)) {
+                    keylen = keylen_tmp;
+                    flags |= SHV_K_WASUTF8;
+                }
+                else {
+                    flags |= SHV_K_UTF8;
+                }
+#else
                 const char *keysave = keyval;
                 bool is_utf8 = TRUE;
 
@@ -2982,6 +2995,7 @@ static int store_hash(pTHX_ stcxt_t *cxt, HV *hv)
                        to assign back to keylen.  */
                     flags |= SHV_K_UTF8;
                 }
+#endif
             }
 
             if (flagged_hash) {
@@ -3000,8 +3014,12 @@ static int store_hash(pTHX_ stcxt_t *cxt, HV *hv)
             WLEN(keylen);
             if (keylen)
                 WRITE(keyval, keylen);
+
+#ifndef utf8_to_bytes_overwrite
+
             if (flags & SHV_K_WASUTF8)
                 Safefree (keyval);
+#endif
         }
 
         /*
@@ -3207,8 +3225,9 @@ static int store_lhash(pTHX_ stcxt_t *cxt, HV *hv, unsigned char hash_flags)
  * Layout is SX_CODE <length> followed by a scalar containing the perl
  * source code of the code reference.
  */
-static int store_code(pTHX_ stcxt_t *cxt, CV *cv)
+static int store_code(pTHX_ stcxt_t *cxt, SV *xsv)
 {
+    CV *cv = (CV *)xsv;
     dSP;
     STRLEN len;
     STRLEN count, reallen;

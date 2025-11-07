@@ -139,43 +139,59 @@ typedef enum {
 #define is_ascii_string(s, len)     is_utf8_invariant_string(s, len)
 #define is_invariant_string(s, len) is_utf8_invariant_string(s, len)
 
+/*
+=for apidoc uvoffuni_to_utf8_flags
+
+THIS FUNCTION SHOULD BE USED IN ONLY VERY SPECIALIZED CIRCUMSTANCES.
+Instead, B<Almost all code should use L<perlapi/uv_to_utf8> or
+L<perlapi/uv_to_utf8_flags>>.
+
+This function is like them, but the input is a strict Unicode
+(as opposed to native) code point.  Only in very rare circumstances should code
+not be using the native code point.
+
+For details, see the description for L<perlapi/uv_to_utf8_flags>.
+
+=cut
+*/
 #define uvoffuni_to_utf8_flags(d,uv,flags)                                     \
                                uvoffuni_to_utf8_flags_msgs(d, uv, flags, 0)
 
-#define Perl_uv_to_utf8(mTHX, d, u)                                         \
-        Perl_uv_to_utf8_flags(aTHX, d, u, 0)
-#define Perl_uv_to_utf8_flags(mTHX, d, u, f)                                \
-        Perl_uv_to_utf8_msgs(aTHX, d, u, f, 0)
-#define Perl_uv_to_utf8_msgs(mTHX, d, u, f , m)                             \
-        Perl_uvoffuni_to_utf8_flags_msgs(aTHX_ d, NATIVE_TO_UNI(u), f, m)
+#define uvchr_to_utf8                   uv_to_utf8
+#define uvchr_to_utf8_flags             uv_to_utf8_flags
+#define uvchr_to_utf8_flags_msgs        uv_to_utf8_msgs
+#define uvchr_to_utf8              uv_to_utf8
+#define uvchr_to_utf8_flags        uv_to_utf8_flags
+#define uvchr_to_utf8_flags_msgs   uv_to_utf8_msgs
+
+#define uv_to_utf8_msgs(d, uv, flags, msgs)                             \
+        uvoffuni_to_utf8_flags_msgs(d, NATIVE_TO_UNI(uv), flags, msgs)
 
 /* This is needed to cast the parameters for all those calls that had them
  * improperly as chars */
-#define utf8_to_uvchr_buf(s, e, lenp)                                          \
+#define utf8_to_uvchr_buf(s, e, lenp)                                   \
     Perl_utf8_to_uvchr_buf(aTHX_ (const U8 *) (s), (const U8 *) e, lenp)
 
-#define Perl_utf8n_to_uvchr(s, len, lenp, flags)                               \
-                          Perl_utf8n_to_uvchr_error(s, len, lenp, flags, 0)
-#define Perl_utf8n_to_uvchr_error(s, len, lenp, flags, errors)                 \
-                    Perl_utf8n_to_uvchr_msgs(s, len, lenp, flags, errors, 0)
+#define utf8n_to_uvchr(s, len, lenp, flags)                             \
+                          utf8n_to_uvchr_error(s, len, lenp, flags, 0)
+#define utf8n_to_uvchr_error(s, len, lenp, flags, errors)               \
+                    utf8n_to_uvchr_msgs(s, len, lenp, flags, errors, 0)
 
-#define Perl_utf8_to_uv(         s, e, cp_p, advance_p)                     \
-        Perl_utf8_to_uv_flags(   s, e, cp_p, advance_p, 0)
-#define Perl_utf8_to_uv_flags(   s, e, cp_p, advance_p, flags)              \
-        Perl_utf8_to_uv_errors(  s, e, cp_p, advance_p, flags, 0)
-#define Perl_utf8_to_uv_errors(  s, e, cp_p, advance_p, flags, errors)      \
-          Perl_utf8_to_uv_msgs(  s, e, cp_p, advance_p, flags, errors, 0)
-#define Perl_extended_utf8_to_uv(s, e, cp_p, advance_p)                     \
-                 Perl_utf8_to_uv(s, e, cp_p, advance_p)
-#define Perl_strict_utf8_to_uv(  s, e, cp_p, advance_p)                     \
-        Perl_utf8_to_uv_flags(   s, e, cp_p, advance_p,                     \
-                                        UTF8_DISALLOW_ILLEGAL_INTERCHANGE)
-#define Perl_c9strict_utf8_to_uv(s, e, cp_p, advance_p)                     \
-        Perl_utf8_to_uv_flags(   s, e, cp_p, advance_p,                     \
-                                     UTF8_DISALLOW_ILLEGAL_C9_INTERCHANGE)
-#define Perl_uvchr_to_utf8              Perl_uv_to_utf8
-#define Perl_uvchr_to_utf8_flags        Perl_uv_to_utf8_flags
-#define Perl_uvchr_to_utf8_flags_msgs   Perl_uv_to_utf8_msgs
+#define utf8_to_uv(         s, e, cp_p, advance_p)                      \
+        utf8_to_uv_flags(   s, e, cp_p, advance_p, 0)
+#define utf8_to_uv_flags(   s, e, cp_p, advance_p, flags)               \
+        utf8_to_uv_errors(  s, e, cp_p, advance_p, flags, 0)
+#define utf8_to_uv_errors(  s, e, cp_p, advance_p, flags, errors)       \
+          utf8_to_uv_msgs(  s, e, cp_p, advance_p, flags, errors, 0)
+#define extended_utf8_to_uv(s, e, cp_p, advance_p)                      \
+                 utf8_to_uv(s, e, cp_p, advance_p)
+#define strict_utf8_to_uv(  s, e, cp_p, advance_p)                      \
+        utf8_to_uv_flags(   s, e, cp_p, advance_p,                      \
+                                    UTF8_DISALLOW_ILLEGAL_INTERCHANGE)
+#define c9strict_utf8_to_uv(s, e, cp_p, advance_p)                      \
+        utf8_to_uv_flags(   s, e, cp_p, advance_p,                      \
+                                 UTF8_DISALLOW_ILLEGAL_C9_INTERCHANGE)
+#define valid_utf8_to_uvchr(s, advance_p)  valid_utf8_to_uv(s, advance_p)
 
 #define utf16_to_utf8(p, d, bytelen, newlen)                                \
                             utf16_to_utf8_base(p, d, bytelen, newlen, 0, 1)
@@ -186,7 +202,7 @@ typedef enum {
 #define utf8_to_utf16_reversed(p, d, bytelen, newlen)                       \
                             utf8_to_utf16_base(p, d, bytelen, newlen, 1, 0)
 
-#define to_uni_fold(c, p, lenp) _to_uni_fold_flags(c, p, lenp, FOLD_FLAGS_FULL)
+#define to_uni_fold(c, p, lenp) to_uni_fold_flags_(c, p, lenp, FOLD_FLAGS_FULL)
 
 #define foldEQ_utf8(s1, pe1, l1, u1, s2, pe2, l2, u2) \
                     foldEQ_utf8_flags(s1, pe1, l1, u1, s2, pe2, l2, u2, 0)
@@ -215,14 +231,11 @@ typedef enum {
  * following header file: */
 #  include "utfebcdic.h"
 
-#  else	/* ! EBCDIC */
+#  else /* ! EBCDIC */
 
 START_EXTERN_C
 
-#  ifndef DOINIT
-EXTCONST unsigned char PL_utf8skip[];
-#  else
-EXTCONST unsigned char PL_utf8skip[] = {
+EXTCONST unsigned char PL_utf8skip[] INIT( {
 /* 0x00 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ascii */
 /* 0x10 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ascii */
 /* 0x20 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ascii */
@@ -235,17 +248,16 @@ EXTCONST unsigned char PL_utf8skip[] = {
 /* 0x90 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* bogus: continuation byte */
 /* 0xA0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* bogus: continuation byte */
 /* 0xB0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* bogus: continuation byte */
-/* 0xC0 */ 2,2,				    /* overlong */
+/* 0xC0 */ 2,2,                             /* overlong */
 /* 0xC2 */     2,2,2,2,2,2,2,2,2,2,2,2,2,2, /* U+0080 to U+03FF */
 /* 0xD0 */ 2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, /* U+0400 to U+07FF */
 /* 0xE0 */ 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3, /* U+0800 to U+FFFF */
-/* 0xF0 */ 4,4,4,4,4,4,4,4,5,5,5,5,6,6,	    /* above BMP to 2**31 - 1 */
+/* 0xF0 */ 4,4,4,4,4,4,4,4,5,5,5,5,6,6,     /* above BMP to 2**31 - 1 */
            /* Perl extended (never was official UTF-8).  Up to 36 bit */
 /* 0xFE */                             7,
            /* More extended, Up to 72 bits (64-bit + reserved) */
 /* 0xFF */                               ASCII_PLATFORM_UTF8_MAXBYTES
-};
-#  endif
+});
 
 END_EXTERN_C
 
@@ -294,8 +306,8 @@ adding no time nor space requirements to the implementation.
 =cut
 */
 
-#define NATIVE_TO_LATIN1(ch)  (__ASSERT_(FITS_IN_8_BITS(ch)) ((U8) (ch)))
-#define LATIN1_TO_NATIVE(ch)  (__ASSERT_(FITS_IN_8_BITS(ch)) ((U8) (ch)))
+#define NATIVE_TO_LATIN1(ch)  (assert(FITS_IN_8_BITS(ch)), ((U8) (ch)))
+#define LATIN1_TO_NATIVE(ch)  (assert(FITS_IN_8_BITS(ch)), ((U8) (ch)))
 
 /* I8 is an intermediate version of UTF-8 used only in UTF-EBCDIC.  We thus
  * consider it to be identical to UTF-8 on ASCII platforms.  Strictly speaking
@@ -303,8 +315,8 @@ adding no time nor space requirements to the implementation.
  * because they are 8-bit encodings that serve the same purpose in Perl, and
  * rarely do we need to distinguish them.  The term "NATIVE_UTF8" applies to
  * whichever one is applicable on the current platform */
-#define NATIVE_UTF8_TO_I8(ch)  (__ASSERT_(FITS_IN_8_BITS(ch)) ((U8) (ch)))
-#define I8_TO_NATIVE_UTF8(ch)  (__ASSERT_(FITS_IN_8_BITS(ch)) ((U8) (ch)))
+#define NATIVE_UTF8_TO_I8(ch)  (assert(FITS_IN_8_BITS(ch)), ((U8) (ch)))
+#define I8_TO_NATIVE_UTF8(ch)  (assert(FITS_IN_8_BITS(ch)), ((U8) (ch)))
 
 #define UNI_TO_NATIVE(ch)        ((UV) ASSERT_NOT_PTR(ch))
 #define NATIVE_TO_UNI(ch)        ((UV) ASSERT_NOT_PTR(ch))
@@ -314,21 +326,21 @@ adding no time nor space requirements to the implementation.
  The following table is from Unicode 3.2, plus the Perl extensions for above
  U+10FFFF
 
- Code Points		1st Byte  2nd Byte  3rd    4th     5th     6th       7th   8th-13th
+ Code Points           1st Byte  2nd Byte  3rd    4th     5th     6th       7th   8th-13th
 
-   U+0000..U+007F	00..7F
+   U+0000..U+007F       00..7F
    U+0080..U+07FF     * C2..DF    80..BF
-   U+0800..U+0FFF	E0      * A0..BF  80..BF
+   U+0800..U+0FFF       E0      * A0..BF  80..BF
    U+1000..U+CFFF       E1..EC    80..BF  80..BF
    U+D000..U+D7FF       ED        80..9F  80..BF
    U+D800..U+DFFF       ED        A0..BF  80..BF  (surrogates)
    U+E000..U+FFFF       EE..EF    80..BF  80..BF
-  U+10000..U+3FFFF	F0      * 90..BF  80..BF  80..BF
-  U+40000..U+FFFFF	F1..F3    80..BF  80..BF  80..BF
- U+100000..U+10FFFF	F4        80..8F  80..BF  80..BF
+  U+10000..U+3FFFF      F0      * 90..BF  80..BF  80..BF
+  U+40000..U+FFFFF      F1..F3    80..BF  80..BF  80..BF
+ U+100000..U+10FFFF     F4        80..8F  80..BF  80..BF
     Below are above-Unicode code points
- U+110000..U+13FFFF	F4        90..BF  80..BF  80..BF
- U+110000..U+1FFFFF	F5..F7    80..BF  80..BF  80..BF
+ U+110000..U+13FFFF     F4        90..BF  80..BF  80..BF
+ U+110000..U+1FFFFF     F5..F7    80..BF  80..BF  80..BF
  U+200000..U+FFFFFF     F8      * 88..BF  80..BF  80..BF  80..BF
 U+1000000..U+3FFFFFF    F9..FB    80..BF  80..BF  80..BF  80..BF
 U+4000000..U+3FFFFFFF    FC     * 84..BF  80..BF  80..BF  80..BF  80..BF
@@ -427,7 +439,7 @@ are in the character. */
 
 /* Is the byte 'c' part of a multi-byte UTF8-8 encoded sequence, and not the
  * first byte thereof? */
-#define UTF8_IS_CONTINUATION(c)     (__ASSERT_(FITS_IN_8_BITS(c))           \
+#define UTF8_IS_CONTINUATION(c)     (assert(FITS_IN_8_BITS(c)),             \
             (((NATIVE_UTF8_TO_I8(c) & UTF_IS_CONTINUATION_MASK)             \
                                                 == UTF_CONTINUATION_MARK)))
 
@@ -558,6 +570,11 @@ regen/charset_translations.pl. */
      + (pos) + ((UTF_CONTINUATION_BYTE_INFO_BITS - 1) - 1))  /* Step fcn */ \
    / (UTF_CONTINUATION_BYTE_INFO_BITS - 1))             /* take floor of */
 
+
+/* The maximum number of bytes required to represent any Unicode code point
+ * 0..0x10FFFF */
+#define MAX_UNICODE_UTF8_BYTES  UNISKIP_BY_MSB_(20)
+
 /* Compute the number of UTF-8 bytes required for representing the input uv,
  * which must be a Unicode, not native value.
  *
@@ -620,8 +637,8 @@ encoded as UTF-8.  C<cp> is a native (ASCII or EBCDIC) code point if less than
  *
  * Note that on EBCDIC platforms, this is actually the I8 */
 #define UTF_START_BYTE(uv, bits)                                            \
-           (__ASSERT_((uv) >> ((bits) - 1)) /* At least 'bits' */           \
-            __ASSERT_(((uv) & ~nBIT_MASK(bits)) == 0) /* No extra bits */   \
+           (assert((uv) >> ((bits) - 1)), /* At least 'bits' */             \
+            assert(((uv) & ~nBIT_MASK(bits)) == 0), /* No extra bits */     \
               UTF_START_MARK(UNISKIP_BY_MSB_((bits) - 1))                   \
             | ((uv) >> (((bits) / UTF_CONTINUATION_BYTE_INFO_BITS)          \
                                 * UTF_CONTINUATION_BYTE_INFO_BITS)))
@@ -636,8 +653,8 @@ encoded as UTF-8.  C<cp> is a native (ASCII or EBCDIC) code point if less than
  *
  * Note that on EBCDIC platforms, this is actually the I8 */
 #define UTF_FIRST_CONT_BYTE(uv, bits)                                       \
-   (__ASSERT_((uv) >> ((bits) - 1)) /* At least 'bits' */                   \
-    __ASSERT_(((uv) & ~nBIT_MASK(bits)) == 0) /* No extra bits */           \
+   (assert((uv) >> ((bits) - 1)), /* At least 'bits' */                     \
+    assert(((uv) & ~nBIT_MASK(bits)) == 0), /* No extra bits */             \
        UTF_CONTINUATION_MARK                                                \
     | (   UTF_CONTINUATION_MASK                                             \
        & ((uv) >> ((((bits) / UTF_CONTINUATION_BYTE_INFO_BITS) - 1)         \
@@ -651,7 +668,7 @@ encoded as UTF-8.  C<cp> is a native (ASCII or EBCDIC) code point if less than
  * C0-C4 I8 start bytes on EBCDIC ones.  On EBCDIC E0 can't start a
  * non-overlong sequence, so we define a base macro and for those platforms,
  * extend it to also exclude E0 */
-#define UTF8_IS_START_base(c)    (__ASSERT_(FITS_IN_8_BITS(c))              \
+#define UTF8_IS_START_base(c)    (assert(FITS_IN_8_BITS(c)),                \
                              (NATIVE_UTF8_TO_I8(c) >= UTF_MIN_START_BYTE))
 #ifdef EBCDIC
 #  define UTF8_IS_START(c)                                                  \
@@ -664,13 +681,13 @@ encoded as UTF-8.  C<cp> is a native (ASCII or EBCDIC) code point if less than
 
 /* Is the UTF8-encoded byte 'c' the first byte of a sequence of bytes that
  * represent a code point > 255? */
-#define UTF8_IS_ABOVE_LATIN1(c)     (__ASSERT_(FITS_IN_8_BITS(c))           \
+#define UTF8_IS_ABOVE_LATIN1(c)     (assert(FITS_IN_8_BITS(c)),             \
                         (NATIVE_UTF8_TO_I8(c) >= UTF_MIN_ABOVE_LATIN1_BYTE))
 
 /* Is the UTF8-encoded byte 'c' the first byte of a two byte sequence?  Use
  * UTF8_IS_NEXT_CHAR_DOWNGRADEABLE() instead if the input isn't known to
  * be well-formed. */
-#define UTF8_IS_DOWNGRADEABLE_START(c)	(__ASSERT_(FITS_IN_8_BITS(c))       \
+#define UTF8_IS_DOWNGRADEABLE_START(c)  (assert(FITS_IN_8_BITS(c)),         \
                 inRANGE_helper_(U8, NATIVE_UTF8_TO_I8(c),                   \
                         UTF_MIN_START_BYTE, UTF_MIN_ABOVE_LATIN1_BYTE - 1))
 
@@ -711,8 +728,8 @@ uppercase/lowercase/titlecase/fold into.
  *
 =cut
 */
-#define UTF8_MAXBYTES_CASE	                                            \
-        MAX(UTF8_MAXBYTES, UTF8_MAX_FOLD_CHAR_EXPAND * UNISKIP_BY_MSB_(20))
+#define UTF8_MAXBYTES_CASE                                                  \
+        MAX(UTF8_MAXBYTES, UTF8_MAX_FOLD_CHAR_EXPAND * MAX_UNICODE_UTF8_BYTES)
 
 /* Rest of these are attributes of Unicode and perl's internals rather than the
  * encoding, or happen to be the same in both ASCII and EBCDIC (at least at
@@ -737,7 +754,7 @@ uppercase/lowercase/titlecase/fold into.
  * that this is asymmetric on EBCDIC platforms, in that the 'new' parameter is
  * the UTF-EBCDIC byte, whereas the 'old' parameter is a Unicode (not EBCDIC)
  * code point in process of being generated */
-#define UTF8_ACCUMULATE(old, new) (__ASSERT_(FITS_IN_8_BITS(new))              \
+#define UTF8_ACCUMULATE(old, new) (assert(FITS_IN_8_BITS(new)),                \
                                    ((old) << UTF_ACCUMULATION_SHIFT)           \
                                    | ((NATIVE_UTF8_TO_I8(new))                 \
                                        & UTF_CONTINUATION_MASK))
@@ -761,8 +778,8 @@ uppercase/lowercase/titlecase/fold into.
  *  LO: continuation.
  * */
 #define EIGHT_BIT_UTF8_TO_NATIVE(HI, LO)                                        \
-    ( __ASSERT_(UTF8_IS_DOWNGRADEABLE_START(HI))                                \
-      __ASSERT_(UTF8_IS_CONTINUATION(LO))                                       \
+    ( assert(UTF8_IS_DOWNGRADEABLE_START(HI)),                                  \
+      assert(UTF8_IS_CONTINUATION(LO)),                                         \
      LATIN1_TO_NATIVE(UTF8_ACCUMULATE((                                         \
                             NATIVE_UTF8_TO_I8(HI) & UTF_START_MASK(2)), (LO))))
 
@@ -772,11 +789,11 @@ uppercase/lowercase/titlecase/fold into.
  * Note that the result can be larger than 255 if the input character is not
  * downgradable */
 #define TWO_BYTE_UTF8_TO_NATIVE(HI, LO) \
-    (__ASSERT_(FITS_IN_8_BITS(HI))                                              \
-     __ASSERT_(FITS_IN_8_BITS(LO))                                              \
-     __ASSERT_(PL_utf8skip[(U8) HI] == 2)                                            \
-     __ASSERT_(UTF8_IS_CONTINUATION(LO))                                        \
-     UNI_TO_NATIVE(UTF8_ACCUMULATE((NATIVE_UTF8_TO_I8(HI) & UTF_START_MASK(2)), \
+    (assert(FITS_IN_8_BITS(HI)),                                              \
+     assert(FITS_IN_8_BITS(LO)),                                              \
+     assert(PL_utf8skip[(U8) HI] == 2),                                       \
+     assert(UTF8_IS_CONTINUATION(LO)),                                        \
+     UNI_TO_NATIVE(UTF8_ACCUMULATE((NATIVE_UTF8_TO_I8(HI) & UTF_START_MASK(2)),\
                                    (LO))))
 
 /* Should never be used, and be deprecated */
@@ -831,7 +848,7 @@ C<L</UTF8_SAFE_SKIP>>, for example when interfacing with a C library.
 #define UTF8_SKIP(s) UTF8SKIP(s)
 #define UTF8_CHK_SKIP(s)                                                       \
      (UNLIKELY(s[0] == '\0') ? 1 : my_strnlen((const char *) (s), UTF8SKIP(s)))
-#define UTF8_SAFE_SKIP(s, e)  (__ASSERT_((e) >= (s))                \
+#define UTF8_SAFE_SKIP(s, e)  (assert((e) >= (s)),                  \
                               UNLIKELY(((e) - (s)) <= 0)            \
                                ? 0                                  \
                                : MIN(((e) - (s)), UTF8_SKIP(s)))
@@ -859,15 +876,15 @@ that it returns TRUE in each for the exact same set of bit patterns.  It is
 valid on a subset of what UVCHR_IS_INVARIANT is valid on, so can just use that;
 and the compiler should optimize out anything extraneous given the
 implementation of the latter. */
-#define UTF8_IS_INVARIANT(c)	UVCHR_IS_INVARIANT(ASSERT_NOT_PTR(c))
+#define UTF8_IS_INVARIANT(c)    UVCHR_IS_INVARIANT(ASSERT_NOT_PTR(c))
 
 /* Like the above, but its name implies a non-UTF8 input, which as the comments
  * above show, doesn't matter as to its implementation */
-#define NATIVE_BYTE_IS_INVARIANT(c)	UVCHR_IS_INVARIANT(c)
+#define NATIVE_BYTE_IS_INVARIANT(c)     UVCHR_IS_INVARIANT(c)
 
 /* Misleadingly named: is the UTF8-encoded byte 'c' part of a variant sequence
  * in UTF-8?  This is the inverse of UTF8_IS_INVARIANT. */
-#define UTF8_IS_CONTINUED(c)  (__ASSERT_(FITS_IN_8_BITS(c))                 \
+#define UTF8_IS_CONTINUED(c)  (assert(FITS_IN_8_BITS(c)),                 \
                                (! UTF8_IS_INVARIANT(c)))
 
 /* The macros in the next 4 sets are used to generate the two utf8 or utfebcdic
@@ -878,27 +895,27 @@ implementation of the latter. */
  * directly anywhere else.  'translate_function' is either NATIVE_TO_LATIN1
  * (which works for code points up through 0xFF) or NATIVE_TO_UNI which works
  * for any code point */
-#define __BASE_TWO_BYTE_HI(c, translate_function)                               \
-           (__ASSERT_(! UVCHR_IS_INVARIANT(c))                                  \
+#define BASE_TWO_BYTE_HI_(c, translate_function)                               \
+           (assert(! UVCHR_IS_INVARIANT(c)),                                    \
             I8_TO_NATIVE_UTF8((translate_function(c) >> UTF_ACCUMULATION_SHIFT) \
                               | UTF_START_MARK(2)))
-#define __BASE_TWO_BYTE_LO(c, translate_function)                               \
-             (__ASSERT_(! UVCHR_IS_INVARIANT(c))                                \
+#define BASE_TWO_BYTE_LO_(c, translate_function)                               \
+             (assert(! UVCHR_IS_INVARIANT(c)),                                  \
               I8_TO_NATIVE_UTF8((translate_function(c) & UTF_CONTINUATION_MASK) \
                                  | UTF_CONTINUATION_MARK))
 
 /* The next two macros should not be used.  They were designed to be usable as
  * the case label of a switch statement, but this doesn't work for EBCDIC.  Use
  * regen/unicode_constants.pl instead */
-#define UTF8_TWO_BYTE_HI_nocast(c)  __BASE_TWO_BYTE_HI(c, NATIVE_TO_UNI)
-#define UTF8_TWO_BYTE_LO_nocast(c)  __BASE_TWO_BYTE_LO(c, NATIVE_TO_UNI)
+#define UTF8_TWO_BYTE_HI_nocast(c)  BASE_TWO_BYTE_HI_(c, NATIVE_TO_UNI)
+#define UTF8_TWO_BYTE_LO_nocast(c)  BASE_TWO_BYTE_LO_(c, NATIVE_TO_UNI)
 
 /* The next two macros are used when the source should be a single byte
  * character; checked for under DEBUGGING */
-#define UTF8_EIGHT_BIT_HI(c) (__ASSERT_(FITS_IN_8_BITS(c))                    \
-                             ( __BASE_TWO_BYTE_HI(c, NATIVE_TO_LATIN1)))
-#define UTF8_EIGHT_BIT_LO(c) (__ASSERT_(FITS_IN_8_BITS(c))                    \
-                             (__BASE_TWO_BYTE_LO(c, NATIVE_TO_LATIN1)))
+#define UTF8_EIGHT_BIT_HI(c) (assert(FITS_IN_8_BITS(c)),                    \
+                             ( BASE_TWO_BYTE_HI_(c, NATIVE_TO_LATIN1)))
+#define UTF8_EIGHT_BIT_LO(c) (assert(FITS_IN_8_BITS(c)),                    \
+                             (BASE_TWO_BYTE_LO_(c, NATIVE_TO_LATIN1)))
 
 /* These final two macros in the series are used when the source can be any
  * code point whose UTF-8 is known to occupy 2 bytes; they are less efficient
@@ -907,13 +924,13 @@ implementation of the latter. */
  * MAX_UTF8_TWO_BYTE should be exactly all one bits in the lower few
  * places, so the ~ works */
 #define UTF8_TWO_BYTE_HI(c)                                                    \
-       (__ASSERT_((sizeof(c) ==  1)                                            \
-                  || !(((WIDEST_UTYPE)(c)) & ~MAX_UTF8_TWO_BYTE))              \
-        (__BASE_TWO_BYTE_HI(c, NATIVE_TO_UNI)))
+       (assert((sizeof(c) ==  1)                                               \
+                  || !(((WIDEST_UTYPE)(c)) & ~MAX_UTF8_TWO_BYTE)),             \
+        (BASE_TWO_BYTE_HI_(c, NATIVE_TO_UNI)))
 #define UTF8_TWO_BYTE_LO(c)                                                    \
-       (__ASSERT_((sizeof(c) ==  1)                                            \
-                  || !(((WIDEST_UTYPE)(c)) & ~MAX_UTF8_TWO_BYTE))              \
-        (__BASE_TWO_BYTE_LO(c, NATIVE_TO_UNI)))
+       (assert((sizeof(c) ==  1)                                               \
+                  || !(((WIDEST_UTYPE)(c)) & ~MAX_UTF8_TWO_BYTE)),             \
+        (BASE_TWO_BYTE_LO_(c, NATIVE_TO_UNI)))
 
 /* This is illegal in any well-formed UTF-8 in both EBCDIC and ASCII
  * as it is only in overlongs. */
@@ -930,6 +947,10 @@ implementation of the latter. */
                    ((IN_BYTES || !UTF)                                      \
                      ? isIDFIRST(*(p))                                      \
                      : isIDFIRST_utf8_safe(p, e))
+#define isIDCONT_lazy_if_safe(p, e, UTF)                                    \
+                   ((IN_BYTES || !UTF)                                      \
+                     ? isIDCONT(*(p))                                       \
+                     : isIDCONT_utf8_safe(p, e))
 #define isWORDCHAR_lazy_if_safe(p, e, UTF)                                  \
                    ((IN_BYTES || !UTF)                                      \
                      ? isWORDCHAR(*(p))                                     \
@@ -967,8 +988,8 @@ case any call to string overloading updates the internal UTF-8 encoding flag.
                        && is_in_locale_category_(FALSE, -1)))           \
               && (! IN_BYTES))
 
-#define UNICODE_SURROGATE_FIRST		0xD800
-#define UNICODE_SURROGATE_LAST		0xDFFF
+#define UNICODE_SURROGATE_FIRST         0xD800
+#define UNICODE_SURROGATE_LAST          0xDFFF
 
 /*
 =for apidoc Am|bool|UNICODE_IS_SURROGATE|const UV uv
@@ -1012,7 +1033,7 @@ representation.
 
 =cut
  */
-#define UNICODE_REPLACEMENT		0xFFFD
+#define UNICODE_REPLACEMENT         0xFFFD
 #define UNICODE_IS_REPLACEMENT(uv)  UNLIKELY((UV) (uv) == UNICODE_REPLACEMENT)
 #define UTF8_IS_REPLACEMENT(s, send)                                         \
     UNLIKELY(                                                                \
@@ -1021,7 +1042,7 @@ representation.
                       sizeof(REPLACEMENT_CHARACTER_UTF8) - 1))
 
 /* Max legal code point according to Unicode */
-#define PERL_UNICODE_MAX	0x10FFFF
+#define PERL_UNICODE_MAX            0x10FFFF
 
 /*
 
@@ -1057,21 +1078,26 @@ this macro matches
 
 =cut
 
- *		  ASCII		     EBCDIC I8
- * U+10FFFF: \xF4\x8F\xBF\xBF	\xF9\xA1\xBF\xBF\xBF	max legal Unicode
- * U+110000: \xF4\x90\x80\x80	\xF9\xA2\xA0\xA0\xA0
- * U+110001: \xF4\x90\x80\x81	\xF9\xA2\xA0\xA0\xA1
+ *                ASCII              EBCDIC I8
+ * U+10FFFF: \xF4\x8F\xBF\xBF   \xF9\xA1\xBF\xBF\xBF    max legal Unicode
+ * U+110000: \xF4\x90\x80\x80   \xF9\xA2\xA0\xA0\xA0
+ * U+110001: \xF4\x90\x80\x81   \xF9\xA2\xA0\xA0\xA1
  */
 #define UTF_START_BYTE_110000_  UTF_START_BYTE(PERL_UNICODE_MAX + 1, 21)
 #define UTF_FIRST_CONT_BYTE_110000_                                         \
                           UTF_FIRST_CONT_BYTE(PERL_UNICODE_MAX + 1, 21)
+
+/* Internal macro when we don't care about it being well-formed, and know we
+ * have two bytes available to read */
+#define UTF8_IS_SUPER_NO_CHECK_(s)                                          \
+     (       NATIVE_UTF8_TO_I8(s[0]) >= UTF_START_BYTE_110000_              \
+      && (   NATIVE_UTF8_TO_I8(s[0]) >  UTF_START_BYTE_110000_              \
+          || NATIVE_UTF8_TO_I8(s[1]) >= UTF_FIRST_CONT_BYTE_110000_))
+
 #define UTF8_IS_SUPER(s, e)                                                 \
-    (   ((e) - (s)) >= UNISKIP_BY_MSB_(20)                                  \
-     && (       NATIVE_UTF8_TO_I8(s[0]) >= UTF_START_BYTE_110000_           \
-         && (   NATIVE_UTF8_TO_I8(s[0]) >  UTF_START_BYTE_110000_           \
-             || NATIVE_UTF8_TO_I8(s[1]) >= UTF_FIRST_CONT_BYTE_110000_)))   \
+    ((((e) - (s)) >= MAX_UNICODE_UTF8_BYTES && UTF8_IS_SUPER_NO_CHECK_(s))  \
      ? isUTF8_CHAR(s, e)                                                    \
-     : 0
+     : 0)
 
 /*
 =for apidoc Am|bool|UNICODE_IS_NONCHAR|const UV uv
@@ -1091,11 +1117,13 @@ non-character code points
  * the Unicode legal max */
 #define UNICODE_IS_END_PLANE_NONCHAR_GIVEN_NOT_SUPER(uv)                    \
                                   UNLIKELY(((UV) (uv) & 0xFFFE) == 0xFFFE)
+#define UNICODE_IS_NONCHAR_GIVEN_NOT_SUPER(uv)                              \
+    (   UNLIKELY(UNICODE_IS_32_CONTIGUOUS_NONCHARS(uv))                     \
+     || UNLIKELY(UNICODE_IS_END_PLANE_NONCHAR_GIVEN_NOT_SUPER(uv)))
 
 #define UNICODE_IS_NONCHAR(uv)                                              \
-    (       UNLIKELY(UNICODE_IS_32_CONTIGUOUS_NONCHARS(uv))                 \
-     || (   UNLIKELY(UNICODE_IS_END_PLANE_NONCHAR_GIVEN_NOT_SUPER(uv))      \
-         && LIKELY(! UNICODE_IS_SUPER(uv))))
+                       (   LIKELY(! UNICODE_IS_SUPER(uv))                   \
+                        && UNLIKELY(UNICODE_IS_NONCHAR_GIVEN_NOT_SUPER(uv)))
 
 /*
 =for apidoc Am|bool|UTF8_IS_NONCHAR|const U8 *s|const U8 *e
@@ -1152,27 +1180,56 @@ point's representation.
 
 /* The ordering of these bits is important to a switch() statement in utf8.c
  * for handling problems in converting UTF-8 to a UV */
-#define UTF8_ALLOW_OVERFLOW             0x0001
-#define UTF8_GOT_OVERFLOW               UTF8_ALLOW_OVERFLOW
+#define UTF8_GOT_OVERFLOW_BIT_POS_              0
+#define UTF8_GOT_EMPTY_BIT_POS_                 1
+#define UTF8_GOT_CONTINUATION_BIT_POS_          2
+#define UTF8_GOT_SHORT_BIT_POS_                 3
+#define UTF8_GOT_NON_CONTINUATION_BIT_POS_      4
 
-#define UTF8_ALLOW_EMPTY		0x0002	/* Allow a zero length string */
-#define UTF8_GOT_EMPTY                  UTF8_ALLOW_EMPTY
+#define UTF8_GOT_SURROGATE_BIT_POS_             5
+#define UTF8_WARN_SURROGATE_BIT_POS_            6
+
+#define UTF8_GOT_PERL_EXTENDED_BIT_POS_         7
+#define UTF8_WARN_PERL_EXTENDED_BIT_POS_        8
+
+#define UTF8_GOT_SUPER_BIT_POS_                 9
+#define UTF8_WARN_SUPER_BIT_POS_               10
+
+#define UTF8_GOT_NONCHAR_BIT_POS_              11
+#define UTF8_WARN_NONCHAR_BIT_POS_             12
+
+#define UTF8_GOT_LONG_BIT_POS_                 13
+#define UTF8_GOT_LONG_WITH_VALUE_BIT_POS_      14
+
+#define UTF8_CHECK_ONLY_BIT_POS_               15
+#define UTF8_DIE_IF_MALFORMED_BIT_POS_         16
+#define UTF8_FORCE_WARN_IF_MALFORMED_BIT_POS_  17
+
+#define UTF8_NO_CONFIDENCE_IN_CURLEN_BIT_POS_  18
+
+#define UTF8_GOT_OVERFLOW               (1U << UTF8_GOT_OVERFLOW_BIT_POS_)
+#define UTF8_ALLOW_OVERFLOW                    UTF8_GOT_OVERFLOW
+
+/* Allow a zero length string */
+#define UTF8_GOT_EMPTY                  (1U << UTF8_GOT_EMPTY_BIT_POS_)
+#define UTF8_ALLOW_EMPTY                       UTF8_GOT_EMPTY
 
 /* Allow first byte to be a continuation byte */
-#define UTF8_ALLOW_CONTINUATION		0x0004
-#define UTF8_GOT_CONTINUATION		UTF8_ALLOW_CONTINUATION
+#define UTF8_GOT_CONTINUATION           (1U << UTF8_GOT_CONTINUATION_BIT_POS_)
+#define UTF8_ALLOW_CONTINUATION                UTF8_GOT_CONTINUATION
 
 /* expecting more bytes than were available in the string */
-#define UTF8_ALLOW_SHORT		0x0008
-#define UTF8_GOT_SHORT		        UTF8_ALLOW_SHORT
+#define UTF8_GOT_SHORT                  (1U << UTF8_GOT_SHORT_BIT_POS_)
+#define UTF8_ALLOW_SHORT                       UTF8_GOT_SHORT
 
 /* Unexpected non-continuation byte */
-#define UTF8_ALLOW_NON_CONTINUATION	0x0010
-#define UTF8_GOT_NON_CONTINUATION	UTF8_ALLOW_NON_CONTINUATION
+#define UTF8_GOT_NON_CONTINUATION     (1U << UTF8_GOT_NON_CONTINUATION_BIT_POS_)
+#define UTF8_ALLOW_NON_CONTINUATION          UTF8_GOT_NON_CONTINUATION
 
-#define UTF8_DISALLOW_SURROGATE		0x0020	/* Unicode surrogates */
-#define UTF8_GOT_SURROGATE		UTF8_DISALLOW_SURROGATE
-#define UTF8_WARN_SURROGATE		0x0040
+/* Unicode surrogates */
+#define UTF8_GOT_SURROGATE              (1U << UTF8_GOT_SURROGATE_BIT_POS_)
+#define UTF8_DISALLOW_SURROGATE                UTF8_GOT_SURROGATE
+#define UTF8_WARN_SURROGATE             (1U << UTF8_WARN_SURROGATE_BIT_POS_)
 
 /* The original UTF-8 standard did not define UTF-8 with start bytes of 0xFE or
  * 0xFF, though UTF-EBCDIC did.  This allowed both versions to represent code
@@ -1183,26 +1240,27 @@ point's representation.
  * extensions, and not likely to be interchangeable with other languages.  Note
  * that on ASCII platforms, FE overflows a signed 32-bit word, and FF an
  * unsigned one. */
-#define UTF8_DISALLOW_PERL_EXTENDED     0x0080
-#define UTF8_GOT_PERL_EXTENDED          UTF8_DISALLOW_PERL_EXTENDED
-#define UTF8_WARN_PERL_EXTENDED         0x0100
+#define UTF8_GOT_PERL_EXTENDED          (1U << UTF8_GOT_PERL_EXTENDED_BIT_POS_)
+#define UTF8_DISALLOW_PERL_EXTENDED            UTF8_GOT_PERL_EXTENDED
+#define UTF8_WARN_PERL_EXTENDED         (1U << UTF8_WARN_PERL_EXTENDED_BIT_POS_)
 
 /* Super-set of Unicode: code points above the legal max */
-#define UTF8_DISALLOW_SUPER		0x0200
-#define UTF8_GOT_SUPER		        UTF8_DISALLOW_SUPER
-#define UTF8_WARN_SUPER		        0x0400
+#define UTF8_GOT_SUPER                  (1U << UTF8_GOT_SUPER_BIT_POS_)
+#define UTF8_DISALLOW_SUPER                    UTF8_GOT_SUPER
+#define UTF8_WARN_SUPER                 (1U << UTF8_WARN_SUPER_BIT_POS_)
 
 /* Unicode non-character  code points */
-#define UTF8_DISALLOW_NONCHAR           0x0800
-#define UTF8_GOT_NONCHAR                UTF8_DISALLOW_NONCHAR
-#define UTF8_WARN_NONCHAR               0x1000
+#define UTF8_GOT_NONCHAR                (1U << UTF8_GOT_NONCHAR_BIT_POS_)
+#define UTF8_DISALLOW_NONCHAR                  UTF8_GOT_NONCHAR
+#define UTF8_WARN_NONCHAR               (1U << UTF8_WARN_NONCHAR_BIT_POS_)
 
 /* Overlong sequence; i.e., the code point can be specified in fewer bytes.
  * First one will convert the overlong to the REPLACEMENT CHARACTER; second
  * will return what the overlong evaluates to */
-#define UTF8_ALLOW_LONG                 0x2000
-#define UTF8_ALLOW_LONG_AND_ITS_VALUE   0x4000
-#define UTF8_GOT_LONG                   UTF8_ALLOW_LONG
+#define UTF8_GOT_LONG                   (1U << UTF8_GOT_LONG_BIT_POS_)
+#define UTF8_ALLOW_LONG                        UTF8_GOT_LONG
+#define UTF8_GOT_LONG_WITH_VALUE     (1U << UTF8_GOT_LONG_WITH_VALUE_BIT_POS_)
+#define UTF8_ALLOW_LONG_AND_ITS_VALUE       UTF8_GOT_LONG_WITH_VALUE
 
 /* For back compat, these old names are misleading for overlongs and
  * UTF_EBCDIC. */
@@ -1212,10 +1270,12 @@ point's representation.
 #define UTF8_DISALLOW_FE_FF             UTF8_DISALLOW_PERL_EXTENDED
 #define UTF8_WARN_FE_FF                 UTF8_WARN_PERL_EXTENDED
 
-#define UTF8_CHECK_ONLY			0x8000
-#define UTF8_NO_CONFIDENCE_IN_CURLEN_   0x10000  /* Internal core use only */
-#define UTF8_DIE_IF_MALFORMED           0x20000
-#define UTF8_FORCE_WARN_IF_MALFORMED    0x40000
+#define UTF8_CHECK_ONLY                 (1U << UTF8_CHECK_ONLY_BIT_POS_)
+#define UTF8_NO_CONFIDENCE_IN_CURLEN_   /* Internal core use only */        \
+                            (1U << UTF8_NO_CONFIDENCE_IN_CURLEN_BIT_POS_)
+#define UTF8_DIE_IF_MALFORMED   (1U << UTF8_DIE_IF_MALFORMED_BIT_POS_)
+#define UTF8_FORCE_WARN_IF_MALFORMED                                        \
+                                (1U <<UTF8_FORCE_WARN_IF_MALFORMED_BIT_POS_)
 
 /* For backwards source compatibility.  They do nothing, as the default now
  * includes what they used to mean.  The first one's meaning was to allow the
@@ -1225,12 +1285,12 @@ point's representation.
 #define UTF8_ALLOW_SURROGATE 0
 
 /* C9 refers to Unicode Corrigendum #9: allows but discourages non-chars */
-#define UTF8_DISALLOW_ILLEGAL_C9_INTERCHANGE                                    \
+#define UTF8_DISALLOW_ILLEGAL_C9_INTERCHANGE                                \
     (UTF8_DISALLOW_SUPER|UTF8_DISALLOW_PERL_EXTENDED|UTF8_DISALLOW_SURROGATE)
-#define UTF8_WARN_ILLEGAL_C9_INTERCHANGE                                        \
+#define UTF8_WARN_ILLEGAL_C9_INTERCHANGE                                    \
                 (UTF8_WARN_SUPER|UTF8_WARN_PERL_EXTENDED|UTF8_WARN_SURROGATE)
 
-#define UTF8_DISALLOW_ILLEGAL_INTERCHANGE                                       \
+#define UTF8_DISALLOW_ILLEGAL_INTERCHANGE                                   \
                   (UTF8_DISALLOW_ILLEGAL_C9_INTERCHANGE|UTF8_DISALLOW_NONCHAR)
 #define UTF8_WARN_ILLEGAL_INTERCHANGE \
                           (UTF8_WARN_ILLEGAL_C9_INTERCHANGE|UTF8_WARN_NONCHAR)
@@ -1239,10 +1299,10 @@ point's representation.
  * to have to deal with any malformations that might be present.  All such will
  * be safely replaced by the REPLACEMENT CHARACTER, unless other flags
  * overriding this are also present. */
-#define UTF8_ALLOW_ANY ( UTF8_ALLOW_CONTINUATION                                \
-                        |UTF8_ALLOW_NON_CONTINUATION                            \
-                        |UTF8_ALLOW_SHORT                                       \
-                        |UTF8_ALLOW_LONG                                        \
+#define UTF8_ALLOW_ANY ( UTF8_ALLOW_CONTINUATION                            \
+                        |UTF8_ALLOW_NON_CONTINUATION                        \
+                        |UTF8_ALLOW_SHORT                                   \
+                        |UTF8_ALLOW_LONG                                    \
                         |UTF8_ALLOW_OVERFLOW)
 
 /* Accept any Perl-extended UTF-8 that evaluates to any UV on the platform, but
@@ -1250,10 +1310,10 @@ point's representation.
 #define UTF8_ALLOW_ANYUV   0
 #define UTF8_ALLOW_DEFAULT UTF8_ALLOW_ANYUV
 
-#define UNICODE_WARN_SURROGATE         0x0001	/* UTF-16 surrogates */
-#define UNICODE_WARN_NONCHAR           0x0002	/* Non-char code points */
-#define UNICODE_WARN_SUPER             0x0004	/* Above 0x10FFFF */
-#define UNICODE_WARN_PERL_EXTENDED     0x0008	/* Above 0x7FFF_FFFF */
+#define UNICODE_WARN_SURROGATE         0x0001   /* UTF-16 surrogates */
+#define UNICODE_WARN_NONCHAR           0x0002   /* Non-char code points */
+#define UNICODE_WARN_SUPER             0x0004   /* Above 0x10FFFF */
+#define UNICODE_WARN_PERL_EXTENDED     0x0008   /* Above 0x7FFF_FFFF */
 #define UNICODE_WARN_ABOVE_31_BIT      UNICODE_WARN_PERL_EXTENDED
 #define UNICODE_DISALLOW_SURROGATE     0x0010
 #define UNICODE_DISALLOW_NONCHAR       0x0020
@@ -1281,11 +1341,11 @@ point's representation.
 
 /* For backward source compatibility, as are now the default */
 #define UNICODE_ALLOW_SURROGATE 0
-#define UNICODE_ALLOW_SUPER	0
-#define UNICODE_ALLOW_ANY	0
+#define UNICODE_ALLOW_SUPER     0
+#define UNICODE_ALLOW_ANY       0
 
-#define UNICODE_BYTE_ORDER_MARK		0xFEFF
-#define UNICODE_IS_BYTE_ORDER_MARK(uv)	UNLIKELY((UV) (uv)                  \
+#define UNICODE_BYTE_ORDER_MARK         0xFEFF
+#define UNICODE_IS_BYTE_ORDER_MARK(uv)  UNLIKELY((UV) (uv)                  \
                                                 == UNICODE_BYTE_ORDER_MARK)
 
 #define LATIN_SMALL_LETTER_SHARP_S      LATIN_SMALL_LETTER_SHARP_S_NATIVE
@@ -1296,15 +1356,15 @@ point's representation.
                             LATIN_CAPITAL_LETTER_A_WITH_RING_ABOVE_NATIVE
 #define LATIN_SMALL_LETTER_A_WITH_RING_ABOVE                                 \
                                 LATIN_SMALL_LETTER_A_WITH_RING_ABOVE_NATIVE
-#define UNICODE_GREEK_CAPITAL_LETTER_SIGMA	0x03A3
-#define UNICODE_GREEK_SMALL_LETTER_FINAL_SIGMA	0x03C2
-#define UNICODE_GREEK_SMALL_LETTER_SIGMA	0x03C3
+#define UNICODE_GREEK_CAPITAL_LETTER_SIGMA      0x03A3
+#define UNICODE_GREEK_SMALL_LETTER_FINAL_SIGMA  0x03C2
+#define UNICODE_GREEK_SMALL_LETTER_SIGMA        0x03C3
 #define GREEK_SMALL_LETTER_MU                   0x03BC
-#define GREEK_CAPITAL_LETTER_MU                 0x039C	/* Upper and title case
+#define GREEK_CAPITAL_LETTER_MU                 0x039C  /* Upper and title case
                                                            of MICRON */
-#define LATIN_CAPITAL_LETTER_Y_WITH_DIAERESIS   0x0178	/* Also is title case */
+#define LATIN_CAPITAL_LETTER_Y_WITH_DIAERESIS   0x0178  /* Also is title case */
 #ifdef LATIN_CAPITAL_LETTER_SHARP_S_UTF8
-#   define LATIN_CAPITAL_LETTER_SHARP_S	        0x1E9E
+#   define LATIN_CAPITAL_LETTER_SHARP_S         0x1E9E
 #endif
 #define LATIN_CAPITAL_LETTER_I_WITH_DOT_ABOVE   0x130
 #define LATIN_SMALL_LETTER_DOTLESS_I            0x131
@@ -1314,40 +1374,30 @@ point's representation.
 #define KELVIN_SIGN                             0x212A
 #define ANGSTROM_SIGN                           0x212B
 
-#define UNI_DISPLAY_ISPRINT	0x0001
-#define UNI_DISPLAY_BACKSLASH	0x0002
-#define UNI_DISPLAY_BACKSPACE	0x0004  /* Allow \b when also
+#define UNI_DISPLAY_ISPRINT 0x0001
+#define UNI_DISPLAY_BACKSLASH   0x0002
+#define UNI_DISPLAY_BACKSPACE   0x0004  /* Allow \b when also
                                            UNI_DISPLAY_BACKSLASH */
+#define UNI_DISPLAY_TR_       ( 0x0008                              \
+                               |UNI_DISPLAY_ISPRINT                 \
+                               |UNI_DISPLAY_BACKSLASH)
 #define UNI_DISPLAY_QQ		(UNI_DISPLAY_ISPRINT                \
                                 |UNI_DISPLAY_BACKSLASH              \
                                 |UNI_DISPLAY_BACKSPACE)
 
 /* Character classes could also allow \b, but not patterns in general */
-#define UNI_DISPLAY_REGEX	(UNI_DISPLAY_ISPRINT|UNI_DISPLAY_BACKSLASH)
+#define UNI_DISPLAY_REGEX       (UNI_DISPLAY_ISPRINT|UNI_DISPLAY_BACKSLASH)
 
 /* Should be removed; maybe deprecated, but not used in CPAN */
 #define SHARP_S_SKIP 2
 
-#define Perl_is_utf8_char_buf(buf, buf_end) isUTF8_CHAR(buf, buf_end)
+#define is_utf8_char_buf(buf, buf_end) isUTF8_CHAR(buf, buf_end)
 
 typedef enum {
     PL_utf8_to_bytes_overwrite = 0,
     PL_utf8_to_bytes_new_memory,
     PL_utf8_to_bytes_use_temporary,
 } Perl_utf8_to_bytes_arg;
-
-/* INT2PTR() is because this parameter should not be used in this case, but
- * there is a NN assertion for it.  It causes that to pass but to still
- * segfault if wrongly gets used */
-#define Perl_utf8_to_bytes_overwrite(mTHX, s, l)                            \
-        Perl_utf8_to_bytes_(aTHX_ s, l, INT2PTR(U8 **, 1),                  \
-                                  PL_utf8_to_bytes_overwrite)
-#define Perl_utf8_to_bytes_new_pv(mTHX, s, l, f)                            \
-        Perl_utf8_to_bytes_(aTHX_ (U8 **) s, l, f,                          \
-                                  PL_utf8_to_bytes_new_memory)
-#define Perl_utf8_to_bytes_temp_pv(mTHX, s, l)                              \
-        Perl_utf8_to_bytes_(aTHX_ (U8 **) s, l, INT2PTR(U8 **, 1),          \
-                                  PL_utf8_to_bytes_use_temporary)
 
 /* Do not use; should be deprecated.  Use isUTF8_CHAR() instead; this is
  * retained solely for backwards compatibility */

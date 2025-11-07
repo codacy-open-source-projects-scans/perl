@@ -18,8 +18,8 @@ BEGIN {
     chdir 't' if -d 't';
     require './test.pl';
     set_up_inc('../lib','.','../ext/re');
-    require Config; Config->import;
 }
+use Config;
 
 skip_all('no re module') unless defined &DynaLoader::boot_DynaLoader;
 skip_all_without_unicode_tables();
@@ -160,6 +160,8 @@ PROG
     # [perl #133185] Infinite loop
     like("!\xdf", eval 'qr/\pp(?aai)\xdf/',
          'Compiling qr/\pp(?aai)\xdf/ doesn\'t loop');
+
+    watchdog(0);
 
 } # End of sub run_tests
 

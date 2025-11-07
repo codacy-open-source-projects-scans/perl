@@ -182,8 +182,9 @@ Boyd Gerber <gerberb@zenez.com> 0000-Admin (0000) <root@devsys0.zenez.com>
 Bram <perl-rt@wizbit.be> Bram (via RT) <perlbug-followup@perl.org>
 Bram <perl-rt@wizbit.be> Bram <p5p@perl.wizbit.be>
 Bram <perl-rt@wizbit.be> Bram via RT <perlbug-comment@perl.org>
-brian d foy <brian.d.foy@gmail.com> brian d foy <bdfoy@cpan.org>
-brian d foy <brian.d.foy@gmail.com> brian d foy <unknown>
+brian d foy <briandfoy@pobox.com> brian d foy <bdfoy@cpan.org>
+brian d foy <briandfoy@pobox.com> brian d foy <brian.d.foy@gmail.com>
+brian d foy <briandfoy@pobox.com> brian d foy <unknown>
 Brian Greenfield <briang@cpan.org> brian greenfield <briang@cpan.org>
 Brian Strand <bstrand@switchmanagement.com> bstrand@switchmanagement.com <bstrand@switchmanagement.com>
 Brooks D. Boyd <unknown> Boyd, Brooks D <unknown>
@@ -250,8 +251,9 @@ Daniel S. Lewart <lewart@uiuc.edu> Daniel S. Lewart <lewart@vadds.cvm.uiuc.edu>
 Danny Sadinoff <danny-cpan@sadinoff.com> <danny-cpan@sadinoff.com>
 Danny Sadinoff <danny-cpan@sadinoff.com> Danny Sadinoff <sadinoff@olf.com>
 Darren/Torin/Who Ever... <torin@daft.com> Darren/Torin/Who Ever <torin@daft.com>
-Dave Cross <dave@mag-sol.com> Dave Cross <dave@dave.org.uk>
-Dave Cross <dave@mag-sol.com> Dave Cross <dave@perlhacks.com>
+Dave Cross <dave@perlhacks.com> Dave Cross <dave@dave.org.uk>
+Dave Cross <dave@perlhacks.com> Dave Cross <dave@davecross.co.uk>
+Dave Cross <dave@perlhacks.com> Dave Cross <dave@mag-sol.com>
 Dave Shariff Yadallee <doctor@doctor.nl2k.ab.ca> The Doctor <doctor@doctor.nl2k.ab.ca>
 David <david@dhaller.de> david@dhaller.de <david@dhaller.de>
 David Dyck <david.dyck@fluke.com> David Dyck <david.dyck@gmail.com>
@@ -307,7 +309,9 @@ Eric Brine <ikegami@adaelis.com> ikegami <eric@fmdev10.(none)>
 Eric Fifer <egf7@columbia.edu> Fifer, Eric <efifer@sanwaint.com>
 Eric Melville <unknown> Eric Melville <perlbug@perl.org>
 Erik <erik@cs.uni-jena.de> erik@cs.uni-jena.de <erik@cs.uni-jena.de>
-Eugen Konkov <kes-kes@yandex.ru> Eugen Konkov <eugen@konkov.top>
+Eugen Konkov <unknown> Eugen Konkov <ekonkov@konkov>
+Eugen Konkov <unknown> Eugen Konkov <eugen@konkov.top>
+Eugen Konkov <unknown> Eugen Konkov <kes-kes@yandex.ru>
 Fabien Tassin <tassin@eerie.fr> Fabien TASSIN <tassin@eerie.fr>
 Father Chrysostomos <sprout@cpan.org> Father Chrysostomos (via RT) <perlbug-followup@perl.org>
 Father Chrysostomos <sprout@cpan.org> Father Chrysostomos <perlbug-followup@perl.org>
@@ -362,6 +366,7 @@ Hans Mulder <hansmu@xs4all.nl> Hans Mulder <hansm@euronet.nl>
 Hans Mulder <hansmu@xs4all.nl> Hans Mulder <hansm@icgned.nl>
 Hans Mulder <hansmu@xs4all.nl> Unknown Contributor <hansm@euronet.nl>
 Harald Jörg <harald.joerg@arcor.de> Harald Jörg <haj@posteo.de>
+hbmaclean <81651480+hbmaclean@users.noreply.github.com> H Barry MacLean <81651480+hbmaclean@users.noreply.github.com>
 Heiko Eissfeldt <heiko.eissfeldt@hexco.de> hexcoder <heiko.eissfeldt@hexco.de>
 Helmut Jarausch <jarausch@numa1.igpm.rwth-aachen.de> <helmutjarausch@unknown>
 Hojung Youn <amoc.yn@gmail.com> Hojung Yoon <amoc.yn@gmail.com>
@@ -391,6 +396,7 @@ Ingo Weinhold <ingo_weinhold@gmx.de> Ingo Weinhold <unknown>
 Ingy döt Net <ingy@ttul.org> Brian Ingerson <ingy@ttul.org>
 Jake Hamby <jehamby@lightside.com> Jake Hamby <jake.hamby@gmail.com>
 James E Keenan <jkeenan@cpan.org> James E Keenan <jkeen@verizon.net>
+James E Keenan <jkeenan@cpan.org> James E Keenan <jkeenan@pobox.com>
 James E Keenan <jkeenan@cpan.org> James E. Keenan <jkeenan@cpan.org>
 James E Keenan <jkeenan@cpan.org> James Keenan <jkeenan@dromedary-001.ams6.corp.booking.com>
 James E Keenan <jkeenan@cpan.org> jkeenan <jkeenan@cpan.org>
@@ -500,6 +506,7 @@ Juerd Waalboer <#####@juerd.nl> Juerd <juerd@convolution.nl>
 Juerd Waalboer <#####@juerd.nl> Juerd <juerd@cpan.org>
 Juerd Waalboer <#####@juerd.nl> Juerd Waalboer <juerd@c3.convolution.nl>
 Justin Case <unknown> Justin Case <>
+Jörg Thomas <zebster@spr.at> zb226 <zebster@spr.at>
 Kaoru Maeda <maeda@src.ricoh.co.jp> Unknown Ricoh Contributor II <maeda@src.ricoh.co.jp>
 Karen Etheridge <ether@cpan.org> Karen Etheridge <github@froods.org>
 Karl Williamson <khw@cpan.org> Karl <khw@karl.(none)>
@@ -548,12 +555,12 @@ Lincoln D. Stein <lstein@cshl.org> Lincoln Stein <lstein@genome.wi.mit.edu>
 Lubomir Rintel <lkundrak@v3.sk> Lubomir Rintel (GoodData) <lubo.rintel@gooddata.com>
 Lubomir Rintel <lkundrak@v3.sk> Lubomir Rintel <lubo.rintel@gooddata.com>
 Lucas Holt <luke@foolishgames.com> Lucas Holt <unknown>
-Lukas Mai <l.mai@web.de> l.mai@web.de <l.mai@web.de>
-Lukas Mai <l.mai@web.de> Lukas Mai <lukasmai.403@gmail.com>
-Lukas Mai <l.mai@web.de> Lukas Mai <plokinom@gmail.com>
-Lukas Mai <l.mai@web.de> Lukas Mai <unknown>
-Lukas Mai <l.mai@web.de> mauke <l.mai@web.de>
-Lukas Mai <l.mai@web.de> mauke <lukasmai.403@gmail.com>
+Lukas Mai <lukasmai.403@gmail.com> l.mai@web.de <l.mai@web.de>
+Lukas Mai <lukasmai.403@gmail.com> Lukas Mai <l.mai@web.de>
+Lukas Mai <lukasmai.403@gmail.com> Lukas Mai <plokinom@gmail.com>
+Lukas Mai <lukasmai.403@gmail.com> Lukas Mai <unknown>
+Lukas Mai <lukasmai.403@gmail.com> mauke <l.mai@web.de>
+Lukas Mai <lukasmai.403@gmail.com> mauke <lukasmai.403@gmail.com>
 Lupe Christoph <lupe@lupe-christoph.de> Lupe Christoph <lupe@alanya.m.isar.de>
 Luther Huffman <lutherh@stratcom.com> <lutherh@stratcom.com>
 Luther Huffman <lutherh@stratcom.com> Luther Huffman <lutherh@infinet.com>
@@ -746,6 +753,7 @@ Richard Foley <richard.foley@rfi.net> <richard.foley@ubs.com>
 Richard Foley <richard.foley@rfi.net> <richard.foley@ubsw.com>
 Richard L. Maus, Jr. <rmaus@monmouth.com> Richard L. Maus <rmaus@monmouth.com>
 Richard Leach <rich+perl@hyphen-dash-hyphen.info> Richard Leach <richardleach@users.noreply.github.com>
+Richard Leach <rich+perl@hyphen-dash-hyphen.info> richardleach <richardleach@users.noreply.github.com>
 Richard Soderberg <p5-authors@crystalflame.net> <perl@crystalflame.net>
 Richard Soderberg <p5-authors@crystalflame.net> <rs@crystalflame.net>
 Richard Soderberg <p5-authors@crystalflame.net> <rs@oregonnet.com>
@@ -785,7 +793,8 @@ Scott Wiersdorf <scott@perlcode.org> scott@perlcode.org <scott@perlcode.org>
 Sean Davis <dive@endersgame.net> Sean Davis <dive@ender.com>
 Sebastian Schmidt <yath@yath.de> <yath@yath.de>
 Sebastian Schmidt <yath@yath.de> yath-perlbug@yath.de <yath-perlbug@yath.de>
-Sergey Zhmylove <zhmylove@narod.ru> zhmylove <zhmylove@narod.ru>
+Sergei Zhmylev <zhmylove@narod.ru> Sergey Zhmylove <zhmylove@narod.ru>
+Sergei Zhmylev <zhmylove@narod.ru> zhmylove <zhmylove@narod.ru>
 Shawn M Moore <sartak@gmail.com> Shawn M Moore <code@sartak.org>
 Shawn M Moore <sartak@gmail.com> Shawn M Moore <sartak@bestpractical.com>
 Shigeya Suzuki <shigeya@wide.ad.jp> Shigeya Suzuki <shigeya@foretune.co.jp>
@@ -824,6 +833,7 @@ Spider Boardman <spider@orb.nashua.nh.us> Spider Boardman <spider@web.zk3.dec.co
 Spider Boardman <spider@orb.nashua.nh.us> Spider.Boardman@Orb.Nashua.NH.US <spider.boardman@orb.nashua.nh.us>
 Spider Boardman <spider@orb.nashua.nh.us> system PRIVILEGED account <root@peano.zk3.dec.com>
 Spiros Denaxas <s.denaxas@gmail.com> Spiros Denaxas <spiros@lokku.com>
+Stan Ulbrych <89152624+stanfromireland@users.noreply.github.com> Stan Ulbrych <stanulbrych@gmail.com>
 Steffen Müller <smueller@cpan.org> <7k8lrvf02@sneakemail.com>
 Steffen Müller <smueller@cpan.org> <dtr8sin02@sneakemail.com>
 Steffen Müller <smueller@cpan.org> <kjx9zthh3001@sneakemail.com>
@@ -900,6 +910,7 @@ Ton Hospel <cpan@ton.iguana.be> me-01@ton.iguana.be <me-01@ton.iguana.be>
 Ton Hospel <cpan@ton.iguana.be> perl-5.8.0@ton.iguana.be <perl-5.8.0@ton.iguana.be>
 Ton Hospel <cpan@ton.iguana.be> Ton Hospel <me-02@ton.iguana.be>
 Ton Hospel <cpan@ton.iguana.be> Ton Hospel <perl5-porters@ton.iguana.be>
+Tony Cook <tony@develop-help.com> Tony Cook <tony cook>
 Tony Cook <tony@develop-help.com> Tony Cook <tony@openbsd32.tony.develop-help.com>
 Tony Cook <tony@develop-help.com> Tony Cook <tony@saturn.(none)>
 Torsten Schönfeld <kaffeetisch@gmx.de> Torsten Schoenfeld <kaffeetisch@gmx.de>

@@ -8,6 +8,9 @@ lib/feature.pm linguist-generated
 lib/unicore/uni_keywords.pl linguist-generated
 lib/warnings.pm linguist-generated
 feature.h linguist-generated
+mg_names.inc linguist-generated
+mg_raw.h linguist-generated
+mg_vtable.h linguist-generated
 opcode.h linguist-generated
 opnames.h linguist-generated
 perly.act linguist-generated
@@ -23,3 +26,5 @@ warnings.h linguist-generated
 *.t linguist-language=Perl
 *.h linguist-language=C
 *.fnc linguist-language=Text
+*.inc linguist-language=C
+cpan/Math-BigInt/t/*.inc linguist-language=Perl

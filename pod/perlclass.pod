@@ -70,8 +70,8 @@ used within the scope of this declaration.
 
 Classes can be declared in either block or statement syntax. If a block is
 used, the body of the block contains the implementation of the class. If the
-statement form is used, the remainder of the file is used up until the next
-C<class> or C<package> statement.
+statement form is used, the remainder of the current scope or file is used up
+until the next C<class> or C<package> statement.
 
 A C<class> declaration can optionally have a version number, similar to the
 C<package> keyword. It can also optionally have attributes. If both are
@@ -184,6 +184,28 @@ Just like regular subroutines, methods I<can> be anonymous:
             };
         }
     }
+
+Methods can also be declared as lexical subroutines, using the C<my> prefix.
+This creates a subroutine that is lexically visible within the current scope,
+but does not appear in the symbol table.  The effect is that of a I<private>
+method; one that can be called from within the class's own code, but not from
+outside.
+
+To invoke these lexical subroutines as methods, it is best to use the
+C<< ->& >> operator.  This bypasses method lookup by name, and directly
+invokes a lexical subroutine as if it was a method.
+
+    class LexicalMethod {
+        my method abc ($x, $y) {
+            say "Internal method abc invoked with x=$x y=$y";
+        }
+
+        method xyz {
+            $self->&abc("x", "y");
+        }
+    }
+
+    # The `abc` method is not visible from here
 
 =head1 ATTRIBUTES
 
@@ -378,22 +400,6 @@ invoked with the full ENTERSUB overhead. It should be possible to use the same
 mechanism that makes all field initializer expressions appear within the same
 CV on ADJUST blocks as well, merging them all into a single CV per class. This
 will make it faster to invoke if a class has more than one of them.
-
-=item * More accessor generator attributes
-
-Attributes to request that other kinds of accessor methods be generated for
-fields. Likely C<:writer>.
-
-    class X {
-        field $name :writer;
-    }
-
-Equivalent to
-
-    class X {
-        field $name;
-        method set_name ($new) { $name = $new; return $self; }
-    }
 
 =item * Metaprogramming
 

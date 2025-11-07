@@ -4,12 +4,11 @@ BEGIN {
     chdir 't' if -d 't';
     require './test.pl';
     set_up_inc('../lib');
-    require Config; Config->import;
-    require constant;
-    constant->import(constcow => *Config::{NAME});
     require './charset_tools.pl';
     require './loc_tools.pl';
 }
+use Config;
+use constant constcow => *Config::{NAME};
 
 plan(tests => 281);
 
@@ -883,6 +882,7 @@ fresh_perl_is( '$_="abcdefg123456"; s/(?<=...\G)?(\d)/($1)/; print' => 'abcdefg(
     ::is($fc, 1, '$tied_ref =~ s/non-utf8/utf8/ fetch count');
     ::like("$s", qr/^\x{101}AR\(0x.*\)\z/,
            '$tied_ref =~ s/non-utf8/utf8/ result');
+    ::watchdog(0);
 }
 
 # RT #97954

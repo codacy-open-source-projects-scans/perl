@@ -128,8 +128,7 @@ everywhere.  It's fine to probe for additional C99 features and use
 them where available, providing there is also a fallback for compilers
 that don't support the feature.  For example, we use C11 thread local
 storage when available, but fall back to POSIX thread specific APIs
-otherwise, and we use C<char> for booleans if C<< <stdbool.h> >> isn't
-available.
+otherwise.
 
 Code can use (and rely on) the following C99 features being present
 
@@ -232,6 +231,13 @@ C<//> comments
 
 All compilers we tested support their use. Not all humans we tested
 support their use.
+
+=item *
+
+booleans
+
+You can use C<bool>, C<true>, and C<false> as provided by C<< <stdbool.h> >>
+(or natively in C++).
 
 =back
 
@@ -365,8 +371,13 @@ It's best then to:
 =item B<Don't begin a file-level symbol name with an underscore>; (I<e.g.>, don't
 use: C<_FOOBAR>)
 
-It is fine to have a symbol in a function or block like C<_ref>,
-beginning with an underscore followed by a lowercase letter.
+It is fine to have a symbol in a function or block begin with an
+underscore followed by a lowercase letter, like
+
+ {
+      int _ref;
+      ...
+ }
 
 =item B<Don't use two consecutive underscores in a symbol name>;
 (I<e.g.>, don't use C<FOO__BAR>)
@@ -379,7 +390,7 @@ Perl also has conflicts with that.
 
 Perl reserves for its use any symbol beginning with C<Perl>, C<perl>,
 or C<PL_>.  Any time you introduce a macro into a header file that
-doesn't follow that convention, you are creating the possiblity of a
+doesn't follow that convention, you are creating the possibility of a
 namespace clash with an existing XS module, unless you restrict it by,
 say,
 
@@ -617,7 +628,7 @@ Assuming one can dereference any type of pointer for any type of data
   long pony = *(long *)p;    /* BAD */
 
 Many platforms, quite rightly so, will give you a core dump instead of
-a pony if the p happens not to be correctly aligned.
+a pony if the C<p> happens not to be correctly aligned.
 
 =item *
 
@@ -1574,10 +1585,9 @@ C<ASAN_OPTIONS=detect_leaks=1>.
 To build perl with AddressSanitizer, your Configure invocation should
 look like:
 
-    sh Configure -des -Dcc=clang \
-       -Accflags=-fsanitize=address -Aldflags=-fsanitize=address \
-       -Alddlflags=-shared\ -fsanitize=address \
-       -fsanitize-blacklist=`pwd`/asan_ignore
+  sh Configure -des -Dcc=clang \
+   -Accflags="-fsanitize=address -fsanitize-ignorelist=$PWD/asan_ignore" \
+   -Aldflags="-fsanitize=address" -Alddlflags="-shared -fsanitize=address"
 
 where these arguments mean:
 
@@ -1588,26 +1598,24 @@ where these arguments mean:
 This should be replaced by the full path to your clang executable if it
 is not in your path.
 
-=item * -Accflags=-fsanitize=address
+=item * -Accflags="-fsanitize=address -fsanitize-ignorelist=$PWD/asan_ignore"
 
 Compile perl and extensions sources with AddressSanitizer.
 
-=item * -Aldflags=-fsanitize=address
+AddressSanitizer will ignore functions listed in the F<asan_ignore>
+file.  (This file should contain a short explanation of why each of the
+functions is listed.)
+
+=item * -Aldflags="-fsanitize=address"
 
 Link the perl executable with AddressSanitizer.
 
-=item * -Alddlflags=-shared\ -fsanitize=address
+=item * -Alddlflags="-shared -fsanitize=address"
 
 Link dynamic extensions with AddressSanitizer.  You must manually
 specify C<-shared> because using C<-Alddlflags=-shared> will prevent
 Configure from setting a default value for C<lddlflags>, which usually
 contains C<-shared> (at least on Linux).
-
-=item * -fsanitize-blacklist=`pwd`/asan_ignore
-
-AddressSanitizer will ignore functions listed in the C<asan_ignore>
-file.  (This file should contain a short explanation of why each of the
-functions is listed.)
 
 =back
 
@@ -2115,7 +2123,7 @@ C99, and so some workarounds were created.  The C<TRUE> and C<FALSE>
 macros are still available as alternatives for C<true> and C<false>.
 And the C<cBOOL> macro was created to correctly cast to a true/false
 value in all circumstances, but should no longer be necessary.  Using
-S<C<(bool)> I<expr>>> should now always work.
+S<C<(bool)> I<expr>> should now always work.
 
 There are no plans to remove any of C<TRUE>, C<FALSE>, nor C<cBOOL>.
 

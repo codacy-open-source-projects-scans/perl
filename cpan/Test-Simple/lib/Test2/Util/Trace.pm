@@ -6,7 +6,7 @@ use strict;
 
 our @ISA = ('Test2::EventFacet::Trace');
 
-our $VERSION = '1.302204';
+our $VERSION = '1.302214';
 
 1;
 
@@ -18,7 +18,7 @@ __END__
 
 =head1 NAME
 
-Test2::Util::Trace - Legacy wrapper fro L<Test2::EventFacet::Trace>.
+Test2::Util::Trace - Legacy wrapper for L<Test2::EventFacet::Trace>.
 
 =head1 DESCRIPTION
 

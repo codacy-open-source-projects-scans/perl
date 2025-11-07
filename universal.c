@@ -39,19 +39,14 @@
  * The main guts of traverse_isa was actually copied from gv_fetchmeth
  */
 
-#define PERL_ARGS_ASSERT_ISA_LOOKUP \
-    assert(stash); \
-    assert(namesv || name)
-
-
 STATIC bool
 S_isa_lookup(pTHX_ HV *stash, SV *namesv, const char * name, STRLEN len, U32 flags)
 {
+    PERL_ARGS_ASSERT_ISA_LOOKUP;
+
     const struct mro_meta *const meta = HvMROMETA(stash);
     HV *isa = meta->isa;
     const HV *our_stash;
-
-    PERL_ARGS_ASSERT_ISA_LOOKUP;
 
     if (!isa) {
         (void)mro_get_linear_isa(stash);
@@ -82,10 +77,6 @@ S_isa_lookup(pTHX_ HV *stash, SV *namesv, const char * name, STRLEN len, U32 fla
 
     return FALSE;
 }
-
-#define PERL_ARGS_ASSERT_SV_DERIVED_FROM_SVPVN \
-    assert(sv); \
-    assert(namesv || name)
 
 STATIC bool
 S_sv_derived_from_svpvn(pTHX_ SV *sv, SV *namesv, const char * name, const STRLEN len, U32 flags)
@@ -122,7 +113,6 @@ S_sv_derived_from_svpvn(pTHX_ SV *sv, SV *namesv, const char * name, const STRLE
 
 /*
 =for apidoc_section $SV
-
 =for apidoc      sv_derived_from
 =for apidoc_item sv_derived_from_hv
 =for apidoc_item sv_derived_from_pv
@@ -133,23 +123,27 @@ These each return a boolean indicating whether C<sv> is derived from the
 specified class I<at the C level>.  To check derivation at the Perl level, call
 C<isa()> as a normal Perl method.
 
+The differences between the forms is how the class is specified, and the
+UTF-8ness of its name.
+
+In C<sv_derived_from_sv>, the class name is extracted from C<namesv> using
+some version of L</C<SvPV>>.  This is the preferred form.  The class name is
+considered to be in UTF-8 iff C<namesv> is marked as such, hence C<flags> is
+effectively currently ignored.
+
 In C<sv_derived_from_hv>, the class name is C<HvNAME(hv)> (which would
 presumably represent a stash).  Its UTF8ness is C<HvNAMEUTF8(hv)>.
 
-In C<sv_derived_from> and C<sv_derived_from_pv>, the class name is given by
-C<name>, which is a NUL-terminated C string.  In C<sv_derived_from>, the name
-is never considered to be encoded as UTF-8.
+In the remaining forms, the class name is specified by the C<name> parameter.
+In C<sv_derived_from> and C<sv_derived_from_pv>, it is a NUL-terminated C
+string.  In C<sv_derived_from_pvn>, C<name> points to the first byte of the
+string specifying the class, and an additional parameter, C<len>, specifies
+its length in bytes.  Hence, C<name> may contain embedded-NUL characters.
 
-The remaining forms differ only in how the class name is specified;
-they all have a C<flags> parameter. Currently, the only significant value for
-which is C<SVf_UTF8> to indicate that the class name is encoded as such.
-
-In C<sv_derived_from_sv>, the class name is extracted from C<namesv>.
-This is the preferred form.  The class name is considered to be in UTF-8 if
-C<namesv> is marked as such.
-
-In C<sv_derived_from_pvn>, C<len> gives the length of C<name>, so the latter
-may contain embedded NUL characters.
+C<name> is never considered to be encoded as UTF-8 in C<sv_derived_from>.  The
+remaining forms have a C<flags> parameter. If the C<SVf_UTF8> is set in it,
+the class name is encoded as UTF-8; otherwise not.  No other flags are
+currently meaningful.
 
 =cut
 
@@ -262,12 +256,39 @@ Perl_sv_isa_sv(pTHX_ SV *sv, SV *namesv)
 }
 
 /*
-=for apidoc sv_does_sv
+=for apidoc      sv_does
+=for apidoc_item sv_does_pv
+=for apidoc_item sv_does_pvn
+=for apidoc_item sv_does_sv
 
-Returns a boolean indicating whether the SV performs a specific, named role.
-The SV can be a Perl object or the name of a Perl class.
+These each return a boolean indicating whether C<sv> performs a specific, named
+role.
+
+C<sv> can be a Perl object or the name of a Perl class.
+
+The forms differ in how the role is specified.
+
+In C<sv_does> and C<sv_does_pv>, the role is in C<name>, which is a
+NUL-terminated string, which means that it may not contain embedded NUL
+characters.
+
+In C<sv_does_pvn>, the role is in C<name> whose length is given by C<len>.
+Hence it may contain embedded NUL characters.
+
+In C<sv_does_sv>, the role is extracted from C<namesv>.  Its C<flags> argument
+is currently ignored.
+
+You can pass C<SVf_UTF8> to the other functions that have a C<flags> argument
+to indicate that C<name> is encoded as UTF-8.  C<sv_does> does not have a
+C<flags> argument, so its role is never considered to be UTF-8.
 
 =cut
+
+The above is based on the behavior of newSVpvn_flags at the time of this
+writing.  It only recognizes SVs_TEMP and SVf_UTF8.
+
+XXX extracted in sv_does_sv is more complicated than the hand waving above
+
 */
 
 #include "XSUB.h"
@@ -327,14 +348,6 @@ Perl_sv_does_sv(pTHX_ SV *sv, SV *namesv, U32 flags)
     return does_it;
 }
 
-/*
-=for apidoc sv_does
-
-Like L</sv_does_pv>, but doesn't take a C<flags> parameter.
-
-=cut
-*/
-
 bool
 Perl_sv_does(pTHX_ SV *sv, const char *const name)
 {
@@ -342,29 +355,12 @@ Perl_sv_does(pTHX_ SV *sv, const char *const name)
     return sv_does_sv(sv, newSVpvn_flags(name, strlen(name), SVs_TEMP), 0);
 }
 
-/*
-=for apidoc sv_does_pv
-
-Like L</sv_does_sv>, but takes a nul-terminated string instead of an SV.
-
-=cut
-*/
-
-
 bool
 Perl_sv_does_pv(pTHX_ SV *sv, const char *const name, U32 flags)
 {
     PERL_ARGS_ASSERT_SV_DOES_PV;
     return sv_does_sv(sv, newSVpvn_flags(name, strlen(name), SVs_TEMP | flags), flags);
 }
-
-/*
-=for apidoc sv_does_pvn
-
-Like L</sv_does_sv>, but takes a string/length pair instead of an SV.
-
-=cut
-*/
 
 bool
 Perl_sv_does_pvn(pTHX_ SV *sv, const char *const name, const STRLEN len, U32 flags)
@@ -384,8 +380,7 @@ A specialised variant of C<croak()> for emitting the usage message for xsubs
 works out the package name and subroutine name from C<cv>, and then calls
 C<croak()>.  Hence if C<cv> is C<&ouch::awk>, it would call C<croak> as:
 
- diag_listed_as: SKIPME
- Perl_croak(aTHX_ "Usage: %" SVf "::%" SVf "(%s)", "ouch" "awk",
+ croak("Usage: %" SVf "::%" SVf "(%s)", "ouch", "awk",
                                                      "eee_yow");
 
 =cut
@@ -418,7 +413,7 @@ Perl_croak_xs_usage(const CV *const cv, const char *const params)
 
         /* Pants. I don't think that it should be possible to get here. */
         /* diag_listed_as: SKIPME */
-        Perl_croak(aTHX_ "Usage: CODE(0x%" UVxf ")(%s)", PTR2UV(cv), params);
+        Perl_croak_nocontext("Usage: CODE(0x%" UVxf ")(%s)", PTR2UV(cv), params);
     }
 }
 
@@ -451,20 +446,19 @@ XS(XS_UNIVERSAL_import_unimport)
     if (items > 1) {
         char *class_pv= SvPV_nolen(ST(0));
         if (strEQ(class_pv,"UNIVERSAL"))
-            Perl_croak(aTHX_ "UNIVERSAL does not export anything");
+            croak("UNIVERSAL does not export anything");
         /* _charnames is special - ignore it for now as the code that
          * depends on it has its own "no import" logic that produces better
          * warnings than this does. */
         if (strNE(class_pv,"_charnames"))
-            Perl_ck_warner_d(aTHX_
-                packWARN(WARN_DEPRECATED__MISSING_IMPORT_CALLED_WITH_ARGS),
-                "Attempt to call undefined %s method with arguments "
-                "(%" SVf_QUOTEDPREFIX "%s) via package "
-                "%" SVf_QUOTEDPREFIX " (Perhaps you forgot to load the package?)",
-                ix ? "unimport" : "import", 
-                SVfARG(ST(1)), 
-                (items > 2 ? " ..." : ""),
-                SVfARG(ST(0)));
+            ck_warner_d(packWARN(WARN_DEPRECATED__MISSING_IMPORT_CALLED_WITH_ARGS),
+                        "Attempt to call undefined %s method with arguments "
+                        "(%" SVf_QUOTEDPREFIX "%s) via package "
+                        "%" SVf_QUOTEDPREFIX " (Perhaps you forgot to load the package?)",
+                        ix ? "unimport" : "import",
+                        SVfARG(ST(1)),
+                        (items > 2 ? " ..." : ""),
+                        SVfARG(ST(0)));
     }
     XSRETURN_EMPTY;
 }
@@ -528,7 +522,7 @@ XS(XS_UNIVERSAL_DOES)
     PERL_UNUSED_ARG(cv);
 
     if (items != 2)
-        Perl_croak(aTHX_ "Usage: invocant->DOES(kind)");
+        croak("Usage: invocant->DOES(kind)");
     else {
         SV * const sv = ST(0);
         if (sv_does_sv( sv, ST(1), 0 ))
@@ -648,27 +642,27 @@ XS(XS_utf8_downgrade)
 XS(XS_utf8_native_to_unicode); /* prototype to pass -Wmissing-prototypes */
 XS(XS_utf8_native_to_unicode)
 {
- dXSARGS;
- const UV uv = SvUV(ST(0));
+    dXSARGS;
+    const UV uv = SvUV(ST(0));
 
- if (items > 1)
-     croak_xs_usage(cv, "sv");
+    if (items > 1)
+        croak_xs_usage(cv, "sv");
 
- ST(0) = sv_2mortal(newSVuv(NATIVE_TO_UNI(uv)));
- XSRETURN(1);
+    ST(0) = sv_2mortal(newSVuv(NATIVE_TO_UNI(uv)));
+    XSRETURN(1);
 }
 
 XS(XS_utf8_unicode_to_native); /* prototype to pass -Wmissing-prototypes */
 XS(XS_utf8_unicode_to_native)
 {
- dXSARGS;
- const UV uv = SvUV(ST(0));
+    dXSARGS;
+    const UV uv = SvUV(ST(0));
 
- if (items > 1)
-     croak_xs_usage(cv, "sv");
+    if (items > 1)
+        croak_xs_usage(cv, "sv");
 
- ST(0) = sv_2mortal(newSVuv(UNI_TO_NATIVE(uv)));
- XSRETURN(1);
+    ST(0) = sv_2mortal(newSVuv(UNI_TO_NATIVE(uv)));
+    XSRETURN(1);
 }
 
 XS(XS_Internals_SvREADONLY); /* prototype to pass -Wmissing-prototypes */
@@ -826,7 +820,7 @@ XS(XS_PerlIO_get_layers)
                        goto fail;
                   default:
                   fail:
-                       Perl_croak(aTHX_
+                       croak(
                                   "get_layers: unknown argument '%s'",
                                   key);
                   }
@@ -1024,7 +1018,7 @@ XS(XS_re_regnames)
         
         if (!entry)
             /* diag_listed_as: SKIPME */
-            Perl_croak(aTHX_ "NULL array element in re::regnames()");
+            croak("NULL array element in re::regnames()");
 
         mPUSHs(SvREFCNT_inc_simple_NN(*entry));
     }
@@ -1104,7 +1098,7 @@ XS(XS_re_regexp_pattern)
         } else {
             /* Scalar, so use the string that Perl would return */
             /* return the pattern in (?msixn:..) format */
-            pattern = sv_2mortal(newSVsv(MUTABLE_SV(re)));
+            pattern = sv_mortalcopy_flags(MUTABLE_SV(re), SV_GMAGIC|SV_NOSTEAL);
             PUSHs(pattern);
             XSRETURN(1);
         }
@@ -1230,7 +1224,7 @@ XS(XS_NamedCapture_FETCH)
 
         if (!rx || !SvROK(ST(0))) {
             if (ix & UNDEF_FATAL)
-                Perl_croak_no_modify();
+                croak_no_modify();
             else
                 XSRETURN_UNDEF;
         }

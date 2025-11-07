@@ -73,6 +73,22 @@
  * without a compiler warning */
 GCC_DIAG_IGNORE(-Wdeprecated-declarations)
 
+void
+Perl_load_mathoms()
+{
+    /* This exists only to make sure the functions in this file get loaded, as
+     * it is referred to by a structure element in intrpvar.h */
+}
+
+/* ref() is now a macro using Perl_doref;
+ * this version provided for binary compatibility only.
+ */
+OP *
+Perl_ref(pTHX_ OP *o, I32 type)
+{
+    return doref(o, type, TRUE);
+}
+
 #if defined(HUGE_VAL) || (defined(USE_LONG_DOUBLE) && defined(HUGE_VALL))
 /*
  * This hack is to force load of "huge" support from libm.a
@@ -89,51 +105,6 @@ Perl_huge(void)
 #  endif
 }
 #endif
-
-/*
-=for apidoc_section $SV
-=for apidoc sv_nolocking
-
-Dummy routine which "locks" an SV when there is no locking module present.
-Exists to avoid test for a C<NULL> function pointer and because it could
-potentially warn under some level of strict-ness.
-
-"Superseded" by C<sv_nosharing()>.
-
-=cut
-*/
-
-void
-Perl_sv_nolocking(pTHX_ SV *sv)
-{
-    PERL_UNUSED_CONTEXT;
-    PERL_UNUSED_ARG(sv);
-}
-
-
-/*
-=for apidoc_section $SV
-=for apidoc sv_nounlocking
-
-Dummy routine which "unlocks" an SV when there is no locking module present.
-Exists to avoid test for a C<NULL> function pointer and because it could
-potentially warn under some level of strict-ness.
-
-"Superseded" by C<sv_nosharing()>.
-
-=cut
-
-PERL_UNLOCK_HOOK in intrpvar.h is the macro that refers to this, and guarantees
-that mathoms gets loaded.
-
-*/
-
-void
-Perl_sv_nounlocking(pTHX_ SV *sv)
-{
-    PERL_UNUSED_CONTEXT;
-    PERL_UNUSED_ARG(sv);
-}
 
 /*
 =for apidoc_section $unicode
@@ -158,6 +129,8 @@ next possible position in C<s> that could begin a non-malformed character.
 See L<perlapi/utf8n_to_uvchr> for details on when the REPLACEMENT CHARACTER is returned.
 
 =cut
+
+Deprecated since 5.38 
 */
 
 UV
@@ -166,7 +139,7 @@ Perl_utf8_to_uvuni(pTHX_ const U8 *s, STRLEN *retlen)
     PERL_UNUSED_CONTEXT;
     PERL_ARGS_ASSERT_UTF8_TO_UVUNI;
 
-    return NATIVE_TO_UNI(valid_utf8_to_uvchr(s, retlen));
+    return NATIVE_TO_UNI(valid_utf8_to_uv(s, retlen));
 }
 
 U8 *
@@ -181,15 +154,15 @@ Perl_uvuni_to_utf8(pTHX_ U8 *d, UV uv)
 =for apidoc_section $unicode
 =for apidoc utf8n_to_uvuni
 
-Instead use L<perlapi/utf8_to_uvchr_buf>, or rarely, L<perlapi/utf8n_to_uvchr>.
+Instead use L<perlapi/utf8_to_uv>, or rarely, L<perlapi/utf8_to_uv_flags>.
 
 This function was useful for code that wanted to handle both EBCDIC and
 ASCII platforms with Unicode properties, but starting in Perl v5.20, the
 distinctions between the platforms have mostly been made invisible to most
 code, so this function is quite unlikely to be what you want.  If you do need
-this precise functionality, use instead
-C<L<NATIVE_TO_UNI(utf8_to_uvchr_buf(...))|perlapi/utf8_to_uvchr_buf>>
-or C<L<NATIVE_TO_UNI(utf8n_to_uvchr(...))|perlapi/utf8n_to_uvchr>>.
+this precise functionality, use instead L<perlapi/C<utf8_to_uv>> or
+L<perlapi/C<utf8_to_uv_flags>> to calculate the native code point, and then
+convert to Unicode using L<perlapi/C<NATIVE_TO_UNI>>.
 
 =cut
 */
@@ -197,7 +170,7 @@ or C<L<NATIVE_TO_UNI(utf8n_to_uvchr(...))|perlapi/utf8n_to_uvchr>>.
 UV
 Perl_utf8n_to_uvuni(pTHX_ const U8 *s, STRLEN curlen, STRLEN *retlen, U32 flags)
 {
-    PERL_ARGS_ASSERT_UTF8N_TO_UVUNI;
+    PERL_ARGS_ASSERT_UTF8N_TO_UVUNI; /* Deprecated since 5.38 */
 
     return NATIVE_TO_UNI(utf8n_to_uvchr(s, curlen, retlen, flags));
 }
@@ -205,7 +178,7 @@ Perl_utf8n_to_uvuni(pTHX_ const U8 *s, STRLEN curlen, STRLEN *retlen, U32 flags)
 UV
 Perl_utf8_to_uvchr(pTHX_ const U8 *s, STRLEN *retlen)
 {
-    PERL_ARGS_ASSERT_UTF8_TO_UVCHR;
+    PERL_ARGS_ASSERT_UTF8_TO_UVCHR; /* Deprecated since 5.38 */
 
     /* This function is unsafe if malformed UTF-8 input is given it, which is
      * why the function is deprecated.  If the first byte of the input

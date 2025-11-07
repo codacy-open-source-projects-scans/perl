@@ -77,8 +77,8 @@ removed in a future Perl version:
 
 =item all is experimental
 
-(S experimental::all) This warning is emitted if you use the C<all>
-keyword of C<use feature 'all'>.  This keyword is currently
+(S experimental::keyword_all) This warning is emitted if you use the
+C<all> keyword of C<use feature 'keyword_all'>.  This keyword is currently
 experimental and its behaviour may change in future releases of Perl.
 
 =item '%c' allowed only after types %s in %s
@@ -190,8 +190,8 @@ which 'splits' output into two streams, such as
 
 =item any is experimental
 
-(S experimental::any) This warning is emitted if you use the C<any>
-keyword of C<use feature 'any'>.  This keyword is currently
+(S experimental::keyword_any) This warning is emitted if you use the
+C<any> keyword of C<use feature 'keyword_any'>.  This keyword is currently
 experimental and its behaviour may change in future releases of Perl.
 
 =item Applying %s to %s will act on scalar(%s)
@@ -247,6 +247,15 @@ coerced to a scalar - the number of elements in the array.
 sigil; for example:
 
     sub foo ($x, $, $y = 1, @z) {}
+
+=item A named signature parameter must start with '$'
+
+(F) Each subroutine signature parameter declaration that declares a named
+parameter must start with a scalar variable sigil; for example:
+
+    sub foo (:$x, :$y, :$z) {}
+
+Array and hash variables are not permitted as named parameters.
 
 =item A slurpy parameter may not have a default value
 
@@ -675,6 +684,16 @@ is currently being compiled. Since this method is used to introduce new
 lexical subroutines into the scope currently being compiled, this is not
 going to have any effect.
 
+=item builtin::inf not implemented
+
+(F) Your machine doesn't support infinity as a numeric value (probably because
+it's a VAX).
+
+=item builtin::nan not implemented
+
+(F) Your machine doesn't support NaN ("not a number") as a numeric value
+(probably because it's a VAX).
+
 =item Builtin version bundle "%s" is not supported by Perl
 
 (F) You attempted to C<use builtin :ver> for a version number that is either
@@ -887,6 +906,15 @@ object instance.
 (F) Only hard references may be blessed.  This is how Perl "enforces"
 encapsulation of objects.  See L<perlobj>.
 
+=item Can't "break" in a loop topicalizer
+
+(F) You called C<break>, but you're in a C<foreach> block rather than
+a C<given> block.  You probably meant to use C<next> or C<last>.
+
+=item Can't "break" outside a given block
+
+(F) You called C<break>, but you're not inside a C<given> block.
+
 =item Can't call destructor for 0x%p in global destruction
 
 (S) This should not happen. Internals code has set up a destructor
@@ -953,6 +981,11 @@ You CAN say
 
 but then $foo no longer contains a glob.
 
+=item Can't "continue" outside a when block
+
+(F) You called C<continue>, but you're not inside a C<when>
+or C<default> block.
+
 =item can't convert empty path
 
 (F) On Cygwin, you called a path conversion function with an empty path.
@@ -967,6 +1000,13 @@ quotas or other plumbing problems.
 
 (F) Only scalar, array, and hash variables may be declared as "my", "our" or
 "state" variables.  They must have ordinary identifiers as names.
+
+=item Can't "default" outside a topicalizer
+
+(F) You have used a C<default> block that is neither inside a
+C<foreach> loop nor a C<given> block.  (Note that this error is
+issued on exit from the C<default> block, so you won't get the
+error if you use an explicit C<continue>.)
 
 =item Can't determine class of operator %s, assuming BASEOP
 
@@ -1165,6 +1205,11 @@ error occurs in cases such as these:
 
 (F) A C<goto> statement was executed to jump into the scope of a C<defer>
 block.  This is not permitted.
+
+=item Can't "goto" into a "given" block
+
+(F) A "goto" statement was executed to jump into the middle of a C<given>
+block.  You can't get there from here.  See L<perlfunc/goto>.
 
 =item Can't "goto" into the middle of a foreach loop
 
@@ -1449,10 +1494,23 @@ missing.  You need to figure out where your CRTL misplaced its environ
 or define F<PERL_ENV_TABLES> (see L<perlvms>) so that environ is not
 searched.
 
+=item Can't redeclare catch variable as "%s"
+
+(F) A C<my>, C<our> or C<state> keyword was used with the exception variable in
+a C<catch> block:
+
+    try { ... }
+    catch (my $e) { ... }
+    # or catch (our $e) { ... }
+    # or catch (state $e) { ... }
+
+This is not valid syntax. C<catch> takes a bare variable name, which is
+automatically lexically declared.
+
 =item Can't redeclare "%s" in "%s"
 
-(F) A "my", "our" or "state" declaration was found within another declaration,
-such as C<my ($x, my($y), $z)> or C<our (my $x)>.
+(F) A C<my>, C<our> or C<state> declaration was found within another
+declaration, such as C<my ($x, my($y), $z)> or C<our (my $x)>.
 
 =item Can't "redo" outside a loop block
 
@@ -1693,6 +1751,13 @@ instead.
 
 (F) You attempted to weaken something that was not a reference.  Only
 references can be weakened.
+
+=item Can't "when" outside a topicalizer
+
+(F) You have used a when() block that is neither inside a C<foreach>
+loop nor a C<given> block.  (Note that this error is issued on exit
+from the C<when> block, so you won't get the error if the match fails,
+or if you use an explicit C<continue>.)
 
 =item Can't x= to read-only value
 
@@ -2291,6 +2356,12 @@ already been freed.
 (W unpack) You have applied the same modifier more than once after a
 type in a pack template.  See L<perlfunc/pack>.
 
+=item Duplicated subroutine parameter name
+
+(F) You have attempted to use a subroutine parameter name a second time.
+
+    sub f ( :$name, :$name ) { ... }
+
 =item each on anonymous %s will always start from the beginning
 
 (W syntax) You called L<each|perlfunc/each> on an anonymous hash or
@@ -2359,6 +2430,10 @@ specifications in either VMS or Unix syntax, it converts them to a
 single form when it must operate on them directly.  Either you've passed
 an invalid file specification to Perl, or you've found a case the
 conversion routines don't handle.  Drat.
+
+=item error creating/fetching widecharmap entry for 0x%X
+
+(P) A failure happened when folding a character for a regex trie.
 
 =item Error %s in expansion of %s
 
@@ -2545,13 +2620,18 @@ queue of such routines has been prematurely ended.
 (F) Closing an output file from in-place editing, as with the C<-i>
 command-line switch, failed.
 
+=item Failed to create a fake bit bucket
+
+(F) You tried to call perl with the B<-e> switch, but you're on a Cray system
+and perl's F</dev/null> emulation was unable to create an empty temporary file.
+
 =item False [] range "%s" in regex; marked by S<<-- HERE> in m/%s/
 
 (W regexp)(F) A character class range must start and end at a literal
 character, not another character class like C<\d> or C<[:alpha:]>.  The "-"
 in your false range is interpreted as a literal "-".  In a C<(?[...])>
-construct, this is an error, rather than a warning.  Consider quoting
-the "-", "\-".  The S<<-- HERE> shows whereabouts in the regular expression
+construct, this is an error, rather than a warning.  Consider escaping
+the "-" as "\-".  The S<<-- HERE> shows whereabouts in the regular expression
 the problem was discovered.  See L<perlre>.
 
 =item Fatal VMS error (status=%d) at %s, line %d
@@ -2663,12 +2743,6 @@ the risk that your code may break in a future Perl version.
 some time before now.  Check your control flow.  flock() operates on
 filehandles.  Are you attempting to call flock() on a dirhandle by the
 same name?
-
-=item for my (...) is experimental
-
-(S experimental::for_list) This warning is emitted if you use C<for> to
-iterate multiple values at a time. This syntax is currently experimental
-and its behaviour may change in future releases of Perl.
 
 =item Forked open '%s' not meaningful in <>
 
@@ -2807,9 +2881,19 @@ has since been undefined.
 =item Group name must start with a non-digit word character in regex; marked by 
 S<<-- HERE> in m/%s/
 
-(F) Group names must follow the rules for perl identifiers, meaning
-they must start with a non-digit word character.  A common cause of
-this error is using (?&0) instead of (?0).  See L<perlre>.
+(F) Group names must follow the rules for Perl identifiers, meaning
+they must start with a character that matches C<\p{XID_Start}> plus the
+underscore.  This means the first character may not be a digit.
+Subsequent characters must match C<\p{XID_Continue}>.
+
+A common cause of this error is using (?&0) instead of (?0).
+
+This message was formulated before Perl supported Unicode; so it is
+not accurate for Unicode characters outside the ASCII-range.  There are
+many word characters in Unicode that may not start a group name, and a
+few that may not be a continuation character.
+
+See L<perlre>.
 
 =item ()-group starts with a count
 
@@ -3637,7 +3721,9 @@ does when displayed.
 (P) A dynamic loading library C<.so> or C<.dll> was being loaded into the
 process that was built against a different build of perl than the
 said library was compiled against.  Reinstalling the XS module will
-likely fix this error.
+likely fix this error.  This error is a less commonly seen subset of
+L<"Perl API version %s of %s does not match %s"|perldiag/"Perl API version %s of %s does not match %s">
+error.
 
 =item Locale '%s' contains (at least) the following characters which
 have unexpected meanings: %s  The Perl program will use the expected
@@ -3883,6 +3969,10 @@ caller to omit an earlier one and pass a later one.  If you want to act
 as if the parameters are filled from right to left, declare the rightmost
 optional and then shuffle the parameters around in the subroutine's body.
 
+When using named parameters, no named parameter may be made mandatory if
+there exist any optional I<positional> parameters, though any named
+parameters may be freely mixed between mandatory and optional.
+
 =item Matched non-Unicode code point 0x%X against Unicode property; may
 not be portable
 
@@ -4070,6 +4160,16 @@ L<perlfunc/require EXPR> and L<perlfunc/do EXPR>.
 (F) A C<%{^HOOK}{require__before}> hook rewrote the name of the file being
 compiled with C<require> or C<do> with an empty string an undefined value
 which is forbidden.  See L<perlvar/%{^HOOK}> and L<perlfunc/require EXPR>.
+
+=item Missing required named parameter '%s' to subroutine '%s'
+
+(F) A subroutine was invoked that uses a signature that declares a
+non-optional named parameter, but the caller did not provide a value associated
+with that name.  The caller of the subroutine is presumably at fault.
+
+The message attempts to include the name of the called subroutine.  If
+the subroutine has been aliased, the subroutine's original name will be
+shown, regardless of what name the caller used.
 
 =item Missing right brace on \%c{} in regex; marked by S<<-- HERE> in m/%s/
 
@@ -4269,6 +4369,23 @@ format) are considered the same; if a program uses $c only once
 but also uses any of the others it will not trigger this warning.
 Symbols beginning with an underscore and symbols using special
 identifiers (q.v. L<perldata>) are exempt from this warning.
+
+=item Named parameters in signatures are experimental
+
+(S experimental::signature_named_parameters)  This warning is emitted if you
+use a named parameter as part of a subroutine signature.  This ability is
+currently considered experimental and its behaviour may change in future
+releases of Perl.
+
+=item Named parameters must actually have a name
+
+(F) An attempt was made to declare a named subroutine parameter using the
+anonymous scalar notation
+
+    sub foo (:$, ...)
+
+As named parameters must actually have a declared name in order to match it
+against the argument values passed by the caller, this is not allowed.
 
 =item Need exactly 3 octal digits in regex; marked by S<<-- HERE> in m/%s/
 
@@ -4889,6 +5006,11 @@ remaining memory (or virtual memory) to satisfy the request.  However,
 the request was judged large enough (compile-time default is 64K), so a
 possibility to shut down by trapping this error is granted.
 
+=item Out of memory during pack()
+
+(F) An attempt was made to extend a string beyond the largest possible memory
+allocation.
+
 =item Out of memory during request for %s
 
 (X)(F) The malloc() function returned 0, indicating there was
@@ -5039,6 +5161,14 @@ the glob and a destructor that adds a new object to the glob.
 
 (P) The lexer got into a bad state parsing a string with brackets.
 
+=item panic! In trie construction, no char mapping for %d
+
+(P) A failure happened in the construction of a regex trie.
+
+=item panic! In trie construction, unknown node type %u %s
+
+(P) An unexpected node type was encountered in regex trie construction.
+
 =item panic: kid popen errno read
 
 (F) A forked child returned an incomprehensible message about its errno.
@@ -5154,6 +5284,12 @@ was string.
 
 (P) The compiler attempted to do a goto, or something weird like that.
 
+=item panic! %s: %d: Tried to warn when none expected at '%s'
+
+(P) The regex engine tried to emit a warning for a temporary regex that it
+generated internally. This should never happen because any regex thus generated
+should be correct and free of warnings.
+
 =item panic: unexpected constant lvalue entersub entry via type/targ %d:%d
 
 (P) When compiling a subroutine call in lvalue context, Perl failed an
@@ -5217,6 +5353,32 @@ redirected it with select().)
 
 (F) The XS module in question was compiled against a different incompatible
 version of Perl than the one that has loaded the XS module.
+
+If the internal
+differences between the two incompatible Perl versions are large enough to
+prevent obtaining the full module name causing this error message, a
+C<.c> file name will be shown in this error message instead of the full module
+name.  The C<.c> file name serves as a hint to help identify the module
+causing this error.
+
+The term XS module does not mean a C<.pm> file.  This error is not directly
+caused by Perl code inside a particular C<.pm> file or C<.pl> file.
+Instead this error is only caused by OS and CPU specific "shared library"
+files created by a C or C++ compiler.  This file format is called a
+C<.so>, C<.dll>, C<.dylib>, C<.bundle> or C<.sl> on Perl's most popular
+operating systems.  These shared library files are a part of the XS API
+documented in L<perlxs>.
+
+Each OS has a different file extension or no extension for shared libraries.
+But shared library files on all OSes are non-text, unprintable, binary files
+with raw machine code inside of them created by a C or C++ compiler.
+
+The C<.so> or C<.dll> or equivalent is usually loaded by a C<.pm> or C<.pl>
+file making a call to L<DynaLoader> or L<XSLoader>, which
+then calls OS specific mechanisms to load the shared library file into the Perl
+process. The OS specific mechanism then calls a function or subroutine inside
+the particular C<.so> or C<.dll> file. That particular C<.so> or C<.dll> file
+then throws this error.
 
 =item Perl folding rules are not up-to-date for 0x%X; please use the perlbug
 utility to report; in regex; marked by S<<-- HERE> in m/%s/
@@ -5308,6 +5470,14 @@ are as follows.
 Both numeric and string values are accepted, but note that string values are
 case sensitive.  The default for this setting is "RANDOM" or 1.
 
+=item PerlIO layer function table size (%d) does not match size expected by this perl (%d)
+
+(P) The size of a PerlIO function table passed by an extension is smaller than expected.
+
+=item PerlIO layer instance size (%d) smaller than size expected by this perl (%d)
+
+(P) The size of a PerlIO instance passed by an extension is smaller than expected.
+
 =item pid %x not a child
 
 (W exec) A warning peculiar to VMS.  Waitpid() was asked to wait for a
@@ -5317,6 +5487,12 @@ fine from VMS' perspective, it's probably not what you intended.
 =item 'P' must have an explicit size in unpack
 
 (F) The unpack format P must have an explicit size, not "*".
+
+=item Positional parameter follows named parameter
+
+(F) An attempt was made to declare a positional parameter in a subroutine
+signature after adding named parameters.  All of the positional parameters
+must be declared before any named ones.
 
 =item POSIX class [:%s:] unknown in regex; marked by S<<-- HERE> in m/%s/
 
@@ -5358,7 +5534,7 @@ S<<-- HERE> in m/%s/
 (F) Within regular expression character classes ([]) the syntax beginning
 with "[." and ending with ".]" is reserved for future extensions.  If you
 need to represent those character sequences inside a regular expression
-character class, just quote the square brackets with the backslash: "\[."
+character class, just escape the square brackets with the backslash: "\[."
 and ".\]".  The S<<-- HERE> shows whereabouts in the regular expression the
 problem was discovered.  See L<perlre>.
 
@@ -5368,9 +5544,36 @@ S<<-- HERE> in m/%s/
 (F) Within regular expression character classes ([]) the syntax beginning
 with "[=" and ending with "=]" is reserved for future extensions.  If you
 need to represent those character sequences inside a regular expression
-character class, just quote the square brackets with the backslash: "\[="
+character class, just escape the square brackets with the backslash: "\[="
 and "=\]".  The S<<-- HERE> shows whereabouts in the regular expression the
 problem was discovered.  See L<perlre>.
+
+=item Possible attempt to escape whitespace in qw() list
+
+(W qw) qw() lists contain items separated by whitespace; contrary to
+what some might expect, backslash characters cannot be used to "protect"
+whitespace from being split, but are instead treated as literal data.
+(You may have used different delimiters than the parentheses shown here;
+braces are also frequently used.)
+
+You probably wrote something like this:
+
+    @list = qw(
+        a\ string
+        another
+    );
+
+expecting to get a two element list containing the strings C<'a string'>
+and C<'another'>.  Instead the list will hold three elements: C<'a\'>
+(with a literal backslash), C<'string'> and C<'another'>.
+
+If you really want whitespace in your strings, build your list the
+old-fashioned way, with quotes and commas:
+
+    @list = ( 'a string', 'another' );
+
+Note that this warnings is I<only> emitted when the backslash is followed
+by actual whitespace (that C<qw> splits on).
 
 =item Possible attempt to put comments in qw() list
 
@@ -6174,6 +6377,12 @@ requested.
 hash) parameter.  The slurpy parameter takes all the available arguments,
 so there can't be any left to fill later parameters.
 
+=item Smart matching a non-overloaded object breaks encapsulation
+
+(F) You should not use the C<~~> operator on an object that does not
+overload it: Perl refuses to use the object's underlying structure
+for the smart match.
+
 =item Sorry, hash keys must be smaller than 2**31 bytes
 
 (F) You tried to create a hash containing a very large key, where "very
@@ -6820,6 +7029,16 @@ Perhaps it's in a different package?  See L<perlfunc/sort>.
 (F) The subroutine indicated hasn't been defined, or if it was, it has
 since been undefined.
 
+=item Undefined subroutine &%s called, close to label '%s'
+
+(F) The subroutine indicated hasn't been defined, or if it was, it has
+since been undefined.
+
+This error could also indicate a mistyped package separator, when a
+single colon was typed instead of two colons. For example, C<Foo:bar()>
+would be parsed as the label C<Foo> followed by an unqualified function
+name: C<foo: bar()>.
+
 =item Undefined subroutine called
 
 (F) The anonymous subroutine you're trying to call hasn't been defined,
@@ -7309,6 +7528,17 @@ whereabouts in the regular expression the escape was discovered.
 (F) You attempted to add a named attribute to a C<field> definition, but
 perl does not recognise the name of the requested attribute.
 
+=item Unrecognized named parameter '%s' to subroutine '%s'
+
+(F) A subroutine was invoked that uses a signature that declares named parameters but has no
+slurpy parameter, and the caller provided a name that did not
+match any declared named parameter.  The caller of the subroutine is
+presumably at fault.
+
+The message attempts to include the name of the called subroutine.  If
+the subroutine has been aliased, the subroutine's original name will be
+shown, regardless of what name the caller used.
+
 =item Unrecognised parameters for "%s" constructor: %s
 
 (F) You called new on a class but supplied a parameter name that
@@ -7694,13 +7924,6 @@ middle of an iteration causes Perl to see a freed value.
 operator.  Since C<split> always tries to match the pattern
 repeatedly, the C</g> has no effect.
 
-=item Use of "goto" to jump into a construct is deprecated
-
-(D deprecated::goto_construct) Using C<goto> to jump from an outer scope into an inner
-scope is deprecated and will be removed completely in Perl 5.42.
-
-This was deprecated in Perl 5.12.
-
 =item Use of '%s' in \p{} or \P{} is deprecated because: %s
 
 (D deprecated::unicode_property_name) Certain properties are deprecated
@@ -7821,20 +8044,30 @@ compile if the currently unassigned delimiter ends up being something
 that isn't a stand-alone grapheme.  Because Unicode is never going to
 assign
 L<non-character code points|perlunicode/Noncharacter code points>, nor
-L<code points that are above the legal Unicode maximum|
-perlunicode/Beyond Unicode code points>, those can be delimiters, and
-their use is legal.
+L<code points that are above the legal Unicode
+maximum|perlunicode/Beyond Unicode code points>, those can be delimiters,
+and their use is legal.
 
 =item Use of uninitialized value%s
 
-(W uninitialized) An undefined value was used as if it were already
-defined.  It was interpreted as a "" or a 0, but maybe it was a mistake.
-To suppress this warning assign a defined value to your variables.
+(W uninitialized) An undefined value was used in a context where the
+value has meaning, for example as a number, string or reference. It was
+interpreted as an empty string or zero.
+
+If you didn't expect this value to be undefined, you can initialise the
+value before using it. If you expected the value could be undefined and
+want to suppress this particular instance of the warning, you can use the
+L<C<E<sol>E<sol>>|perlop/C-style Logical Or, Xor, and Defined Or>
+(defined-or) operator to provide an alternative that takes effect only
+when the value is undefined.
+
+Otherwise if you don't care about undefined values you can disable this
+warning.
 
 To help you figure out what was undefined, perl will try to tell you
 the name of the variable (if any) that was undefined.  In some cases
 it cannot do this, so it also tells you what operation you used the
-undefined value in.  Note, however, that perl optimizes your program
+undefined value in.  Note, however, that perl optimizes your program,
 and the operation displayed in the warning may not necessarily appear
 literally in your program.  For example, C<"that $foo"> is usually
 optimized into C<"that " . $foo>, and the warning will refer to the
@@ -8234,6 +8467,10 @@ Warning is given and the operation is not done.
 
 (W closed) The filehandle you're writing to got itself closed sometime
 before now.  Check your control flow.
+
+=item wrong alignment in free()
+
+(P) An invalid pointer was passed to C<Perl_mfree> (also known as C<Safefree>).
 
 =item %s "\x%X" does not map to Unicode
 

@@ -1,4 +1,4 @@
-/*    inline.h
+/*>    inline.h
  *
  *    Copyright (C) 2012 by Larry Wall and others
  *
@@ -56,9 +56,20 @@ PERL_STATIC_INLINE Size_t
 Perl_av_count(pTHX_ AV *av)
 {
     PERL_ARGS_ASSERT_AV_COUNT;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     return AvFILL(av) + 1;
+}
+
+PERL_STATIC_INLINE SSize_t
+Perl_AvFILL_(pTHX_ AV *av)
+{
+    PERL_ARGS_ASSERT_AVFILL_;
+
+    if (SvRMAGICAL((const SV *) (av))) {
+        return mg_size((SV *) av);
+    }
+
+    return AvFILLp(av);
 }
 
 /* ------------------------------- av.c ------------------------------- */
@@ -88,7 +99,6 @@ Perl_av_store_simple(pTHX_ AV *av, SSize_t key, SV *val)
     SV** ary;
 
     PERL_ARGS_ASSERT_AV_STORE_SIMPLE;
-    assert(SvTYPE(av) == SVt_PVAV);
     assert(!SvMAGICAL(av));
     assert(!SvREADONLY(av));
     assert(AvREAL(av));
@@ -131,7 +141,6 @@ PERL_STATIC_INLINE SV**
 Perl_av_fetch_simple(pTHX_ AV *av, SSize_t key, I32 lval)
 {
     PERL_ARGS_ASSERT_AV_FETCH_SIMPLE;
-    assert(SvTYPE(av) == SVt_PVAV);
     assert(!SvMAGICAL(av));
     assert(!SvREADONLY(av));
     assert(AvREAL(av));
@@ -148,7 +157,6 @@ PERL_STATIC_INLINE void
 Perl_av_push_simple(pTHX_ AV *av, SV *val)
 {
     PERL_ARGS_ASSERT_AV_PUSH_SIMPLE;
-    assert(SvTYPE(av) == SVt_PVAV);
     assert(!SvMAGICAL(av));
     assert(!SvREADONLY(av));
     assert(AvREAL(av));
@@ -183,10 +191,10 @@ initialized.
 PERL_STATIC_INLINE AV *
 Perl_av_new_alloc(pTHX_ SSize_t size, bool zeroflag)
 {
+    PERL_ARGS_ASSERT_AV_NEW_ALLOC;
+
     AV * const av = newAV();
     SV** ary;
-    PERL_ARGS_ASSERT_AV_NEW_ALLOC;
-    assert(size > 0);
 
     Newx(ary, size, SV*); /* Newx performs the memwrap check */
     AvALLOC(av) = ary;
@@ -282,6 +290,28 @@ S_strip_spaces(pTHX_ const char * orig, STRLEN * const len)
                 return SvPVX(tmpsv);
 }
 #endif
+
+/* ------------------------------- hv.c ------------------------------- */
+
+/* Common code for hv_delete()/hv_exists()/hv_fetch()/hv_store()  */
+PERL_STATIC_INLINE void *
+Perl_hv_common_key_len(pTHX_ HV *hv, const char *key, I32 klen_i32,
+                       const int action, SV *val, const U32 hash)
+{
+    PERL_ARGS_ASSERT_HV_COMMON_KEY_LEN;
+
+    STRLEN klen;
+    int flags;
+
+    if (klen_i32 < 0) {
+        klen = -klen_i32;
+        flags = HVhek_UTF8;
+    } else {
+        klen = klen_i32;
+        flags = 0;
+    }
+    return hv_common(hv, NULL, key, klen, flags, action, val, hash);
+}
 
 /* ------------------------------- iperlsys.h ------------------------------- */
 #if ! defined(PERL_IMPLICIT_SYS) && defined(USE_ITHREADS)
@@ -399,7 +429,7 @@ Perl_rpp_extend(pTHX_ SSize_t n)
 
     EXTEND_HWM_SET(PL_stack_sp, n);
 #ifndef STRESS_REALLOC
-    if (UNLIKELY(_EXTEND_NEEDS_GROW(PL_stack_sp, n)))
+    if (UNLIKELY(EXTEND_NEEDS_GROW_(PL_stack_sp, n)))
 #endif
     {
         (void)stack_grow(PL_stack_sp, PL_stack_sp, n);
@@ -1132,7 +1162,6 @@ in lvalue context.
 =cut
 */
 
-
 PERL_STATIC_INLINE bool
 Perl_rpp_is_lone(pTHX_ SV *sv)
 {
@@ -1145,9 +1174,9 @@ Perl_rpp_is_lone(pTHX_ SV *sv)
     assert(AvREAL(PL_curstack));
 #endif
 
-    return SvREFCNT(sv) <= cBOOL(SvTEMP(sv))
+    return SvREFCNT(sv) <= (U32)cBOOL(SvTEMP(sv))
 #ifdef PERL_RC_STACK
-                         + 1
+                         + 1u
             && !SvIMMORTAL(sv) /* PL_sv_undef etc are never stealable */
 #endif
     ;
@@ -1178,6 +1207,20 @@ Perl_rpp_invoke_xs(pTHX_ CV *cv)
 }
 
 
+/* for SvCANEXISTDELETE() macro in pp.h */
+PERL_STATIC_INLINE bool
+Perl_sv_can_existdelete(pTHX_ SV *sv)
+{
+    /* Anything without tie magic is fine */
+    MAGIC *mg;
+    if(!SvRMAGICAL(sv) || !(mg = mg_find(sv, PERL_MAGIC_tied)))
+        return true;
+
+    HV *stash = SvSTASH(SvRV(SvTIED_obj(sv, mg)));
+    return stash &&
+        gv_fetchmethod_autoload(stash, "EXISTS", TRUE) &&
+        gv_fetchmethod_autoload(stash, "DELETE", TRUE);
+}
 
 
 /* ----------------------------- regexp.h ----------------------------- */
@@ -1231,48 +1274,181 @@ Perl_append_utf8_from_native_byte(const U8 byte, U8** dest)
     }
 }
 
+PERL_STATIC_INLINE U8 *
+Perl_bytes_to_utf8(pTHX_ const U8 *s, STRLEN *lenp)
+{
+    return bytes_to_utf8_free_me(s, lenp, NULL);
+}
+
+PERL_STATIC_INLINE U8 *
+Perl_bytes_to_utf8_temp_pv(pTHX_ const U8 *s, STRLEN *lenp)
+{
+    void * free_me = NULL;
+    U8 * converted = bytes_to_utf8_free_me(s, lenp, &free_me);
+
+    if (free_me) {
+        SAVEFREEPV(free_me);
+    }
+
+    return converted;
+}
+
+PERL_STATIC_INLINE bool
+Perl_utf8_to_bytes_new_pv(pTHX_ U8 const **s_ptr, STRLEN *lenp, void ** free_me)
+{
+    /* utf8_to_bytes_() is declared to take a non-const s_ptr because it may
+     * change it, but NOT when called with PL_utf8_to_bytes_new_memory, so it
+     * is ok to cast away const */
+    return utf8_to_bytes_((U8 **) s_ptr, lenp, free_me,
+                          PL_utf8_to_bytes_new_memory);
+}
+
+PERL_STATIC_INLINE bool
+Perl_utf8_to_bytes_temp_pv(pTHX_ U8 const **s_ptr, STRLEN *lenp)
+{
+    /* utf8_to_bytes_() requires a non-NULL pointer, but doesn't use it when
+     * called with PL_utf8_to_bytes_use_temporary */
+    void* dummy = NULL;
+
+    /* utf8_to_bytes_() is declared to take a non-const s_ptr because it may
+     * change it, but NOT when called with PL_utf8_to_bytes_use_temporary, so
+     * it is ok to cast away const */
+    return utf8_to_bytes_((U8 **) s_ptr, lenp, &dummy,
+                          PL_utf8_to_bytes_use_temporary);
+}
+
+PERL_STATIC_INLINE bool
+Perl_utf8_to_bytes_overwrite(pTHX_ U8 **s_ptr, STRLEN *lenp)
+{
+    /* utf8_to_bytes_() requires a non-NULL pointer, but doesn't use it when
+     * called with PL_utf8_to_bytes_overwrite */
+    void* dummy = NULL;
+
+    return utf8_to_bytes_(s_ptr, lenp, &dummy, PL_utf8_to_bytes_overwrite);
+}
+
 /*
-=for apidoc valid_utf8_to_uvchr
-Like C<L<perlapi/utf8_to_uvchr_buf>>, but should only be called when it is
+=for apidoc      valid_utf8_to_uv
+=for apidoc_item valid_utf8_to_uvchr
+
+These are synonymous.
+
+These are like C<L<perlapi/utf8_to_uv>>, but should only be called when it is
 known that the next character in the input UTF-8 string C<s> is well-formed
 (I<e.g.>, it passes C<L<perlapi/isUTF8_CHAR>>.  Surrogates, non-character code
 points, and non-Unicode code points are allowed.
+
+The only use for these is that they should run slightly faster than
+C<utf8_to_uv> because no error checking is done.
+
+The C<_uv> form is slightly preferred so as to have a consistent spelling with
+the other C<_uv> forms that are definitely preferred over the older and
+problematic C<_uvchr> forms.
 
 =cut
 
  */
 
 PERL_STATIC_INLINE UV
-Perl_valid_utf8_to_uvchr(const U8 *s, STRLEN *retlen)
+Perl_valid_utf8_to_uv(const U8 *s, STRLEN *retlen)
 {
-    const UV expectlen = UTF8SKIP(s);
-    const U8* send = s + expectlen;
-    UV uv = *s;
+    PERL_ARGS_ASSERT_VALID_UTF8_TO_UV;
 
-    PERL_ARGS_ASSERT_VALID_UTF8_TO_UVCHR;
+    const UV expectlen = UTF8SKIP(s);
+    ASSUME(inRANGE(expectlen, 1, UTF8_MAXBYTES));
+    UV uv = 0;
+
+    /* Note that this is branchless except for the switch() jump table, and
+     * checking that the caller wants a *retlen returned.
+     *
+     * There is wasted effort for length 1 inputs of initializing 'uv' to 0
+     * and calculating 'full_shift' (unless the compiler optimizes that out).
+     * Benchmarks indicate this is acceptable.
+     * See GH #23690 */
+
+    /* Consider a 4-byte UTF-8-encoded charater.  On ASCII platforms it looks
+     * like:
+     * 1st Byte   2nd Byte   3rd Byte   4th Byte
+     * 1111 0ddd  10cc cccc  10bb bbbb  10aa aaaa
+     *
+     * And the code point it represents is dddccccccbbbbbbbbaaaaaa
+     * Each continuation byte contributes its lower 6 bits to the total.  For
+     * generality call that number 'L'.
+     *
+     * You get that code point by masking off the top bits of each byte, then
+     * or'ing together:
+     * the start byte shifted left by 3*L bits,
+     * with  byte [1] shifted left by 2*L bits
+     * with  byte [2] shifted left by 1*L bits
+     * with  byte [3] shifted left by 0*L bits
+     *
+     * The order is immaterial, so we can rewrite that as
+     * 'or' together byte [3] shifted left by 0*L bits
+     *          with byte [2] shifted left by 1*L bits
+     *          with byte [1] shifted left by 2*L bits
+     *          with byte [0] shifted left by 3*L bits,
+     *
+     * All share the paradigm that for byte n you mask off the top bits and
+     * shift the remainder left by (4 - 1 - n) * L bits.  So we get
+     *      (s[n] & mask) << (4 - 1 - n) * L
+     * For a three-byte character it would be
+     *      (s[n] & mask) << (3 - 1 - n) * L
+     * and generally
+     *      (s[n] & mask) << (expectlen - 1 - n) * L
+     * which can be rewritten
+     *      (s[n] & mask) << (expectlen - 1) * L - nL
+     * Calculate the term once that isn't compile-time constant and is the same
+     * for all n */
+    U8 full_shift = (expectlen - 1) * UTF_ACCUMULATION_SHIFT;
+
+    /* Then create a macro that does the full calculation given n.  For EBCDIC,
+     * we need to transform s[n] to I8 */
+#define PERL_VALID_UTF8_NEXT_ACCUMULATION(n)         \
+    (( (UV) (   NATIVE_UTF8_TO_I8( s[n] ) & UTF_CONTINUATION_MASK))         \
+             << (full_shift - (n) * UTF_ACCUMULATION_SHIFT))
+
+    switch (expectlen) {
+      default:
+        uv = long_valid_utf8_to_uv(s, s + expectlen);
+        break;
+
+#if 0   /* See GH #23690 */
+      /* These cases give the correct results, but the extra memory used lowers
+       * the chances of the compiler actually inlining this, and we only care
+       * about performance for Unicode code points, all of which can be
+       * expressed with 4 bytes (5 on EBCDIC).  Experiements with clang showed
+       * no difference between 4,5,6, but a huge drop off with 7. */
+      case 7: uv |= PERL_VALID_UTF8_NEXT_ACCUMULATION(6);
+              /* FALLTHROUGH */
+      case 6: uv |= PERL_VALID_UTF8_NEXT_ACCUMULATION(5);
+              /* FALLTHROUGH */
+#endif
+      case 5: uv |= PERL_VALID_UTF8_NEXT_ACCUMULATION(4);
+              /* FALLTHROUGH */
+      case 4:
+        uv |= PERL_VALID_UTF8_NEXT_ACCUMULATION(3);
+              /* FALLTHROUGH */
+      case 3:
+        uv |= PERL_VALID_UTF8_NEXT_ACCUMULATION(2);
+              /* FALLTHROUGH */
+      case 2:
+        uv |= PERL_VALID_UTF8_NEXT_ACCUMULATION(1);
+
+        uv = UNI_TO_NATIVE(uv | (  ((UV)(  NATIVE_UTF8_TO_I8(s[0])
+                                         & UTF_START_MASK(expectlen))
+                                 << full_shift)));
+        break;
+
+      case 1:
+        uv = s[0];
+        break;
+    }
 
     if (retlen) {
         *retlen = expectlen;
     }
 
-    /* An invariant is trivially returned */
-    if (expectlen == 1) {
-        return uv;
-    }
-
-    /* Remove the leading bits that indicate the number of bytes, leaving just
-     * the bits that are part of the value */
-    uv = NATIVE_UTF8_TO_I8(uv) & UTF_START_MASK(expectlen);
-
-    /* Now, loop through the remaining bytes, accumulating each into the
-     * working total as we go.  (I khw tried unrolling the loop for up to 4
-     * bytes, but there was no performance improvement) */
-    for (++s; s < send; s++) {
-        uv = UTF8_ACCUMULATE(uv, *s);
-    }
-
-    return UNI_TO_NATIVE(uv);
-
+    return uv;
 }
 
 /* This looks like 0x010101... */
@@ -1283,14 +1459,60 @@ Perl_valid_utf8_to_uvchr(const U8 *s, STRLEN *retlen)
 #  define PERL_WORDSIZE            sizeof(PERL_UINTMAX_T)
 #  define PERL_WORD_BOUNDARY_MASK (PERL_WORDSIZE - 1)
 
-/* Evaluates to 0 if 'x' is at a word boundary; otherwise evaluates to 1, by
- * or'ing together the lowest bits of 'x'.  Hopefully the final term gets
- * optimized out completely on a 32-bit system, and its mask gets optimized out
- * on a 64-bit system */
-#  define PERL_IS_SUBWORD_ADDR(x) (1 & (       PTR2nat(x)                     \
-                                      |   (  PTR2nat(x) >> 1)                 \
-                                      | ( ( (PTR2nat(x)                       \
-                                           & PERL_WORD_BOUNDARY_MASK) >> 2))))
+/* Given an address of a byte 'x', how many bytes away is that address to the
+ * following closest full word boundary. */
+#  define BYTES_REMAINING_IN_WORD(x)                                        \
+              ( (PERL_WORDSIZE - (PTR2nat(x) & PERL_WORD_BOUNDARY_MASK))    \
+               & PERL_WORD_BOUNDARY_MASK)
+/* For example, consider two addresses in an 8 byte word size (the dots are
+ * don't cares):
+ *      0b...............010                0b...............000
+ *      ((8 - (0b1101010 & 0x7)) & 0x7)     ((8 - (0b1101000 & 0x7)) & 0x7)
+ *      ((8 - 0b10) & 0x7)                  ((8 - 0) & 0x7)
+ *      (6 & 0x7)                           (8 & 0x7)
+ *      6                                   0                              */
+
+/* Some tasks that are byte-oriented can be done as well a full word-at-a-time,
+ * running 8 times faster on an 8-byte word, for example.  But there is
+ * generally extra setup required to do this, and byte-at-a-time must be used
+ * anyway to get to the next word boundary.  This macro calculates whether the
+ * trade-off is worth doing.  If not, it returns NULL; if so, it returns a
+ * pointer to the first byte of the next word.  Code using this is typically
+ * structured like:
+ *      U8 * next_word_boundary = WORTH_PER_LOOP()
+ *      if (next_word_boundary) {
+ *          loop per-byte until next_word_boundary
+ *          loop per-word until less than a word left before upper boundary
+ *      }
+ *      loop per-byte until reach final boundary
+ *
+ * 's' is the current position in the string
+ * 'e' is the upper string bound
+ * 'full_words_needed' is the caller's determination of where to make the
+ *      trade-off between per-byte and per-word.  Only if the number of words
+ *      in the input string is at least this many, does the macro return
+ *      non-NULL.
+ *
+ * Because of EBCDIC, there are two forms of this macro.
+ * WORTH_PER_WORD_LOOP_BINMODE() is for use when the data being examined is
+ * not dependent on the character set.  The more usual form is plain
+ * WORTH_PER_WORD_LOOP() for character data.  Because EBCDIC needs an extra
+ * transformation, per-word operations are not appropriate on it, so the macro
+ * always returns NULL, meaning don't use a per-word loop on an EBCDIC
+ * platform. */
+#  define WORTH_PER_WORD_LOOP_BINMODE(s, e, full_words_needed)      \
+       /* Note multiple evaluations of 's' */                       \
+       ( ( ( (s) + BYTES_REMAINING_IN_WORD(s)                       \
+                 + (full_words_needed) * PERL_WORDSIZE) < (e) )     \
+        ? ((s) + BYTES_REMAINING_IN_WORD(s))                        \
+        : NULL)
+
+#  ifdef EBCDIC
+#    define WORTH_PER_WORD_LOOP(s, e, f)  NULL
+#  else
+#    define WORTH_PER_WORD_LOOP(s, e, f)                \
+        WORTH_PER_WORD_LOOP_BINMODE(s, e, f)
+#  endif
 
 /*
 =for apidoc      is_utf8_invariant_string
@@ -1339,35 +1561,22 @@ C<L</is_utf8_string>> and C<L</is_utf8_fixed_width_buf_flags>>.
 PERL_STATIC_INLINE bool
 Perl_is_utf8_invariant_string_loc(const U8* const s, STRLEN len, const U8 ** ep)
 {
-    const U8* send;
-    const U8* x = s;
-
     PERL_ARGS_ASSERT_IS_UTF8_INVARIANT_STRING_LOC;
+
+    const U8* send = s + len;
+    const U8* x = s;
 
     if (len == 0) {
         len = strlen((const char *)s);
     }
 
-    send = s + len;
-
-#ifndef EBCDIC
-
     /* Do the word-at-a-time iff there is at least one usable full word.  That
      * means that after advancing to a word boundary, there still is at least a
-     * full word left.  The number of bytes needed to advance is 'wordsize -
-     * offset' unless offset is 0. */
-    if ((STRLEN) (send - x) >= PERL_WORDSIZE
+     * full word left. */
+    const U8 * const per_byte_end = WORTH_PER_WORD_LOOP(x, send, 1);
 
-                            /* This term is wordsize if subword; 0 if not */
-                          + PERL_WORDSIZE * PERL_IS_SUBWORD_ADDR(x)
-
-                            /* 'offset' */
-                          - (PTR2nat(x) & PERL_WORD_BOUNDARY_MASK))
-    {
-
-        /* Process per-byte until reach word boundary.  XXX This loop could be
-         * eliminated if we knew that this platform had fast unaligned reads */
-        while (PTR2nat(x) & PERL_WORD_BOUNDARY_MASK) {
+    if (per_byte_end) {
+        while (x < per_byte_end ) {
             if (! UTF8_IS_INVARIANT(*x)) {
                 if (ep) {
                     *ep = x;
@@ -1408,8 +1617,6 @@ Perl_is_utf8_invariant_string_loc(const U8* const s, STRLEN len, const U8 ** ep)
 
         } while (x + PERL_WORDSIZE <= send);
     }
-
-#endif      /* End of ! EBCDIC */
 
     /* Process per-byte.  (Can't use libc functions like strpbrk() because
      * input isn't necessarily a C string) */
@@ -1801,13 +2008,20 @@ Perl_single_1bit_pos32(U32 word)
 
 }
 
-#ifndef EBCDIC
+/* Returns the byte number of the lowest numbered-byte whose uppermost bit is
+ * set */
+#define first_upper_bit_set_byte_number(word) Perl_variant_byte_number(word)
 
 PERL_STATIC_INLINE unsigned int
 Perl_variant_byte_number(PERL_UINTMAX_T word)
 {
-    /* This returns the position in a word (0..7) of the first variant byte in
-     * it.  This is a helper function.  Note that there are no branches */
+    /* This returns the position in a word (0..7) of the first byte whose
+     * uppermost bit is set.  On ASCII boxes, this is equivalent to the first
+     * byte whose representation is different in UTF-8 vs not, hence the name
+     * and text in the comments.  It was only later that this was used for
+     * binary data, not tied to the character set.
+     *
+     * This is a helper function.  Note that there are no branches */
 
     /* Get just the msb bits of each byte */
     word &= PERL_VARIANTS_WORD_MASK;
@@ -1816,7 +2030,7 @@ Perl_variant_byte_number(PERL_UINTMAX_T word)
      * word */
     assert(word);
 
-#  if BYTEORDER == 0x1234 || BYTEORDER == 0x12345678
+#if BYTEORDER == 0x1234 || BYTEORDER == 0x12345678
 
     /* Bytes are stored like
      *  Byte8 ... Byte2 Byte1
@@ -1829,7 +2043,7 @@ Perl_variant_byte_number(PERL_UINTMAX_T word)
      * to 0..7 */
     return (unsigned int) ((word + 1) >> 3) - 1;
 
-#  elif BYTEORDER == 0x4321 || BYTEORDER == 0x87654321
+#elif BYTEORDER == 0x4321 || BYTEORDER == 0x87654321
 
     /* Bytes are stored like
      *  Byte1 Byte2  ... Byte8
@@ -1848,13 +2062,24 @@ Perl_variant_byte_number(PERL_UINTMAX_T word)
 
     return (unsigned int) word;
 
-#  else
-#    error Unexpected byte order
-#  endif
+#else   /* Unhandled byte-order; the compiler knows which comes first */
+
+    const U8 * bytes = (U8 *) &word;
+    for (unsigned int i = 0; i <  sizeof(word); i++) {
+        if (bytes[i]) {
+            return i;
+        }
+    }
+
+    assert(0);
+
+    /* If all else fails, it's better to return something than just random */
+    return 0;
+
+#endif
 
 }
 
-#endif
 #if defined(PERL_CORE) || defined(PERL_EXT)
 
 /*
@@ -1887,23 +2112,16 @@ C<L<perlapi/is_utf8_invariant_string_loc>>,
 PERL_STATIC_INLINE Size_t
 S_variant_under_utf8_count(const U8* const s, const U8* const e)
 {
+    PERL_ARGS_ASSERT_VARIANT_UNDER_UTF8_COUNT;
+
     const U8* x = s;
     Size_t count = 0;
 
-    PERL_ARGS_ASSERT_VARIANT_UNDER_UTF8_COUNT;
-
-#  ifndef EBCDIC
-
     /* Test if the string is long enough to use word-at-a-time.  (Logic is the
      * same as for is_utf8_invariant_string()) */
-    if ((STRLEN) (e - x) >= PERL_WORDSIZE
-                          + PERL_WORDSIZE * PERL_IS_SUBWORD_ADDR(x)
-                          - (PTR2nat(x) & PERL_WORD_BOUNDARY_MASK))
-    {
-
-        /* Process per-byte until reach word boundary.  XXX This loop could be
-         * eliminated if we knew that this platform had fast unaligned reads */
-        while (PTR2nat(x) & PERL_WORD_BOUNDARY_MASK) {
+    const U8 * const per_byte_end = WORTH_PER_WORD_LOOP(x, e, 1);
+    if (per_byte_end) {
+        while (x < per_byte_end ) {
             count += ! UTF8_IS_INVARIANT(*x++);
         }
 
@@ -1918,8 +2136,6 @@ S_variant_under_utf8_count(const U8* const s, const U8* const e)
             x += PERL_WORDSIZE;
         } while (x + PERL_WORDSIZE <= e);
     }
-
-#  endif
 
     /* Process per-byte */
     while (x < e) {
@@ -1941,6 +2157,7 @@ S_variant_under_utf8_count(const U8* const s, const U8* const e)
 #  undef PERL_COUNT_MULTIPLIER
 #  undef PERL_WORD_BOUNDARY_MASK
 #  undef PERL_VARIANTS_WORD_MASK
+#  undef BYTES_REMAINING_IN_WORD
 #endif
 
 #define is_utf8_string(s, len)  is_utf8_string_loclen(s, len, NULL, NULL)
@@ -2114,8 +2331,8 @@ Perl_is_utf8_string_flags(const U8 *s, STRLEN len, const U32 flags)
     return TRUE;
 }
 
-#define Perl_is_utf8_string_loc(s, len, ep)          \
-        Perl_is_utf8_string_loclen(s, len, ep, 0)
+#define is_utf8_string_loc(s, len, ep)          \
+        is_utf8_string_loclen(s, len, ep, 0)
 
 PERL_STATIC_INLINE bool
 Perl_is_utf8_string_loclen(const U8 *s, STRLEN len, const U8 **ep, STRLEN *el)
@@ -2285,8 +2502,9 @@ legal UTF-8 for a single character.
 
 With C<isUTF8_CHAR>, the code point can be any that will fit in an IV on this
 machine, using Perl's extension to official UTF-8 to represent those higher
-than the Unicode maximum of 0x10FFFF.  That means that this will consider valid
-bytes that are unrecognized or considered illegal by non-Perl applications.
+than the Unicode maximum of 0x10FFFF.  That means that this will consider byte
+sequences to be valid that are unrecognized or considered illegal by non-Perl
+applications.
 
 With C<L</isSTRICT_UTF8_CHAR>>, acceptable code points are restricted to those
 defined by Unicode to be fully interchangeable across applications.
@@ -2692,8 +2910,8 @@ unchanged.
 
 =cut
 */
-# define Perl_utf8_hop_forward(          s, off, end)           \
-         Perl_utf8_hop_forward_overshoot(s, off, end, NULL)
+# define utf8_hop_forward(          s, off, end)           \
+         utf8_hop_forward_overshoot(s, off, end, NULL)
 
 PERL_STATIC_INLINE U8 *
 Perl_utf8_hop_forward_overshoot(const U8 * s, SSize_t off,
@@ -2778,15 +2996,14 @@ displaced.
 =cut
 */
 
-# define Perl_utf8_hop_back(          s, off, start)            \
-         Perl_utf8_hop_back_overshoot(s, off, start, NULL)
+# define utf8_hop_back(          s, off, start)            \
+         utf8_hop_back_overshoot(s, off, start, NULL)
 
 PERL_STATIC_INLINE U8 *
 Perl_utf8_hop_back_overshoot(const U8 *s, SSize_t off,
                              const U8 * const start, SSize_t *remaining)
 {
     PERL_ARGS_ASSERT_UTF8_HOP_BACK_OVERSHOOT;
-    assert(start <= s);
     assert(off <= 0);
 
     /* Note: if we know that the input is well-formed, we can do per-word
@@ -2845,7 +3062,7 @@ the excess count is the absolute value of C<remaining>.
 =cut
 */
 
-#define Perl_utf8_hop_safe(s, o, b, e)  Perl_utf8_hop_overshoot(s, o, b, e, 0)
+#define utf8_hop_safe(s, o, b, e)  utf8_hop_overshoot(s, o, b, e, 0)
 
 PERL_STATIC_INLINE U8 *
 Perl_utf8_hop_overshoot(const U8 *s, SSize_t off,
@@ -2853,8 +3070,6 @@ Perl_utf8_hop_overshoot(const U8 *s, SSize_t off,
                    SSize_t * remaining)
 {
     PERL_ARGS_ASSERT_UTF8_HOP_OVERSHOOT;
-
-    assert(start <= s && s <= end);
 
     if (off >= 0) {
         return utf8_hop_forward_overshoot(s, off, end, remaining);
@@ -3110,7 +3325,7 @@ Perl_utf8_to_uv_msgs(const U8 * const s0,
          *
          * The terminology of the dfa refers to a 'class'.  The variable 'type'
          * would have been named 'class' except that is a reserved word in C++
-         * 
+         *
          * The table can be a U16 on EBCDIC platforms, so 'state' is declared
          * as U16; 'type' is likely to never occupy more than 5 bits.  */
         PERL_UINT_FAST8_T type = PL_strict_utf8_dfa_tab[*s];
@@ -3127,6 +3342,7 @@ Perl_utf8_to_uv_msgs(const U8 * const s0,
         if (LIKELY(state == 0)) {
             if (advance_p) {
                 *advance_p = s - s0 + 1;
+                ASSUME(*advance_p <= UTF8_MAXBYTES);
             }
 
             *cp_p = UNI_TO_NATIVE(uv);
@@ -3135,7 +3351,10 @@ Perl_utf8_to_uv_msgs(const U8 * const s0,
     }
 
     /* Here is potentially problematic.  Use the full mechanism */
-    return utf8_to_uv_msgs_helper_(s0, e, cp_p, advance_p, flags, errors, msgs);
+    bool success = utf8_to_uv_msgs_helper_(s0, e, cp_p, advance_p,
+                                           flags, errors, msgs);
+    ASSUME(advance_p == NULL || inRANGE(*advance_p, 1, UTF8_MAXBYTES));
+    return success;
 }
 
 PERL_STATIC_INLINE UV
@@ -3145,6 +3364,7 @@ Perl_utf8_to_uv_or_die(const U8 *s, const U8 *e, STRLEN *advance_p)
 
     UV cp;
     (void) utf8_to_uv_flags(s, e, &cp, advance_p, UTF8_DIE_IF_MALFORMED);
+    ASSUME(advance_p == NULL || inRANGE(*advance_p, 1, UTF8_MAXBYTES));
     return cp;
 }
 
@@ -3177,7 +3397,6 @@ PERL_STATIC_INLINE UV
 Perl_utf8_to_uvchr_buf(pTHX_ const U8 *s, const U8 *send, STRLEN *retlen)
 {
     PERL_ARGS_ASSERT_UTF8_TO_UVCHR_BUF;
-    assert(s < send);
 
     UV cp;
 
@@ -3206,14 +3425,29 @@ Perl_utf8_to_uvchr_buf(pTHX_ const U8 *s, const U8 *send, STRLEN *retlen)
     return 0;
 }
 
+PERL_STATIC_INLINE U8 *
+Perl_uv_to_utf8(pTHX_ U8 *d, UV uv)
+{
+    return uv_to_utf8_msgs(d, uv, 0, 0);
+}
+
+PERL_STATIC_INLINE U8 *
+Perl_uv_to_utf8_flags(pTHX_ U8 *d, UV uv, UV flags)
+{
+    return uv_to_utf8_msgs(d, uv, flags, 0);
+}
+
 /* ------------------------------- perl.h ----------------------------- */
 
 /*
 =for apidoc_section $utility
 
-=for apidoc is_safe_syscall
+=for apidoc         is_safe_syscall
+=for apidoc_item m||IS_SAFE_SYSCALL
 
-Test that the given C<pv> (with length C<len>) doesn't contain any internal
+These are synonymous.
+
+They test that the given C<pv> (with length C<len>) doesn't contain any internal
 C<NUL> characters.
 If it does, set C<errno> to C<ENOENT>, optionally warn using the C<syscalls>
 category, and return FALSE.
@@ -3222,9 +3456,9 @@ Return TRUE if the name is safe.
 
 C<what> and C<op_name> are used in any warning.
 
-Used by the C<IS_SAFE_SYSCALL()> macro.
-
 =cut
+
+Allows one ending \0
 */
 
 PERL_STATIC_INLINE bool
@@ -3325,6 +3559,190 @@ S_lossless_NV_to_IV(const NV nv, IV *ivp)
     }
     return FALSE;
 }
+
+/*
+ * S_iv_{add,sub,mul}_may_overflow(a, b, p) virtually compute "a <op> b"
+ * (where <op> is +, -, or *) in infinite precision, and, if the result
+ * is (or may be) not representable with IV, return true.
+ * Otherwise (no overflow), store the result to *p and return false.
+ * These functions allow false positives (so their names contain "may")
+ * to speed up simple common cases.
+ */
+
+/* Define IV_*_OVERFLOW_IS_EXPENSIVE below to nonzero value
+ * if strict overflow checks are too expensive
+ * (for example, for CPUs that have no hardware overflow detection flags).
+ * If these macros have nonzero value, or overflow-checking compiler intrinsics
+ * are not available, good-old heuristics (with some false positives)
+ * will be used.  */
+#  ifndef IV_ADD_SUB_OVERFLOW_IS_EXPENSIVE
+#    define IV_ADD_SUB_OVERFLOW_IS_EXPENSIVE 0
+#  endif
+#  ifndef IV_MUL_OVERFLOW_IS_EXPENSIVE
+/* Strict overflow check for IV multiplication is generally expensive
+ * when IV is a multi-word integer.
+ * We assume that PTRSIZE matches the platform word size; LONGSIZE might not
+ * match for LLP64 platforms such as Win32 x86-64.  */
+#    define IV_MUL_OVERFLOW_IS_EXPENSIVE (IVSIZE > PTRSIZE)
+#  endif
+
+#  ifdef I_STDCKDINT
+#    include <stdckdint.h>
+#  endif
+
+#  if defined(I_STDCKDINT) && !IV_ADD_SUB_OVERFLOW_IS_EXPENSIVE
+#    define S_iv_add_may_overflow(il, ir, result) ckd_add(result, il, ir)
+#  elif defined(HAS_BUILTIN_ADD_OVERFLOW) && !IV_ADD_SUB_OVERFLOW_IS_EXPENSIVE
+#    define S_iv_add_may_overflow __builtin_add_overflow
+#  else
+PERL_STATIC_INLINE bool
+S_iv_add_may_overflow (IV il, IV ir, IV *const result)
+{
+    /* topl and topr hold only 2 bits */
+    PERL_UINT_FAST8_T const topl = ((UV)il) >> (UVSIZE * 8 - 2);
+    PERL_UINT_FAST8_T const topr = ((UV)ir) >> (UVSIZE * 8 - 2);
+
+    /* if both are in a range that can't under/overflow, do a simple integer
+     * add: if the top of both numbers are 00  or 11, then it's safe */
+    if (!( ((topl+1) | (topr+1)) & 2)) {
+        *result = il + ir;
+        return false;
+    }
+    return true;                   /* addition may overflow */
+}
+#  endif
+
+/*
+ * S_uv_{add,sub,mul}_overflow(a, b, p) are similar, but the results are UV
+ * and they should perform strict overflow check (no false positives).
+ */
+
+#  if defined(I_STDCKDINT)
+#    define S_uv_add_overflow(auv, buv, result) ckd_add(result, auv, buv)
+#  elif defined(HAS_BUILTIN_ADD_OVERFLOW)
+#    define S_uv_add_overflow __builtin_add_overflow
+#  else
+PERL_STATIC_INLINE bool
+S_uv_add_overflow (UV auv, UV buv, UV *const result)
+{
+    /* (auv + buv) < auv means that the addition wrapped around,
+       i.e. overflowed.  Note that unsigned integer overflow is well-defined
+       in standard C to wrap around, in constrast to signed integer overflow
+       whose behaviour is undefined.  */
+    return (*result = auv + buv) < auv;
+}
+#  endif
+
+#  if defined(I_STDCKDINT) && !IV_ADD_SUB_OVERFLOW_IS_EXPENSIVE
+#    define S_iv_sub_may_overflow(il, ir, result) ckd_sub(result, il, ir)
+#  elif defined(HAS_BUILTIN_SUB_OVERFLOW) && !IV_ADD_SUB_OVERFLOW_IS_EXPENSIVE
+#    define S_iv_sub_may_overflow __builtin_sub_overflow
+#  else
+PERL_STATIC_INLINE bool
+S_iv_sub_may_overflow (IV il, IV ir, IV *const result)
+{
+    PERL_UINT_FAST8_T const topl = ((UV)il) >> (UVSIZE * 8 - 2);
+    PERL_UINT_FAST8_T const topr = ((UV)ir) >> (UVSIZE * 8 - 2);
+
+    /* if both are in a range that can't under/overflow, do a simple integer
+     * subtract: if the top of both numbers are 00  or 11, then it's safe */
+    if (!( ((topl+1) | (topr+1)) & 2)) {
+        *result = il - ir;
+        return false;
+    }
+    return true;                   /* subtraction may overflow */
+}
+#  endif
+
+#  if defined(I_STDCKDINT)
+#    define S_uv_sub_overflow(auv, buv, result) ckd_sub(result, auv, buv)
+#  elif defined(HAS_BUILTIN_SUB_OVERFLOW)
+#    define S_uv_sub_overflow __builtin_sub_overflow
+#  else
+PERL_STATIC_INLINE bool
+S_uv_sub_overflow (UV auv, UV buv, UV *const result)
+{
+    return (*result = auv - buv) > auv;
+}
+#  endif
+
+#  if defined(I_STDCKDINT) && !IV_MUL_OVERFLOW_IS_EXPENSIVE
+#    define S_iv_mul_may_overflow(il, ir, result) ckd_mul(result, il, ir)
+#  elif defined(HAS_BUILTIN_MUL_OVERFLOW) && !IV_MUL_OVERFLOW_IS_EXPENSIVE
+#    define S_iv_mul_may_overflow __builtin_mul_overflow
+#  else
+PERL_STATIC_INLINE bool
+S_iv_mul_may_overflow (IV il, IV ir, IV *const result)
+{
+    UV const topl = ((UV)il) >> (UVSIZE * 4 - 1);
+    UV const topr = ((UV)ir) >> (UVSIZE * 4 - 1);
+
+    /* if both are in a range that can't under/overflow, do a simple integer
+     * multiply: if the top halves(*) of both numbers are 00...00  or 11...11,
+     * then it's safe.
+     * (*) for 32-bits, the "top half" is the top 17 bits,
+     *     for 64-bits, its 33 bits */
+    if (!(
+              ((topl+1) | (topr+1))
+            & ( (((UV)1) << (UVSIZE * 4 + 1)) - 2) /* 11..110 */
+    )) {
+        *result = il * ir;
+        return false;
+    }
+    return true;                   /* multiplication may overflow */
+}
+#  endif
+
+#  if defined(I_STDCKDINT)
+#    define S_uv_mul_overflow(auv, buv, result) ckd_mul(result, auv, buv)
+#  elif defined(HAS_BUILTIN_MUL_OVERFLOW)
+#    define S_uv_mul_overflow   __builtin_mul_overflow
+#  else
+PERL_STATIC_INLINE bool
+S_uv_mul_overflow (UV auv, UV buv, UV *const result)
+{
+    const UV topmask = (~ (UV)0) << (4 * sizeof (UV));
+    const UV botmask = ~topmask;
+
+#    if UVSIZE > LONGSIZE && UVSIZE <= 2 * LONGSIZE
+    /* If UV is double-word integer, declare these variables as single-word
+       integers to help compiler to avoid double-word multiplication.  */
+    unsigned long alow, ahigh, blow, bhigh;
+#    else
+    UV alow, ahigh, blow, bhigh;
+#    endif
+
+    /* If this does sign extension on unsigned it's time for plan B  */
+    ahigh = auv >> (4 * sizeof (UV));
+    alow  = auv & botmask;
+    bhigh = buv >> (4 * sizeof (UV));
+    blow  = buv & botmask;
+
+    if (ahigh && bhigh)
+        /* eg 32 bit is at least 0x10000 * 0x10000 == 0x100000000
+           which is overflow.  */
+        return true;
+
+    UV product_middle = 0;
+    if (ahigh || bhigh) {
+        /* One operand is large, 1 small */
+        /* Either ahigh or bhigh is zero here, so the addition below
+           can't overflow.  */
+        product_middle = (UV)ahigh * blow + (UV)alow * bhigh;
+        if (product_middle & topmask)
+            return true;
+        /* OK, product_middle won't lose bits when we shift it.  */
+        product_middle <<= 4 * sizeof (UV);
+    }
+    /* else: eg 32 bit is at most 0xFFFF * 0xFFFF == 0xFFFE0001
+       so the unsigned multiply cannot overflow.  */
+
+    /* (UV) cast below is necessary to force the multiplication to produce
+       UV result, as alow and blow might be narrower than UV */
+    UV product_low = (UV)alow * blow;
+    return S_uv_add_overflow(product_middle, product_low, result);
+}
+#  endif
 
 #endif
 
@@ -3739,6 +4157,52 @@ Perl_cx_poploop(pTHX_ PERL_CONTEXT *cx)
 }
 
 
+PERL_STATIC_INLINE void
+Perl_cx_pushwhen(pTHX_ PERL_CONTEXT *cx)
+{
+    PERL_ARGS_ASSERT_CX_PUSHWHEN;
+
+    cx->blk_givwhen.leave_op = cLOGOP->op_other;
+}
+
+
+PERL_STATIC_INLINE void
+Perl_cx_popwhen(pTHX_ PERL_CONTEXT *cx)
+{
+    PERL_ARGS_ASSERT_CX_POPWHEN;
+    assert(CxTYPE(cx) == CXt_WHEN);
+
+    PERL_UNUSED_ARG(cx);
+    PERL_UNUSED_CONTEXT;
+    /* currently NOOP */
+}
+
+
+PERL_STATIC_INLINE void
+Perl_cx_pushgiven(pTHX_ PERL_CONTEXT *cx, SV *orig_defsv)
+{
+    PERL_ARGS_ASSERT_CX_PUSHGIVEN;
+
+    cx->blk_givwhen.leave_op = cLOGOP->op_other;
+    cx->blk_givwhen.defsv_save = orig_defsv;
+}
+
+
+PERL_STATIC_INLINE void
+Perl_cx_popgiven(pTHX_ PERL_CONTEXT *cx)
+{
+    SV *sv;
+
+    PERL_ARGS_ASSERT_CX_POPGIVEN;
+    assert(CxTYPE(cx) == CXt_GIVEN);
+
+    sv = GvSV(PL_defgv);
+    GvSV(PL_defgv) = cx->blk_givwhen.defsv_save;
+    cx->blk_givwhen.defsv_save = NULL;
+    SvREFCNT_dec(sv);
+}
+
+
 /* Make @_ empty in-place in simple cases: a cheap av_clear().
  * See Perl_clear_defarray() for non-simple cases */
 
@@ -3748,7 +4212,6 @@ Perl_clear_defarray_simple(pTHX_ AV *av)
 {
     PERL_ARGS_ASSERT_CLEAR_DEFARRAY_SIMPLE;
 
-    assert(SvTYPE(av) == SVt_PVAV);
     assert(!SvREADONLY(av));
     assert(!SvMAGICAL(av));
     assert(SvREFCNT(av) == 1);
@@ -4278,7 +4741,8 @@ Perl_padname_refcnt_inc(PADNAME *pn)
 PERL_STATIC_INLINE PADNAMELIST *
 Perl_padnamelist_refcnt_inc(PADNAMELIST *pnl)
 {
-    PadnamelistREFCNT(pnl)++;
+    if (pnl)
+        PadnamelistREFCNT(pnl)++;
     return pnl;
 }
 
@@ -4295,40 +4759,64 @@ Perl_padnamelist_refcnt_inc(PADNAMELIST *pnl)
 =for apidoc_item savesharedpvs
 =for apidoc_item savesharedsvpv
 
-Perl's version of C<strdup()> (or C<strndup()> would be if it existed).
-
 These each return a pointer to a newly allocated string which is a duplicate of
-the input string.
+the one given by the input argument.  Effectively, they implement the C library
+L<C<strdup(3)>>.
 
-The forms differ in how the string to be copied is specified, and where the new
-memory is allocated from.
+The forms differ in three main ways:
+
+=over
+
+=item 1.
+
+Whether or not the newly allocated memory is in an area that is sharable
+between threads (the forms with C<shared> in their names) or if it is in an
+area exclusive to the calling thread (the other forms).
+
+=item 2.
+
+How the string to be copied is specified.
+
+In the C<savepv> and C<savesharedpv> forms, the source string is a C language
+NUL-terminated string, or C<NULL>.  If C<NULL>, no allocation is done, and
+the functions return NULL.
+
+In the C<savepvn> and C<savesharedpvn> forms, C<pv> (if not NULL) points to the
+first byte of the string to duplicate, and an additional parameter, C<len>,
+specifies the number of bytes to copy.  Hence, C<pv> may contain embedded-NUL
+characters.  It is illegal for C<pv> to be NULL when calling C<savesharedpvn>
+(asserted against in DEBUGGING builds).  If it is NULL in C<savepvn>, C<len>
+bytes of zeroed memory are allocated.
+
+In the C<savepvs> and C<savesharedpvs> forms, the string must be a C literal
+string, enclosed in double quotes.
+
+In the C<savesvpv> and C<savesharedsvpv> forms, the string to duplicate is
+extracted from C<sv> using L</C<SvPV_const>>.  C<sv> must not be NULL.
+
+=item 3.
+
+Memory deallocation
 
 To prevent memory leaks, the memory allocated for the new string needs to be
-freed when no longer needed.  This can be done with the C<L</Safefree>>
-function, or L<C<SAVEFREEPV>|perlguts/SAVEFREEPV(p)>.
+freed when no longer needed.
 
-The forms whose names contain C<shared> differ from the corresponding form
-without that in its name, only in that the memory in the former comes from
-memory shared between threads.  This is needed, because on some platforms,
-Windows for example, all allocated memory owned by a thread is deallocated when
-that thread ends.  So if you need that not to happen, you need to use the
-shared memory forms.
+=over
 
-The string to copy in C<savepvs> is a C language string literal surrounded by
-double quotes.
+=item C<non-shared> forms
 
-The string to copy in the forms whose name contains C<svpv> comes from the PV
-in the SV argument C<sv>, using C<SvPV()>
+Use the C<L</Safefree>> function, or L<C<SAVEFREEPV>|perlguts/SAVEFREEPV(p)>.
+However, BE AWARE, this can happen automatically on some platforms, such as
+Windows, when the thread that allocated it ends.  So if you need that not to
+happen, you need to use a C<shared> form.
 
-The string to copy in the remaining forms comes from the C<pv> argument.
+=item C<shared> forms
 
-In the case of C<savepv>, the size of the string is determined by C<strlen()>,
-which means it may not contain embedded C<NUL> characters, and must have a
-trailing C<NUL>.
+Use the C<PerlMemShared_free> function.
 
-In the case of C<savepvn>, C<len> gives the length of C<pv>, hence it may
-contain embedded C<NUL> characters.  The copy will be guaranteed to have a
-trailing NUL added if not already present.
+=back
+
+=back
 
 =cut
 */

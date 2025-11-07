@@ -82,17 +82,17 @@ S_do_trans_simple(pTHX_ SV * const sv, const OPtrans_map * const tbl)
             short ch;
 
             /* Need to check this, otherwise 128..255 won't match */
-            const UV c = utf8n_to_uvchr(s, send - s, &ulen, UTF8_ALLOW_DEFAULT);
+            const UV c = utf8_to_uv_or_die(s, send, &ulen);
             if (c < 0x100 && (ch = tbl->map[c]) >= 0) {
                 matches++;
                 d = uv_to_utf8(d, (UV)ch);
-                s += ulen;
             }
             else { /* No match -> copy */
                 Move(s, d, ulen, U8);
                 d += ulen;
-                s += ulen;
             }
+
+            s += ulen;
         }
         if (grows) {
             sv_setpvn(sv, (char*)dstart, d - dstart);
@@ -149,7 +149,7 @@ S_do_trans_count(pTHX_ SV * const sv, const OPtrans_map * const tbl)
         const bool complement = cBOOL(PL_op->op_private & OPpTRANS_COMPLEMENT);
         while (s < send) {
             STRLEN ulen;
-            const UV c = utf8n_to_uvchr(s, send - s, &ulen, UTF8_ALLOW_DEFAULT);
+            const UV c = utf8_to_uv_or_die(s, send, &ulen);
             if (c < 0x100) {
                 if (tbl->map[c] >= 0)
                     matches++;
@@ -266,8 +266,7 @@ S_do_trans_complex(pTHX_ SV * const sv, const OPtrans_map * const tbl)
 
         while (s < send) {
             STRLEN len;
-            const UV comp = utf8n_to_uvchr(s, send - s, &len,
-                                           UTF8_ALLOW_DEFAULT);
+            const UV comp = utf8_to_uv_or_die(s, send, &len);
             UV     ch;
             short sch;
 
@@ -371,15 +370,12 @@ S_do_trans_count_invmap(pTHX_ SV * const sv, AV * const invmap)
             s_len = 1;
         }
         else {
-            from = utf8_to_uvchr_buf(s, send, &s_len);
-            if (from == 0 && *s != '\0') {
-                force_out_malformed_utf8_message_(s, send, 0, MALFORMED_UTF8_DIE);
-            }
+            from = utf8_to_uv_or_die(s, send, &s_len);
         }
 
         /* Look the code point up in the data structure for this tr/// to get
          * what it maps to */
-        i = _invlist_search(from_invlist, from);
+        i = invlist_search_(from_invlist, from);
         assert(i >= 0);
 
         if (map[i] != (UV) TR_UNLISTED) {
@@ -490,15 +486,12 @@ S_do_trans_invmap(pTHX_ SV * const sv, AV * const invmap)
             s_len = 1;
         }
         else {
-            from = utf8_to_uvchr_buf(s, send, &s_len);
-            if (from == 0 && *s != '\0') {
-                force_out_malformed_utf8_message_(s, send, 0, MALFORMED_UTF8_DIE);
-            }
+            from = utf8_to_uv_or_die(s, send, &s_len);
         }
 
         /* Look the code point up in the data structure for this tr/// to get
          * what it maps to */
-        i = _invlist_search(from_invlist, from);
+        i = invlist_search_(from_invlist, from);
         assert(i >= 0);
 
         to = map[i];
@@ -599,7 +592,7 @@ Perl_do_trans(pTHX_ SV *sv)
     PERL_ARGS_ASSERT_DO_TRANS;
 
     if (SvREADONLY(sv) && ! identical) {
-        Perl_croak_no_modify();
+        croak_no_modify();
     }
     (void)SvPV_const(sv, len);
     if (!len)
@@ -811,7 +804,7 @@ Perl_do_vecget(pTHX_ SV *sv, STRLEN offset, int size)
     PERL_ARGS_ASSERT_DO_VECGET;
 
     if (size < 1 || ! isPOWER_OF_2(size))
-        Perl_croak(aTHX_ "Illegal number of bits in vec");
+        croak("Illegal number of bits in vec");
 
     if (SvUTF8(sv)) {
         if (Perl_sv_utf8_downgrade_flags(aTHX_ sv, TRUE, 0)) {
@@ -819,7 +812,7 @@ Perl_do_vecget(pTHX_ SV *sv, STRLEN offset, int size)
             s = (unsigned char *) SvPV_flags(sv, srclen, svpv_flags);
         }
         else {
-            Perl_croak(aTHX_ "Use of strings with code points over 0xFF"
+            croak("Use of strings with code points over 0xFF"
                              " as arguments to vec is forbidden");
         }
     }
@@ -840,8 +833,8 @@ Perl_do_vecget(pTHX_ SV *sv, STRLEN offset, int size)
 #ifdef UV_IS_QUAD
 
         if (size == 64) {
-            Perl_ck_warner(aTHX_ packWARN(WARN_PORTABLE),
-                           "Bit vector size > 32 non-portable");
+            ck_warner(packWARN(WARN_PORTABLE),
+                      "Bit vector size > 32 non-portable");
         }
 #endif
         if (offset > Size_t_MAX / n - 1) /* would overflow */
@@ -913,8 +906,8 @@ Perl_do_vecset(pTHX_ SV *sv)
     if (errflags) {
         assert(!(errflags & ~(LVf_NEG_OFF|LVf_OUT_OF_RANGE)));
         if (errflags & LVf_NEG_OFF)
-            Perl_croak_nocontext("Negative offset to vec in lvalue context");
-        Perl_croak_nocontext("Out of memory during vec in lvalue context");
+            croak("Negative offset to vec in lvalue context");
+        croak("Out of memory during vec in lvalue context");
     }
 
     if (!targ)
@@ -935,7 +928,7 @@ Perl_do_vecset(pTHX_ SV *sv)
     size = LvTARGLEN(sv);
 
     if (size < 1 || (size & (size-1))) /* size < 1 or not a power of two */
-        Perl_croak(aTHX_ "Illegal number of bits in vec");
+        croak("Illegal number of bits in vec");
 
     if (size < 8) {
         bitoffs = ((offset%8)*size)%8;
@@ -944,7 +937,7 @@ Perl_do_vecset(pTHX_ SV *sv)
     else if (size > 8) {
         int n = size/8;
         if (offset > Size_t_MAX / n - 1) /* would overflow */
-            Perl_croak_nocontext("Out of memory during vec in lvalue context");
+            croak("Out of memory during vec in lvalue context");
         offset *= n;
     }
 
@@ -968,8 +961,8 @@ Perl_do_vecset(pTHX_ SV *sv)
 #ifdef UV_IS_QUAD
 
       case 64:
-        Perl_ck_warner(aTHX_ packWARN(WARN_PORTABLE),
-                       "Bit vector size > 32 non-portable");
+        ck_warner(packWARN(WARN_PORTABLE),
+                  "Bit vector size > 32 non-portable");
         s[offset+7] = (U8)( lval      );    /* = size - 64 */
         s[offset+6] = (U8)( lval >>  8);    /* = size - 56 */
         s[offset+5] = (U8)( lval >> 16);    /* = size - 48 */
@@ -1028,22 +1021,12 @@ Perl_do_vop(pTHX_ I32 optype, SV *sv, SV *left, SV *right)
     /* Create downgraded temporaries of any UTF-8 encoded operands.  As of
      * perl-5.32, we no longer accept above-FF code points at all */
     if (DO_UTF8(left)) {
-        left_utf8 = TRUE;
         result_needs_to_be_utf8 = TRUE;
-
-        lc = (char *) bytes_from_utf8((const U8 *) lc, &leftlen, &left_utf8);
-        if (! left_utf8) {
-            SAVEFREEPV(lc);
-        }
+        left_utf8 = ! utf8_to_bytes_temp_pv((const U8 **) &lc, &leftlen);
     }
     if (DO_UTF8(right)) {
-        right_utf8 = TRUE;
         result_needs_to_be_utf8 = TRUE;
-
-        rc = (char *) bytes_from_utf8((const U8 *) rc, &rightlen, &right_utf8);
-        if (! right_utf8) {
-            SAVEFREEPV(rc);
-        }
+        right_utf8 = ! utf8_to_bytes_temp_pv((const U8 **) &rc, &rightlen);
     }
 
     /* We set 'len' to the length that the operation actually operates on.  The
@@ -1056,7 +1039,7 @@ Perl_do_vop(pTHX_ I32 optype, SV *sv, SV *left, SV *right)
      * result is the same as the other operand, so the dangling part is just
      * appended to the final result, unchanged. */
     if (left_utf8 || right_utf8) {
-        Perl_croak(aTHX_ FATAL_ABOVE_FF_MSG, PL_op_desc[optype]);
+        croak(FATAL_ABOVE_FF_MSG, PL_op_desc[optype]);
     }
     else {  /* Neither is UTF-8 */
         len = MIN(leftlen, rightlen);
@@ -1241,7 +1224,7 @@ PP(do_kv)
         const I32 flags = is_lvalue_sub();
         if (flags && !(flags & OPpENTERSUB_INARGS))
             /* diag_listed_as: Can't modify %s in %s */
-            Perl_croak(aTHX_ "Can't modify keys in list assignment");
+            croak("Can't modify keys in list assignment");
     }
 
     /* push all keys and/or values onto stack */

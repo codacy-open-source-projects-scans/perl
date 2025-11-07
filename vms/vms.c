@@ -931,7 +931,7 @@ Perl_vmstrnenv(const char *lnm, char *eqv, unsigned long int idx,
                     "Can't read CRTL environ\n");
             } else
 #endif
-                Perl_warn(aTHX_ "Can't read CRTL environ\n");
+                warn("Can't read CRTL environ\n");
             continue;
           }
           retsts = SS$_NOLOGNAM;
@@ -974,9 +974,7 @@ Perl_vmstrnenv(const char *lnm, char *eqv, unsigned long int idx,
                      "Value of CLI symbol \"%s\" too long",lnm);
               } else
 #endif
-                if (ckWARN(WARN_MISC)) {
-                  Perl_warner(aTHX_ packWARN(WARN_MISC),"Value of CLI symbol \"%s\" too long",lnm);
-                }
+                  ck_warner(packWARN(WARN_MISC),"Value of CLI symbol \"%s\" too long",lnm);
             }
             strncpy(eqv,eqvdsc.dsc$a_pointer,eqvlen);
           }
@@ -1341,8 +1339,7 @@ prime_env_iter(void)
       for (j = 0; environ[j]; j++);
       for (j--; j >= 0; j--) {
         if (!(start = strchr(environ[j],'='))) {
-          if (ckWARN(WARN_INTERNAL)) 
-            Perl_warner(aTHX_ packWARN(WARN_INTERNAL),"Ill-formed CRTL environ value \"%s\"\n",environ[j]);
+          ck_warner(packWARN(WARN_INTERNAL),"Ill-formed CRTL environ value \"%s\"\n",environ[j]);
         }
         else {
           start++;
@@ -1406,12 +1403,12 @@ prime_env_iter(void)
       buf[retlen] = '\0';
       if (iosb[1] != subpid) {
         if (iosb[1]) {
-          Perl_croak(aTHX_ "Unknown process %x sent message to prime_env_iter: %s",buf);
+          croak("Unknown process %x sent message to prime_env_iter: %s",buf);
         }
         continue;
       }
-      if (sts == SS$_BUFFEROVF && ckWARN(WARN_INTERNAL))
-        Perl_warner(aTHX_ packWARN(WARN_INTERNAL),"Buffer overflow in prime_env_iter: %s",buf);
+      if (sts == SS$_BUFFEROVF)
+        ck_warner(packWARN(WARN_INTERNAL),"Buffer overflow in prime_env_iter: %s",buf);
 
       for (cp1 = buf; *cp1 && isSPACE_L1(*cp1); cp1++) ;
       if (*cp1 == '(' || /* Logical name table name */
@@ -1432,7 +1429,7 @@ prime_env_iter(void)
         cp1--;  /* stop on last non-space char */
       }
       if ((!keylen || (cp1 - cp2 < -1)) && ckWARN(WARN_INTERNAL)) {
-        Perl_warner(aTHX_ packWARN(WARN_INTERNAL),"Ill-formed message in prime_env_iter: |%s|",buf);
+        warner(packWARN(WARN_INTERNAL),"Ill-formed message in prime_env_iter: |%s|",buf);
         continue;
       }
       PERL_HASH(hash,key,keylen);
@@ -1576,8 +1573,8 @@ Perl_vmssetenv(pTHX_ const char *lnm, const char *eqv, struct dsc$descriptor_s *
 
             nseg = (eqvdsc.dsc$w_length + LNM$C_NAMLENGTH - 1) / LNM$C_NAMLENGTH;
             if (nseg > PERL_LNM_MAX_ALLOWED_INDEX + 1) {
-              Perl_warner(aTHX_ packWARN(WARN_MISC),"Value of logical \"%s\" too long. Truncating to %i bytes",
-                          lnm, LNM$C_NAMLENGTH * (PERL_LNM_MAX_ALLOWED_INDEX+1));
+              warner(packWARN(WARN_MISC),"Value of logical \"%s\" too long. Truncating to %i bytes",
+                     lnm, LNM$C_NAMLENGTH * (PERL_LNM_MAX_ALLOWED_INDEX+1));
               eqvdsc.dsc$w_length = LNM$C_NAMLENGTH * (PERL_LNM_MAX_ALLOWED_INDEX+1);
               nseg = PERL_LNM_MAX_ALLOWED_INDEX + 1;
             }
@@ -4260,10 +4257,8 @@ safe_popen(pTHX_ const char *cmd, const char *in_mode, int *psts)
     } else {        /* uh, oh...we're in tempfile hell */
         tpipe = vmspipe_tempfile(aTHX);
         if (!tpipe) {       /* a fish popular in Boston */
-            if (ckWARN(WARN_PIPE)) {
-                Perl_warner(aTHX_ packWARN(WARN_PIPE),"unable to find VMSPIPE.COM for i/o piping");
-            }
-        return NULL;
+            ck_warner(packWARN(WARN_PIPE),"unable to find VMSPIPE.COM for i/o piping");
+            return NULL;
         }
         fgetname(tpipe,tfilebuf+1,1);
         vmspipedsc.dsc$w_length  = strlen(tfilebuf);
@@ -4291,9 +4286,9 @@ safe_popen(pTHX_ const char *cmd, const char *in_mode, int *psts)
           set_errno(EVMSERR); 
       }
       set_vaxc_errno(sts);
-      if (*in_mode != 'n' && ckWARN(WARN_PIPE)) {
-        Perl_warner(aTHX_ packWARN(WARN_PIPE),"Can't pipe \"%*s\": %s", strlen(cmd), cmd, Strerror(errno));
-      }
+      if (*in_mode != 'n')
+        ck_warner(packWARN(WARN_PIPE), "Can't pipe \"%*s\": %s", strlen(cmd), cmd, Strerror(errno));
+
       *psts = sts;
       return NULL; 
     }
@@ -10921,7 +10916,7 @@ Perl_vms_do_aexec(pTHX_ SV *really,SV **mark,SV **sp)
   if (vfork_called) {           /* this follows a vfork - act Unixish */
     vfork_called--;
     if (vfork_called < 0) {
-      Perl_warn(aTHX_ "Internal inconsistency in tracking vforks");
+      warn("Internal inconsistency in tracking vforks");
       vfork_called = 0;
     }
     else return do_aexec(really,mark,sp);
@@ -10949,7 +10944,7 @@ Perl_vms_do_exec(pTHX_ const char *cmd)
   if (vfork_called) {             /* this follows a vfork - act Unixish */
     vfork_called--;
     if (vfork_called < 0) {
-      Perl_warn(aTHX_ "Internal inconsistency in tracking vforks");
+      warn("Internal inconsistency in tracking vforks");
       vfork_called = 0;
     }
     else return do_exec(cmd);
@@ -10982,10 +10977,9 @@ Perl_vms_do_exec(pTHX_ const char *cmd)
         set_errno(EVMSERR); 
     }
     set_vaxc_errno(retsts);
-    if (ckWARN(WARN_EXEC)) {
-      Perl_warner(aTHX_ packWARN(WARN_EXEC),"Can't exec \"%*s\": %s",
-             vmscmd->dsc$w_length, vmscmd->dsc$a_pointer, Strerror(errno));
-    }
+    ck_warner(packWARN(WARN_EXEC),"Can't exec \"%*s\": %s",
+              vmscmd->dsc$w_length, vmscmd->dsc$a_pointer, Strerror(errno));
+
     vms_execfree(vmscmd);
   }
 
@@ -11082,10 +11076,8 @@ do_spawn2(pTHX_ const char *cmd, int flags)
           set_errno(EVMSERR);
       }
       set_vaxc_errno(sts);
-      if (ckWARN(WARN_EXEC)) {
-        Perl_warner(aTHX_ packWARN(WARN_EXEC),"Can't spawn: %s",
-                    Strerror(errno));
-      }
+      ck_warner(packWARN(WARN_EXEC),"Can't spawn: %s",
+                Strerror(errno));
     }
     sts = substs;
   }
@@ -11382,7 +11374,7 @@ fillpasswd (pTHX_ const char *name, struct passwd *pwd)
         pwd->pw_gid= uic.uic$v_group;
     }
     else
-      Perl_warn(aTHX_ "getpwnam returned invalid UIC %#o for user \"%s\"");
+      warn("getpwnam returned invalid UIC %#o for user \"%s\"");
     pwd->pw_passwd=  pw_passwd;
     pwd->pw_gecos=   owner.pw_gecos;
     pwd->pw_dir=     defdev.pw_dir;
@@ -11595,7 +11587,7 @@ Perl_my_time(pTHX_ time_t *timep)
       if (!vmstrnenv("SYS$TIMEZONE_DIFFERENTIAL",off,0,fildev,0)) {
         gmtime_emulation_type++;
         utc_offset_secs = 0;
-        Perl_warn(aTHX_ "no UTC offset information; assuming local time is UTC");
+        warn("no UTC offset information; assuming local time is UTC");
       }
       else { utc_offset_secs = atol(off); }
     }
@@ -12622,7 +12614,7 @@ rmsexpand_fromperl(pTHX_ CV *cv)
   fs_utf8 = 0;
   dfs_utf8 = 0;
   if (!items || items > 2)
-    Perl_croak(aTHX_ "Usage: VMS::Filespec::rmsexpand(spec[,defspec])");
+    croak("Usage: VMS::Filespec::rmsexpand(spec[,defspec])");
   fspec = SvPV(ST(0),n_a);
   fs_utf8 = SvUTF8(ST(0));
   if (!fspec || !*fspec) XSRETURN_UNDEF;
@@ -12649,7 +12641,7 @@ vmsify_fromperl(pTHX_ CV *cv)
   STRLEN n_a;
   int utf8_fl;
 
-  if (items != 1) Perl_croak(aTHX_ "Usage: VMS::Filespec::vmsify(spec)");
+  if (items != 1) croak("Usage: VMS::Filespec::vmsify(spec)");
   utf8_fl = SvUTF8(ST(0));
   vmsified = do_tovmsspec(SvPV(ST(0),n_a),NULL,1,&utf8_fl);
   ST(0) = sv_newmortal();
@@ -12670,7 +12662,7 @@ unixify_fromperl(pTHX_ CV *cv)
   STRLEN n_a;
   int utf8_fl;
 
-  if (items != 1) Perl_croak(aTHX_ "Usage: VMS::Filespec::unixify(spec)");
+  if (items != 1) croak("Usage: VMS::Filespec::unixify(spec)");
   utf8_fl = SvUTF8(ST(0));
   unixified = do_tounixspec(SvPV(ST(0),n_a),NULL,1,&utf8_fl);
   ST(0) = sv_newmortal();
@@ -12691,7 +12683,7 @@ fileify_fromperl(pTHX_ CV *cv)
   STRLEN n_a;
   int utf8_fl;
 
-  if (items != 1) Perl_croak(aTHX_ "Usage: VMS::Filespec::fileify(spec)");
+  if (items != 1) croak("Usage: VMS::Filespec::fileify(spec)");
   utf8_fl = SvUTF8(ST(0));
   fileified = do_fileify_dirspec(SvPV(ST(0),n_a),NULL,1,&utf8_fl);
   ST(0) = sv_newmortal();
@@ -12712,7 +12704,7 @@ pathify_fromperl(pTHX_ CV *cv)
   STRLEN n_a;
   int utf8_fl;
 
-  if (items != 1) Perl_croak(aTHX_ "Usage: VMS::Filespec::pathify(spec)");
+  if (items != 1) croak("Usage: VMS::Filespec::pathify(spec)");
   utf8_fl = SvUTF8(ST(0));
   pathified = do_pathify_dirspec(SvPV(ST(0),n_a),NULL,1,&utf8_fl);
   ST(0) = sv_newmortal();
@@ -12733,7 +12725,7 @@ vmspath_fromperl(pTHX_ CV *cv)
   STRLEN n_a;
   int utf8_fl;
 
-  if (items != 1) Perl_croak(aTHX_ "Usage: VMS::Filespec::vmspath(spec)");
+  if (items != 1) croak("Usage: VMS::Filespec::vmspath(spec)");
   utf8_fl = SvUTF8(ST(0));
   vmspath = do_tovmspath(SvPV(ST(0),n_a),NULL,1,&utf8_fl);
   ST(0) = sv_newmortal();
@@ -12754,7 +12746,7 @@ unixpath_fromperl(pTHX_ CV *cv)
   STRLEN n_a;
   int utf8_fl;
 
-  if (items != 1) Perl_croak(aTHX_ "Usage: VMS::Filespec::unixpath(spec)");
+  if (items != 1) croak("Usage: VMS::Filespec::unixpath(spec)");
   utf8_fl = SvUTF8(ST(0));
   unixpath = do_tounixpath(SvPV(ST(0),n_a),NULL,1,&utf8_fl);
   ST(0) = sv_newmortal();
@@ -12776,7 +12768,7 @@ candelete_fromperl(pTHX_ CV *cv)
   IO *io;
   STRLEN n_a;
 
-  if (items != 1) Perl_croak(aTHX_ "Usage: VMS::Filespec::candelete(spec)");
+  if (items != 1) croak("Usage: VMS::Filespec::candelete(spec)");
 
   mysv = SvROK(ST(0)) ? SvRV(ST(0)) : ST(0);
   Newx(fspec, VMS_MAXRSS, char);
@@ -12815,7 +12807,7 @@ rmscopy_fromperl(pTHX_ CV *cv)
   STRLEN n_a;
 
   if (items < 2 || items > 3)
-    Perl_croak(aTHX_ "Usage: File::Copy::rmscopy(from,to[,date_flag])");
+    croak("Usage: File::Copy::rmscopy(from,to[,date_flag])");
 
   mysv = SvROK(ST(0)) ? SvRV(ST(0)) : ST(0);
   Newx(inspec, VMS_MAXRSS, char);
@@ -13249,7 +13241,7 @@ unixrealpath_fromperl(pTHX_ CV *cv)
     STRLEN n_a;
 
     if (!items || items != 1)
-        Perl_croak(aTHX_ "Usage: VMS::Filespec::unixrealpath(spec)");
+        croak("Usage: VMS::Filespec::unixrealpath(spec)");
 
     fspec = SvPV(ST(0),n_a);
     if (!fspec || !*fspec) XSRETURN_UNDEF;
@@ -13277,7 +13269,7 @@ vmsrealpath_fromperl(pTHX_ CV *cv)
     STRLEN n_a;
 
     if (!items || items != 1)
-        Perl_croak(aTHX_ "Usage: VMS::Filespec::vmsrealpath(spec)");
+        croak("Usage: VMS::Filespec::vmsrealpath(spec)");
 
     fspec = SvPV(ST(0),n_a);
     if (!fspec || !*fspec) XSRETURN_UNDEF;

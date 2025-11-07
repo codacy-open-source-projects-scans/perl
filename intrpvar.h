@@ -240,6 +240,8 @@ B<BUT BEWARE>, if this is used in a situation where something that is using it
 is in a call stack with something else that is using it, this variable would
 get zapped, leading to hard-to-diagnose errors.
 
+These days using an inline function is generally preferred instead.
+
 =cut
 */
 PERLVAR(I, Sv,		SV *)
@@ -874,15 +876,15 @@ PERLVAR(I, psig_ptr,	SV **)
 PERLVAR(I, psig_name,	SV **)
 
 #if defined(PERL_IMPLICIT_SYS)
-PERLVAR(I, Mem,		struct IPerlMem *)
-PERLVAR(I, MemShared,	struct IPerlMem *)
-PERLVAR(I, MemParse,	struct IPerlMem *)
-PERLVAR(I, Env,		struct IPerlEnv *)
-PERLVAR(I, StdIO,	struct IPerlStdIO *)
-PERLVAR(I, LIO,		struct IPerlLIO *)
-PERLVAR(I, Dir,		struct IPerlDir *)
-PERLVAR(I, Sock,	struct IPerlSock *)
-PERLVAR(I, Proc,	struct IPerlProc *)
+PERLVAR(I, Mem,		const struct IPerlMem **)
+PERLVAR(I, MemShared,	const struct IPerlMem **)
+PERLVAR(I, MemParse,	const struct IPerlMem **)
+PERLVAR(I, Env,		const struct IPerlEnv **)
+PERLVAR(I, StdIO,	const struct IPerlStdIO **)
+PERLVAR(I, LIO,		const struct IPerlLIO **)
+PERLVAR(I, Dir,		const struct IPerlDir **)
+PERLVAR(I, Sock,	const struct IPerlSock **)
+PERLVAR(I, Proc,	const struct IPerlProc **)
 #endif
 
 PERLVAR(I, ptr_table,	PTR_TBL_t *)
@@ -934,13 +936,7 @@ PERLVARI(I, lockhook,	share_proc_t, Perl_sv_nosharing)
 GCC_DIAG_IGNORE(-Wdeprecated-declarations)
 MSVC_DIAG_IGNORE(4996)
 
-#ifdef NO_MATHOMS
-#  define PERL_UNLOCK_HOOK Perl_sv_nosharing
-#else
-/* This reference ensures that the mathoms are linked with perl */
-#  define PERL_UNLOCK_HOOK Perl_sv_nounlocking
-#endif
-PERLVARI(I, unlockhook,	share_proc_t, PERL_UNLOCK_HOOK)
+PERLVARI(I, unlockhook,	share_proc_t, Perl_sv_nosharing)
 
 MSVC_DIAG_RESTORE
 GCC_DIAG_RESTORE
@@ -1095,6 +1091,21 @@ PERLVARA(I, mem_log, PERL_MEM_LOG_ARYLEN,  char)
  * version object so we can fit the U16 into the uv of a SAVEHINTS and not
  * have to worry about SV refcounts during scope enter/exit. */
 PERLVAR(I, prevailing_version, U16)
+
+PERLVARI(I, in_diehook, bool, FALSE)
+PERLVARI(I, in_warnhook, bool, FALSE)
+
+/* Perl_load_mathoms is defined in mathoms.c, so this forces the loading of the
+ * functions in that file when NO_MATHOMS isn't defined.  Otherwise, it is just
+ * a pointer to a function that is always going to exist.  The use of
+ * Perl_noshutdownhook is solely because there is a typedef for its signature
+ * and has no arguments that need to be passed */
+#ifdef NO_MATHOMS
+#  define PERL_LOAD_MATHOMS_HOOK  Perl_noshutdownhook
+#else
+#  define PERL_LOAD_MATHOMS_HOOK  Perl_load_mathoms
+#endif
+PERLVARI(I, load_mathoms, shutdown_proc_t, PERL_LOAD_MATHOMS_HOOK)
 
 /* If you are adding a U8 or U16, check to see if there are 'Space' comments
  * above on where there are gaps which currently will be structure padding.  */

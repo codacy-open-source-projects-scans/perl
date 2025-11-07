@@ -10,6 +10,7 @@
  */
 
 #define YYEMPTY		(-2)
+#define PERL_IDENTIFIER_LENGTH  (256 * MAX_UNICODE_UTF8_BYTES)
 
 typedef struct {
     YYSTYPE val;    /* semantic value */
@@ -30,6 +31,10 @@ typedef struct yy_lexshared {
     char		*re_eval_start;	/* start of "(?{..." text */
     SV			*re_eval_str;	/* "(?{...})" text */
 } LEXSHARED;
+
+/* Opaque struct of data relevant during parsing and construction of a
+ * subroutine signature. Defined and used exclusively by op.c */
+typedef struct yy_parser_signature yy_parser_signature;
 
 typedef struct yy_parser {
 
@@ -108,14 +113,11 @@ typedef struct yy_parser {
     U8		lex_fakeeof;	/* precedence at which to fake EOF */
     U8		lex_flags;
     COP		*saved_curcop;	/* the previous PL_curcop */
-    char	tokenbuf[256];
+    char	tokenbuf[ PERL_IDENTIFIER_LENGTH ];
     line_t	herelines;	/* number of lines in here-doc */
     line_t	preambling;	/* line # when processing $ENV{PERL5DB} */
 
-    /* these are valid while parsing a subroutine signature */
-    UV          sig_elems;      /* number of signature elements seen so far */
-    UV          sig_optelems;   /* number of optional signature elems seen */
-    char        sig_slurpy;     /* the sigil of the slurpy var (or null) */
+    yy_parser_signature *signature; /* parser state of a subroutine signature */
     bool        sig_seen;       /* the currently parsing sub has a signature */
 
     bool        recheck_charset_validity;

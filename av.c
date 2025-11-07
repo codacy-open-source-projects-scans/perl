@@ -25,13 +25,12 @@ Perl_av_reify(pTHX_ AV *av)
     SSize_t key;
 
     PERL_ARGS_ASSERT_AV_REIFY;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     if (AvREAL(av))
         return;
 #ifdef DEBUGGING
     if (SvTIED_mg((const SV *)av, PERL_MAGIC_tied))
-        Perl_ck_warner_d(aTHX_ packWARN(WARN_DEBUGGING), "av_reify called on tied array");
+        ck_warner_d(packWARN(WARN_DEBUGGING), "av_reify called on tied array");
 #endif
     key = AvMAX(av) + 1;
     while (key > AvFILLp(av) + 1)
@@ -68,7 +67,6 @@ Perl_av_extend(pTHX_ AV *av, SSize_t key)
     MAGIC *mg;
 
     PERL_ARGS_ASSERT_AV_EXTEND;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     mg = SvTIED_mg((const SV *)av, PERL_MAGIC_tied);
     if (mg) {
@@ -99,7 +97,7 @@ Perl_av_extend_guts(pTHX_ AV *av, SSize_t key, SSize_t *maxp, SV ***allocp,
     PERL_ARGS_ASSERT_AV_EXTEND_GUTS;
 
     if (key < -1) /* -1 is legal */
-        Perl_croak(aTHX_
+        croak(
             "panic: av_extend_guts() negative count (%" IVdf ")", (IV)key);
 
     if (key > *maxp) {
@@ -272,7 +270,6 @@ Perl_av_fetch(pTHX_ AV *av, SSize_t key, I32 lval)
     SSize_t size;
 
     PERL_ARGS_ASSERT_AV_FETCH;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     if (UNLIKELY(SvRMAGICAL(av))) {
         const MAGIC * const tied_magic
@@ -342,7 +339,6 @@ Perl_av_store(pTHX_ AV *av, SSize_t key, SV *val)
     SV** ary;
 
     PERL_ARGS_ASSERT_AV_STORE;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     /* S_regclass relies on being able to pass in a NULL sv
        (unicode_alternate may be NULL).
@@ -370,7 +366,7 @@ Perl_av_store(pTHX_ AV *av, SSize_t key, SV *val)
     }
 
     if (SvREADONLY(av) && key >= AvFILL(av))
-        Perl_croak_no_modify();
+        croak_no_modify();
 
     if (!AvREAL(av) && AvREIFY(av))
         av_reify(av);
@@ -479,6 +475,8 @@ Perl_av_make(pTHX_ SSize_t size, SV **strp)
         AvALLOC(av) = ary;
         AvARRAY(av) = ary;
         AvMAX(av) = size - 1;
+        SSize_t *fillp = &AvFILLp(av);
+
         /* avoid av being leaked if croak when calling magic below */
         EXTEND_MORTAL(1);
         PL_tmps_stack[++PL_tmps_ix] = (SV*)av;
@@ -490,12 +488,8 @@ Perl_av_make(pTHX_ SSize_t size, SV **strp)
             /* Don't let sv_setsv swipe, since our source array might
                have multiple references to the same temp scalar (e.g.
                from a list slice) */
-
-            SvGETMAGIC(*strp); /* before newSV, in case it dies */
-            AvFILLp(av)++;
-            ary[i] = newSV_type(SVt_NULL);
-            sv_setsv_flags(ary[i], *strp,
-                           SV_DO_COW_SVSETSV|SV_NOSTEAL);
+            ary[i] = newSVsv_flags(*strp, SV_DO_COW_SVSETSV|SV_NOSTEAL|SV_GMAGIC);
+            *fillp = i;
             strp++;
         }
         /* disarm av's leak guard */
@@ -637,16 +631,15 @@ Perl_av_clear(pTHX_ AV *av)
     SSize_t orig_ix = 0;
 
     PERL_ARGS_ASSERT_AV_CLEAR;
-    assert(SvTYPE(av) == SVt_PVAV);
 
 #ifdef DEBUGGING
     if (SvREFCNT(av) == 0) {
-        Perl_ck_warner_d(aTHX_ packWARN(WARN_DEBUGGING), "Attempt to clear deleted array");
+        ck_warner_d(packWARN(WARN_DEBUGGING), "Attempt to clear deleted array");
     }
 #endif
 
     if (SvREADONLY(av))
-        Perl_croak_no_modify();
+        croak_no_modify();
 
     /* Give any tie a chance to cleanup first */
     if (SvRMAGICAL(av)) {
@@ -711,7 +704,6 @@ Perl_av_undef(pTHX_ AV *av)
     SSize_t orig_ix = PL_tmps_ix; /* silence bogus warning about possible uninitialized use */
 
     PERL_ARGS_ASSERT_AV_UNDEF;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     /* Give any tie a chance to cleanup first */
     if (SvTIED_mg((const SV *)av, PERL_MAGIC_tied)) 
@@ -793,10 +785,9 @@ Perl_av_push(pTHX_ AV *av, SV *val)
     MAGIC *mg;
 
     PERL_ARGS_ASSERT_AV_PUSH;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     if (SvREADONLY(av))
-        Perl_croak_no_modify();
+        croak_no_modify();
 
     if ((mg = SvTIED_mg((const SV *)av, PERL_MAGIC_tied))) {
         Perl_magic_methcall(aTHX_ MUTABLE_SV(av), mg, SV_CONST(PUSH), G_DISCARD, 1,
@@ -825,10 +816,9 @@ Perl_av_pop(pTHX_ AV *av)
     MAGIC* mg;
 
     PERL_ARGS_ASSERT_AV_POP;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     if (SvREADONLY(av))
-        Perl_croak_no_modify();
+        croak_no_modify();
     if ((mg = SvTIED_mg((const SV *)av, PERL_MAGIC_tied))) {
         retval = Perl_magic_methcall(aTHX_ MUTABLE_SV(av), mg, SV_CONST(POP), 0, 0);
         if (retval)
@@ -884,10 +874,9 @@ Perl_av_unshift(pTHX_ AV *av, SSize_t num)
     MAGIC* mg;
 
     PERL_ARGS_ASSERT_AV_UNSHIFT;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     if (SvREADONLY(av))
-        Perl_croak_no_modify();
+        croak_no_modify();
 
     if ((mg = SvTIED_mg((const SV *)av, PERL_MAGIC_tied))) {
         Perl_magic_methcall(aTHX_ MUTABLE_SV(av), mg, SV_CONST(UNSHIFT),
@@ -951,10 +940,9 @@ Perl_av_shift(pTHX_ AV *av)
     MAGIC* mg;
 
     PERL_ARGS_ASSERT_AV_SHIFT;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     if (SvREADONLY(av))
-        Perl_croak_no_modify();
+        croak_no_modify();
     if ((mg = SvTIED_mg((const SV *)av, PERL_MAGIC_tied))) {
         retval = Perl_magic_methcall(aTHX_ MUTABLE_SV(av), mg, SV_CONST(SHIFT), 0, 0);
         if (retval)
@@ -1027,7 +1015,6 @@ Perl_av_fill(pTHX_ AV *av, SSize_t fill)
     MAGIC *mg;
 
     PERL_ARGS_ASSERT_AV_FILL;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     if (fill < 0)
         fill = -1;
@@ -1080,10 +1067,9 @@ Perl_av_delete(pTHX_ AV *av, SSize_t key, I32 flags)
     SV *sv;
 
     PERL_ARGS_ASSERT_AV_DELETE;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     if (SvREADONLY(av))
-        Perl_croak_no_modify();
+        croak_no_modify();
 
     if (SvRMAGICAL(av)) {
         const MAGIC * const tied_magic
@@ -1155,7 +1141,6 @@ bool
 Perl_av_exists(pTHX_ AV *av, SSize_t key)
 {
     PERL_ARGS_ASSERT_AV_EXISTS;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     if (SvRMAGICAL(av)) {
         const MAGIC * const tied_magic
@@ -1213,7 +1198,6 @@ S_get_aux_mg(pTHX_ AV *av) {
     MAGIC *mg;
 
     PERL_ARGS_ASSERT_GET_AUX_MG;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     mg = mg_find((const SV *)av, PERL_MAGIC_arylen_p);
 
@@ -1232,7 +1216,6 @@ Perl_av_arylen_p(pTHX_ AV *av) {
     MAGIC *const mg = get_aux_mg(av);
 
     PERL_ARGS_ASSERT_AV_ARYLEN_P;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     return &(mg->mg_obj);
 }
@@ -1242,7 +1225,6 @@ Perl_av_iter_p(pTHX_ AV *av) {
     MAGIC *const mg = get_aux_mg(av);
 
     PERL_ARGS_ASSERT_AV_ITER_P;
-    assert(SvTYPE(av) == SVt_PVAV);
 
     if (sizeof(IV) == sizeof(SSize_t)) {
         return (IV *)&(mg->mg_len);

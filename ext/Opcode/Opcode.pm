@@ -1,4 +1,4 @@
-package Opcode 1.67;
+package Opcode 1.70;
 
 use strict;
 
@@ -309,6 +309,7 @@ invert_opset function.
 
     rv2hv helem hslice kvhslice each values keys exists delete
     aeach akeys avalues multideref argelem argdefelem argcheck
+    multiparam paramtest paramstore
 
     preinc i_preinc predec i_predec postinc i_postinc
     postdec i_postdec int hex oct abs pow multiply i_multiply
@@ -322,7 +323,8 @@ invert_opset function.
     slt sgt sle sge seq sne scmp
     isa
 
-    substr vec stringify study pos length index rindex ord chr
+    substr substr_left vec stringify study pos length index
+    rindex ord chr
 
     ucfirst lcfirst uc lc fc quotemeta trans transr chop schop
     chomp schomp
@@ -434,6 +436,11 @@ These are a hotchpotch of opcodes still waiting to be considered
 
     entertry leavetry -- can be used to 'hide' fatal errors
     entertrycatch poptry catch leavetrycatch -- similar
+
+    entergiven leavegiven
+    enterwhen leavewhen
+    break continue
+    smartmatch
 
     pushdefer
 

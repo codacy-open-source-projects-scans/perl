@@ -157,12 +157,12 @@ scope has the given name. C<name> must be a literal string.
         if (PL_savestack_ix > old) leave_scope(old); \
     } STMT_END
 
+/* N.B. These are documented in pad.h */
 #define SAVEI8(i)                   save_I8((I8*)&(i))
 #define SAVEI16(i)                  save_I16((I16*)&(i))
 #define SAVEI32(i)                  save_I32((I32*)&(i))
 #define SAVEINT(i)                  save_int((int*)&(i))
 #define SAVEIV(i)                   save_iv((IV*)&(i))
-#define SAVELONG(l)                 save_long((long*)&(l))
 #define SAVESTRLEN(l)               Perl_save_strlen(aTHX_ (STRLEN*)&(l))
 #define SAVEBOOL(b)                 save_bool(&(b))
 #define SAVESPTR(s)                 save_sptr((SV**)&(s))
@@ -182,6 +182,11 @@ scope has the given name. C<name> must be a literal string.
 #define SAVESHAREDPV(s)             save_shared_pvref((char**)&(s))
 #define SAVESETSVFLAGS(sv,mask,val) save_set_svflags(sv,mask,val)
 #define SAVEFREECOPHH(h)            save_pushptr((void *)(h), SAVEt_FREECOPHH)
+
+#if defined(PERL_CORE) || defined(PERL_EXT)
+#  define SAVE_FREE_REXC_STATE(p) \
+        save_pushptr((void *)(p), SAVEt_FREE_REXC_STATE)
+#endif
 
 #define SAVEDELETE(h,k,l) \
           save_delete(MUTABLE_HV(h), (char*)(k), (I32)(l))
@@ -245,7 +250,7 @@ scope has the given name. C<name> must be a literal string.
         CopFILE_debug((c),"SAVECOPFILE_FREE",0);   \
     } STMT_END
 #else
-#  /* XXX not refcounted */
+  /* XXX not refcounted */
 #  define SAVECOPSTASH_FREE(c)	SAVESPTR(CopSTASH(c))
 #  define SAVECOPFILE(c)	SAVESPTR(CopFILEGV(c))
 #  define SAVECOPFILE_FREE(c)	SAVEGENERICSV(CopFILEGV(c))
@@ -294,20 +299,17 @@ casts it to a pointer of that C<type>.
 #define SSPTR(off,type)         (assert(sizeof(off) >= sizeof(SSize_t)), (type)  ((char*)PL_savestack + off))
 #define SSPTRt(off,type)        (assert(sizeof(off) >= sizeof(SSize_t)), (type*) ((char*)PL_savestack + off))
 
-#define Perl_save_freesv(mTHX, op)                                          \
-        Perl_save_pushptr(aTHX_ (void *)(op), SAVEt_FREESV)
-#define Perl_save_mortalizesv(mTHX, op)                                     \
-        Perl_save_pushptr(aTHX_ (void *)(op), SAVEt_MORTALIZESV)
+#define save_freesv(op)		save_pushptr((void *)(op), SAVEt_FREESV)
+#define save_mortalizesv(op)	save_pushptr((void *)(op), SAVEt_MORTALIZESV)
 
-# define Perl_save_freeop(mTHX, op)                                         \
-STMT_START {                                                                \
-      OP * const _o = (OP *)(op);                                           \
-      assert(!_o->op_savefree);                                             \
-      _o->op_savefree = 1;                                                  \
-      Perl_save_pushptr(aTHX_ (void *)(_o), SAVEt_FREEOP);                  \
+# define save_freeop(op)                    \
+STMT_START {                                 \
+      OP * const o_ = (OP *)(op);             \
+      assert(!o_->op_savefree);               \
+      o_->op_savefree = 1;                     \
+      save_pushptr((void *)(o_), SAVEt_FREEOP); \
     } STMT_END
-#define Perl_save_freepv(mTHX, pv)                          \
-        Perl_save_pushptr(aTHX_ (void *)(pv), SAVEt_FREEPV)
+#define save_freepv(pv)		save_pushptr((void *)(pv), SAVEt_FREEPV)
 
 /*
 =for apidoc_section $callback
@@ -318,7 +320,7 @@ Implements C<SAVEOP>.
 =cut
  */
 
-#define Perl_save_op(mTHX)  Perl_save_pushptr(aTHX_ (void *)(PL_op), SAVEt_OP)
+#define save_op()		save_pushptr((void *)(PL_op), SAVEt_OP)
 
 /*
  * ex: set ts=8 sts=4 sw=4 et:

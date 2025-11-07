@@ -27,7 +27,7 @@
 
 
 #define CALL_RPEEP(o) PL_rpeepp(aTHX_ o)
-
+#define cMAXARG3x(o)  (o->op_private & OPpARG3_MASK)
 
 static void
 S_scalar_slice_warning(pTHX_ const OP *o)
@@ -1053,7 +1053,7 @@ S_warn_implicit_snail_cvsig(pTHX_ OP *o)
         cv = CvOUTSIDE(cv);
 
     if(cv && CvSIGNATURE(cv))
-        Perl_ck_warner_d(aTHX_ packWARN(WARN_EXPERIMENTAL__ARGS_ARRAY_WITH_SIGNATURES),
+        ck_warner_d(packWARN(WARN_EXPERIMENTAL__ARGS_ARRAY_WITH_SIGNATURES),
             "Implicit use of @_ in %s with signatured subroutine is experimental", OP_DESC(o));
 }
 
@@ -1116,7 +1116,7 @@ S_optimize_op(pTHX_ OP* o)
                 while(OP_TYPE_IS(parent, OP_NULL))
                     parent = op_parent(parent);
 
-                Perl_ck_warner_d(aTHX_ packWARN(WARN_EXPERIMENTAL__ARGS_ARRAY_WITH_SIGNATURES),
+                ck_warner_d(packWARN(WARN_EXPERIMENTAL__ARGS_ARRAY_WITH_SIGNATURES),
                     "Use of @_ in %s with signatured subroutine is experimental", OP_DESC(parent));
             }
             break;
@@ -1259,9 +1259,9 @@ S_finalize_op(pTHX_ OP* o)
                     if (type != OP_EXIT && type != OP_WARN && type != OP_DIE) {
                         const line_t oldline = CopLINE(PL_curcop);
                         CopLINE_set(PL_curcop, CopLINE((COP*)sib));
-                        Perl_warner(aTHX_ packWARN(WARN_EXEC),
+                        warner(packWARN(WARN_EXEC),
                             "Statement unlikely to be reached");
-                        Perl_warner(aTHX_ packWARN(WARN_EXEC),
+                        warner(packWARN(WARN_EXEC),
                             "\t(Maybe you meant system() when you said exec()?)\n");
                         CopLINE_set(PL_curcop, oldline);
                     }
@@ -1276,9 +1276,9 @@ S_finalize_op(pTHX_ OP* o)
                     /* XXX could check prototype here instead of just carping */
                     SV * const sv = sv_newmortal();
                     gv_efullname3(sv, gv, NULL);
-                    Perl_warner(aTHX_ packWARN(WARN_PROTOTYPE),
-                                "%" SVf "() called too early to check prototype",
-                                SVfARG(sv));
+                    warner(packWARN(WARN_PROTOTYPE),
+                           "%" SVf "() called too early to check prototype",
+                           SVfARG(sv));
                 }
             }
             break;
@@ -2205,14 +2205,14 @@ S_maybe_multideref(pTHX_ OP *start, OP *orig_o, UV orig_action, U8 hints)
             /* if a custom array/hash access checker is in scope,
              * abandon optimisation attempt */
             if (  (o->op_type == OP_AELEM || o->op_type == OP_HELEM)
-               && PL_check[o->op_type] != Perl_ck_null)
+               && UNLIKELY(PL_check[o->op_type] != PL_check[PERL_CK_NULL]))
                 return;
             /* similarly for customised exists and delete */
             if (  (o->op_type == OP_EXISTS)
-               && PL_check[o->op_type] != Perl_ck_exists)
+               && UNLIKELY(PL_check[o->op_type] != PL_check[PERL_CK_EXISTS]))
                 return;
             if (  (o->op_type == OP_DELETE)
-               && PL_check[o->op_type] != Perl_ck_delete)
+               && UNLIKELY(PL_check[o->op_type] != PL_check[PERL_CK_DELETE]))
                 return;
 
             if (   o->op_type != OP_AELEM
@@ -3588,6 +3588,114 @@ Perl_rpeep(pTHX_ OP *o)
                 S_check_for_bool_cxt(o, 1, OPpTRUEBOOL, 0);
             /* FALLTHROUGH */
         case OP_COND_EXPR:
+            if (o->op_type == OP_COND_EXPR) {
+                OP *stub = cLOGOP->op_other;
+                OP *trueop  = OpSIBLING( cLOGOP->op_first );
+                OP *falseop = OpSIBLING(trueop);
+
+                /* Is there an empty "if" block or ternary true branch?
+                   If so, optimise away the OP_STUB if safe to do so. */
+                if (stub->op_type == OP_STUB &&
+                    ((stub->op_flags & OPf_WANT) != OPf_WANT_SCALAR)
+                ) {
+                    if (stub == trueop) {
+                        /* This is very unlikely:
+                         *     cond_expr
+                         *         -condition-
+                         *         stub
+                         *         -else-
+                         */
+                        assert(!(stub->op_flags & OPf_KIDS));
+                        cLOGOP->op_other = stub->op_next;
+                        op_sibling_splice(o, cLOGOP->op_first, 1, NULL);
+                        op_free(stub);
+                        break;
+                    } else if (OP_TYPE_IS(trueop, OP_SCOPE) &&
+                               (stub == cUNOPx(trueop)->op_first) ) {
+                        assert(!(stub->op_flags & OPf_KIDS));
+
+                        OP *stubsib = OpSIBLING(stub);
+                        if (!stubsib) {
+                        /*     cond_expr
+                         *         -condition-
+                         *         scope
+                         *             stub
+                         *         -else-
+                         */
+                            cLOGOP->op_other = trueop->op_next;
+                            op_sibling_splice(o, cLOGOP->op_first, 1, NULL);
+                            op_free(stub);
+                            op_free(trueop);
+                            break;
+                        } else {
+                            /* Could be something like this:
+                             *         -condition-
+                             *         scope
+                             *             stub
+                             *             null
+                             *         -else-
+                             * But it may be more desirable (but is less
+                             * straightforward) to transform this earlier
+                             * in the compiler. Ignoring it for now,
+                             * pending further exploration. */
+                        }
+                    }
+                }
+
+                /* Is there an empty "else" block or ternary false branch?
+                   If so, optimise away the OP_STUB if safe to do so. */
+                stub = o->op_next;
+                if ((stub->op_flags & OPf_WANT) != OPf_WANT_SCALAR) {
+                    if (stub->op_type == OP_STUB && !OpSIBLING(stub) ){
+                        OP *stubsib = OpSIBLING(stub);
+                        if ((stub == falseop) && !stubsib) {
+                            /*     cond_expr
+                             *         -condition-
+                             *         - if -
+                             *         stub
+                             */
+                            assert(!(stub->op_flags & OPf_KIDS));
+                            o->op_flags |= OPf_SPECIAL; /* For B::Deparse */
+                            o->op_next = stub->op_next;
+                            op_sibling_splice(o, OpSIBLING(cLOGOP->op_first), 1, NULL);
+                            op_free(stub);
+                    } else { /* Unexpected */ }
+                } else if (OP_TYPE_IS(stub,OP_ENTER) &&
+                               OP_TYPE_IS(falseop, OP_LEAVE)) {
+                        OP *enter = stub;
+                        OP *stub = OpSIBLING(enter);
+                        if (stub && OP_TYPE_IS(stub, OP_STUB) ){
+                            assert(!(stub->op_flags & OPf_KIDS));
+                            OP *stubsib = OpSIBLING(stub);
+                            assert(stubsib);
+                            if (OP_TYPE_IS(stubsib, OP_NULL) &&
+                                !OpSIBLING(stubsib) &&
+                                !(stubsib->op_flags & OPf_KIDS) ) {
+                                    /*     cond_expr
+                                     *         -condition-
+                                     *         - if -
+                                     *         leave
+                                     *             enter
+                                     *             stub
+                                     *             null
+                                     */
+                            /* Ignoring it for now, pending further exploration.*/
+                            /*
+                                o->op_flags |= OPf_SPECIAL; // For B::Deparse
+                                o->op_next = falseop->op_next;
+                                op_sibling_splice(o, OpSIBLING(cLOGOP->op_first), 1, NULL);
+                                op_free(enter);
+                                op_free(stub);
+                                op_free(stubsib);
+                                op_free(falseop);
+                             */
+                            }
+                        }
+                    }
+                }
+
+            }
+            /* FALLTHROUGH */
         case OP_MAPWHILE:
         case OP_ANDASSIGN:
         case OP_ORASSIGN:
@@ -3595,6 +3703,7 @@ Perl_rpeep(pTHX_ OP *o)
         case OP_RANGE:
         case OP_ONCE:
         case OP_ARGDEFELEM:
+        case OP_PARAMTEST:
             while (cLOGOP->op_other->op_type == OP_NULL)
                 cLOGOP->op_other = cLOGOP->op_other->op_next;
             DEFER(cLOGOP->op_other);
@@ -3868,6 +3977,103 @@ Perl_rpeep(pTHX_ OP *o)
             }
             break;
 
+        case OP_SUBSTR: {
+            OP *expr, *offs, *len, *repl = NULL;
+            /* Specialize substr($x, 0, $y) and substr($x,0,$y,"") */
+            /* Does this substr have 3-4 args and amiable flags? */
+            if (
+                ((cMAXARG3x(o) == 4) || (cMAXARG3x(o) == 3))
+                /* No lvalue cases, no OPpSUBSTR_REPL_FIRST*/
+                && !(o->op_private & (OPpSUBSTR_REPL_FIRST|OPpMAYBE_LVSUB))
+                && !(o->op_flags & OPf_MOD)
+            ){
+                /* Should be a leading ex-pushmark */
+                OP *pushmark = cBINOPx(o)->op_first;
+                assert(pushmark->op_type == OP_NULL);
+                expr = OpSIBLING(pushmark);
+                offs = OpSIBLING(expr);
+
+                /* Gets complicated fast if the expr isn't simple*/
+                if (expr->op_type != OP_PADSV)
+                    break;
+                /* Is the offset CONST zero? */
+                if (offs->op_type != OP_CONST)
+                    break;
+                SV *offs_sv = cSVOPx_sv(offs);
+                if (!(SvIOK(offs_sv) && SvIVX(offs_sv) == 0))
+                    break;
+                len  = OpSIBLING(offs);
+
+                if (cMAXARG3x(o) == 4) {/* replacement */
+                    /* Is the replacement string CONST ""? */
+                    repl = OpSIBLING(len);
+                    if (repl->op_type != OP_CONST)
+                        break;
+                    SV *repl_sv = cSVOPx_sv(repl);
+                    if(!(SvPOK(repl_sv) && SvCUR(repl_sv) == 0))
+                        break;
+                }
+            } else {
+                break;
+            }
+            /* It's on! */
+            /* Take out the static LENGTH OP.  */
+            /* (The finalizer does not seem to change op_next here) */
+            expr->op_next = offs->op_next;
+            o->op_private = cMAXARG3x(o);
+
+            /* We have a problem if padrange pushes the expr OP for us,
+             * then jumps straight to the offs CONST OP. For example:
+             *     push @{$pref{ substr($key, 0, 1) }}, $key;
+             * We don't want to hit that OP, but cannot easily figure
+             * out if that is going to happen and adjust for it.
+             * So we have to null out the OP, and then do a fixup in
+              * B::Deparse. :/  */
+            op_null(offs);
+
+            /* There can be multiple pointers to repl, see GH #22914.
+             *    substr $x, 0, $y ? 2 : 3, "";
+             * So instead of rewriting all of len, null out repl. */
+            if (repl) {
+                op_null(repl);
+                /* We can still rewrite the simple len case though.*/
+                len->op_next = o;
+            }
+
+            /* Upgrade the SUBSTR to a SUBSTR_LEFT */
+            OpTYPE_set(o, OP_SUBSTR_LEFT);
+
+            /* oldop will be the OP_CONST associated with "" */
+            /* oldoldop is more unpredictable */
+            oldoldop = oldop = NULL;
+
+            /* pp_substr may be unsuitable for TARGMY optimization
+             * because of its potential RETPUSHUNDEF, and use of
+             * bit 4 for OPpSUBSTR_REPL_FIRST, but no such
+             * problems with pp_substr_left. Must just avoid
+             * sv == TARG.*/
+            if (OP_TYPE_IS(o->op_next, OP_PADSV) &&
+                !(o->op_next->op_private) &&
+                OP_TYPE_IS(o->op_next->op_next, OP_SASSIGN) &&
+                (o->op_next->op_targ != expr->op_targ)
+            ) {
+                OP * padsv = o->op_next;
+                OP * sassign = padsv->op_next;
+                /* Carry over some flags */
+                o->op_flags = OPf_KIDS | (o->op_flags & OPf_PARENS) |
+                              (sassign->op_flags & (OPf_WANT|OPf_PARENS));
+                o->op_private |= OPpTARGET_MY;
+                /* Steal the TARG, set op_next pointers*/
+                o->op_targ = padsv->op_targ;
+                padsv->op_targ = 0;
+                o->op_next = sassign->op_next;
+                /* Null the replaced OPs*/
+                op_null(padsv);
+                op_null(sassign);
+            }
+        }
+        break;
+
         case OP_SASSIGN: {
             if (OP_GIMME(o,0) == G_VOID
              || (  o->op_next->op_type == OP_LINESEQ
@@ -3896,7 +4102,7 @@ Perl_rpeep(pTHX_ OP *o)
                     */
                     OP *left = OpSIBLING(right);
                     if (left->op_type == OP_SUBSTR
-                         && (left->op_private & 7) < 4) {
+                         && (cMAXARG3x(left) < 4)) {
                         op_null(o);
                         /* cut out right */
                         op_sibling_splice(o, NULL, 1, NULL);

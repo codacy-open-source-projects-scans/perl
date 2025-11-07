@@ -36,7 +36,8 @@ Each typedef has specific routines that manipulate the various data types.
 =head2 What is an "IV"?
 
 Perl uses a special typedef IV which is a simple signed integer type that is
-guaranteed to be large enough to hold a pointer (as well as an integer).
+guaranteed to be large enough to hold a pointer, but may be larger,
+depending on how perl is Configured.
 Additionally, there is the UV, which is simply an unsigned IV.
 
 Perl also uses several special typedefs to declare variables to hold
@@ -57,7 +58,7 @@ be undefined.  Use IV and UV to declare the largest practicable, and
 C<L<perlapi/WIDEST_UTYPE>> for the absolute maximum unsigned, but which
 may not be usable in all circumstances.
 
-A numeric constant can be specified with L<perlapi/C<INT16_C>>,
+A numeric constant can be specified with the C99 macros like C<INT16_C>,
 L<perlapi/C<UINTMAX_C>>, and similar.
 
 =for apidoc_section $integer
@@ -539,6 +540,96 @@ private flag is set on 'lossy' values.  So when an NV is converted to an
 IV with loss, SvIOKp, SvNOKp and SvNOK will be set, while SvIOK won't be.
 
 In general, though, it's best to use the C<Sv*V> macros.
+
+=head2 Read-Only Values
+
+In Perl 5.16 and earlier, copy-on-write (see the next section) shared a
+flag bit with read-only scalars.  So the only way to test whether
+C<sv_setsv>, etc., will raise a "Modification of a read-only value" error
+in those versions is:
+
+    SvREADONLY(sv) && !SvIsCOW(sv)
+
+Under Perl 5.18 and later, SvREADONLY only applies to read-only variables,
+and, under 5.20, copy-on-write scalars can also be read-only, so the above
+check is incorrect.  You just want:
+
+    SvREADONLY(sv)
+
+If you need to do this check often, define your own macro like this:
+
+    #if PERL_VERSION >= 18
+    # define SvTRULYREADONLY(sv) SvREADONLY(sv)
+    #else
+    # define SvTRULYREADONLY(sv) (SvREADONLY(sv) && !SvIsCOW(sv))
+    #endif
+
+Or better yet, read about THINKFIRST macros below.
+
+=head2 Copy on Write
+
+Perl implements a copy-on-write (COW) mechanism for scalars, in which
+string copies are not immediately made when requested, but are deferred
+until made necessary by one or the other scalar changing.  This is mostly
+transparent, but one must take care not to modify string buffers that are
+shared by multiple SVs.
+
+You can test whether an SV is using copy-on-write with C<SvIsCOW(sv)>.
+
+You can force an SV to make its own copy of its string buffer by calling
+C<sv_force_normal(sv)> or SvPV_force_nolen(sv).
+
+If you want to make the SV drop its string buffer, use
+C<sv_force_normal_flags(sv, SV_COW_DROP_PV)> or simply
+C<sv_setsv(sv, NULL)>.
+
+All of these functions will croak on read-only scalars (see the previous
+section for more on those).
+
+To test that your code is behaving correctly and not modifying COW buffers,
+on systems that support L<mmap(2)> (e.g. Unix, Linux, BSDs, macOS) you can
+configure perl with C<-Accflags=-DPERL_DEBUG_READONLY_COW> and it will turn
+buffer violations into crashes.  You will find it to be marvellously slow,
+so you may want to skip perl's own tests.
+
+=head2 THINKFIRST before writing to a string buffer
+
+You are more likely to (and usually I<should>) see the C<SvTHINKFIRST(sv)>
+macro used to check whether an SV is ready to be written to, as this is a
+combined single check to see if the SV:
+
+=over 4
+
+=item *
+Points to a COW buffer
+
+=item *
+Is READONLY
+
+=item *
+Contains a reference
+
+=item *
+Has some relevant magic assigned
+
+=back
+
+Two related macros can be used to perform those checks and, if required,
+also perform some action:
+
+=over 4
+
+=item *
+C<SV_CHECK_THINKFIRST(sv)> calls C<sv_force_normal(sv)> to copy the
+string buffer, turning it into a mutable string.
+
+=item *
+C<SV_CHECK_THINKFIRST_COW_DROP(sv)> calls C<sv_force_normal_flags(sv, SV_COW_DROP_PV)>
+which drops any string buffer pointed to by C<sv>. This is usually
+used to avoid copying any COW string to a new buffer, prior to
+writing some completely new string to C<sv>.
+
+=back
 
 =head2 Working with AVs
 
@@ -1343,54 +1434,6 @@ following code:
 
 If the order of C<sv_setiv> and C<sv_setpv> had been reversed, then the
 macro C<SvPOK_on> would need to be called instead of C<SvIOK_on>.
-
-=head2 Read-Only Values
-
-In Perl 5.16 and earlier, copy-on-write (see the next section) shared a
-flag bit with read-only scalars.  So the only way to test whether
-C<sv_setsv>, etc., will raise a "Modification of a read-only value" error
-in those versions is:
-
-    SvREADONLY(sv) && !SvIsCOW(sv)
-
-Under Perl 5.18 and later, SvREADONLY only applies to read-only variables,
-and, under 5.20, copy-on-write scalars can also be read-only, so the above
-check is incorrect.  You just want:
-
-    SvREADONLY(sv)
-
-If you need to do this check often, define your own macro like this:
-
-    #if PERL_VERSION >= 18
-    # define SvTRULYREADONLY(sv) SvREADONLY(sv)
-    #else
-    # define SvTRULYREADONLY(sv) (SvREADONLY(sv) && !SvIsCOW(sv))
-    #endif
-
-=head2 Copy on Write
-
-Perl implements a copy-on-write (COW) mechanism for scalars, in which
-string copies are not immediately made when requested, but are deferred
-until made necessary by one or the other scalar changing.  This is mostly
-transparent, but one must take care not to modify string buffers that are
-shared by multiple SVs.
-
-You can test whether an SV is using copy-on-write with C<SvIsCOW(sv)>.
-
-You can force an SV to make its own copy of its string buffer by calling C<sv_force_normal(sv)> or SvPV_force_nolen(sv).
-
-If you want to make the SV drop its string buffer, use
-C<sv_force_normal_flags(sv, SV_COW_DROP_PV)> or simply
-C<sv_setsv(sv, NULL)>.
-
-All of these functions will croak on read-only scalars (see the previous
-section for more on those).
-
-To test that your code is behaving correctly and not modifying COW buffers,
-on systems that support L<mmap(2)> (i.e., Unix) you can configure perl with
-C<-Accflags=-DPERL_DEBUG_READONLY_COW> and it will turn buffer violations
-into crashes.  You will find it to be marvellously slow, so you may want to
-skip perl's own tests.
 
 =head2 Magic Variables
 
@@ -2326,7 +2369,25 @@ you can simply write:
 On a related note, if you do use C<(X)PUSH[iunp]>, then you're going to
 need a C<dTARG> in your variable declarations so that the C<*PUSH*>
 macros can make use of the local variable C<TARG>.  See also
-C<dTARGET> and C<dXSTARG>.
+L<perlapi/C<dTARGET>> and C<dXSTARG>.
+
+Be careful with TARG: each non-recursive call to your OP, or XSUB for
+dXSTARG, will use the same SV for TARG for each call, so you can't
+assume the SV is pristine since the results from the previous call to
+your OP or XSUB may still be in TARG.
+
+Other state such as a cached numeric version of a PV or the cached
+UTF-8 length may also be set.  You can avoid problems with this by
+using the normal sv_set*() APIs instead of trying to optimize by
+directly manipulating the SV.
+
+For OPs that implement the C<OA_TARGLEX> optimization, TARG may be
+special in other ways, there may be references to it, it might be
+blessed, it might be tied, or magical in other ways.
+
+You must not use TARG to return a reference, since that reference will
+be live until the next time the OP or XSUB executes non-recursively,
+or until perl exits.
 
 =head2 Scratchpads
 
@@ -2384,7 +2445,10 @@ marked with correct flags.
 All memory meant to be used with the Perl API functions should be manipulated
 using the macros described in this section.  The macros provide the necessary
 transparency between differences in the actual malloc implementation that is
-used within perl.
+used within perl. Never pass pointers between C<Newx>, C<Renew>, C<Safefree>
+and I<libc> equivalents C<malloc>, C<realloc>, C<free>.  They are not from the
+same memory pool or allocator.  Either an instant or delayed I<SEGV> will
+occur, or subtle memory leaks or subtle heap corruption.
 
 The following three macros are used to initially allocate memory :
 
@@ -3226,11 +3290,13 @@ messages where the string is assumed to be a class name.
 
 =for apidoc Amnh||HvNAMEf
 =for apidoc Amnh||HvNAMEf_QUOTEDPREFIX
+=for apidoc Amh||HvNAMEfARG|HV *hv
 
 C<HvNAMEf> and C<HvNAMEf_QUOTEDPREFIX> are similar to C<SVf> except they
-extract the string, length and utf8 flags from the argument using the
-C<HvNAME()>, C<HvNAMELEN()>, C<HvNAMEUTF8()> macros. This is intended
-for stringifying a class name directly from an stash HV.
+extract the string, length and utf8 flags from the argument given to
+C<HvNAMEfARG()> using the C<HvNAME()>, C<HvNAMELEN()>, C<HvNAMEUTF8()>
+macros. This is intended for stringifying a class name directly from an
+stash HV.
 
 =head2 Formatted Printing of Strings
 
@@ -3486,9 +3552,8 @@ how long the first character in it is with the C<UTF8SKIP> macro:
     len = UTF8SKIP(utf); /* len is 3 here */
 
 Another way to skip over characters in a UTF-8 string is to use
-C<utf8_hop>, which takes a string and a number of characters to skip
-over.  You're on your own about bounds checking, though, so don't use it
-lightly.
+L<perlapi/C<utf8_hop_safe>>, which takes a string and a number of
+characters to skip over.
 
 All bytes in a multi-byte UTF-8 character will have the high bit set,
 so you can test if you need to do something special with this
@@ -3503,20 +3568,23 @@ whether the byte is encoded as a single byte even in UTF-8):
                     char */
     STRLEN len; /* Returned length of character in bytes */
 
-    if (!UTF8_IS_INVARIANT(*utf))
+    if (!UTF8_IS_INVARIANT(*utf)) {
         /* Must treat this as UTF-8 */
-        uv = utf8_to_uvchr_buf(utf, utf_end, &len);
+        if (! utf8_to_uv(utf, utf_end, &uv, &len)) {
+            /* handle error */
+        }
+    }
     else
         /* OK to treat this character as a byte */
         uv = *utf;
 
-You can also see in that example that we use C<utf8_to_uvchr_buf> to get the
-value of the character; the inverse function C<uvchr_to_utf8> is available
+You can also see in that example that we use C<utf8_to_uv> to get the
+value of the character; the inverse function C<uv_to_utf8> is available
 for putting a UV into UTF-8:
 
     if (!UVCHR_IS_INVARIANT(uv))
         /* Must treat this as UTF8 */
-        utf8 = uvchr_to_utf8(utf8, uv);
+        utf8 = uv_to_utf8(utf8, uv);
     else
         /* OK to treat this character as a byte */
         *utf8++ = uv;
@@ -3696,7 +3764,7 @@ in a single byte.
 
 =head2 How do I compare strings?
 
-L<perlapi/sv_cmp> and L<perlapi/sv_cmp_flags> do a lexigraphic
+L<perlapi/sv_cmp> and L<perlapi/sv_cmp_flags> do a lexicographic
 comparison of two SVs, and handle UTF-8ness properly.  Note, however,
 that Unicode specifies a much fancier mechanism for collation, available
 via the L<Unicode::Collate> module.
@@ -3729,13 +3797,13 @@ the PV to somewhere, pass on the flag too.
 
 =item *
 
-If a string is UTF-8, B<always> use C<utf8_to_uvchr_buf> to get at the value,
+If a string is UTF-8, B<always> use C<utf8_to_uv> to get at the value,
 unless C<UTF8_IS_INVARIANT(*s)> in which case you can use C<*s>.
 
 =item *
 
 When writing a character UV to a UTF-8 string, B<always> use
-C<uvchr_to_utf8>, unless C<UVCHR_IS_INVARIANT(uv))> in which case
+C<uv_to_utf8>, unless C<UVCHR_IS_INVARIANT(uv))> in which case
 you can use C<*s = uv>.
 
 =item *
@@ -4190,11 +4258,11 @@ and C<CXt_NULL> which represent a basic scope (as pushed by C<pp_enter>)
 and a sort block. The type determines which part of the context union are
 valid.
 
-=for apidoc  Cyh ||cx_type
-
-=for apidoc  Cmnh||CXt_BLOCK
+=for apidoc Cmnh ||cx_type
+=for apidoc_item ||CXt_BLOCK
 =for apidoc_item ||CXt_EVAL
 =for apidoc_item ||CXt_FORMAT
+=for apidoc_item ||CXt_GIVEN
 =for apidoc_item ||CXt_LOOP_ARY
 =for apidoc_item ||CXt_LOOP_LAZYIV
 =for apidoc_item ||CXt_LOOP_LAZYSV
@@ -4203,6 +4271,7 @@ valid.
 =for apidoc_item ||CXt_NULL
 =for apidoc_item ||CXt_SUB
 =for apidoc_item ||CXt_SUBST
+=for apidoc_item ||CXt_WHEN
 
 The main division in the context struct is between a substitution scope
 (C<CXt_SUBST>) and block scopes, which are everything else. The former is
@@ -4817,7 +4886,7 @@ in summary:
  rpp_xpush_1(sv)         XPUSHs(sv)
  rpp_xpush_2(sv1, sv2))  EXTEND(SP,2); PUSHs(sv1); PUSHs(sv2);
 
- rpp_push_1_norc(sv)     mPUSHs(sv)     // on RC bulds, skips RC++;
+ rpp_push_1_norc(sv)     mPUSHs(sv)     // on RC builds, skips RC++;
                                         // on non-RC builds, mortalises
  rpp_popfree_1()         (void)POPs;
  rpp_popfree_2()         (void)POPs; (void)POPs;

@@ -46,37 +46,37 @@ the need to cast the result to the appropriate type.
 
 #if defined (DEBUGGING) && defined(PERL_USE_GCC_BRACE_GROUPS) && !defined(__INTEL_COMPILER)
 #  define GvGP(gv)							\
-        ((GP *)(*({GV *const _gvgp = (GV *) (gv);				\
-            assert(SvTYPE(_gvgp) == SVt_PVGV || SvTYPE(_gvgp) == SVt_PVLV); \
-            assert(isGV_with_GP(_gvgp));				\
-            &((_gvgp)->sv_u.svu_gp);})))
+        ((GP *)(*({GV *const gvgp_ = (GV *) (gv);				\
+            assert(SvTYPE(gvgp_) == SVt_PVGV || SvTYPE(gvgp_) == SVt_PVLV); \
+            assert(isGV_with_GP(gvgp_));				\
+            &((gvgp_)->sv_u.svu_gp);})))
 #  define GvGP_set(gv,gp)						\
-        {GV *const _gvgp = (GV *) (gv);				\
-            assert(SvTYPE(_gvgp) == SVt_PVGV || SvTYPE(_gvgp) == SVt_PVLV); \
-            assert(isGV_with_GP(_gvgp));				\
-            (_gvgp)->sv_u.svu_gp = (gp); }
+        {GV *const gvgp_ = (GV *) (gv);				\
+            assert(SvTYPE(gvgp_) == SVt_PVGV || SvTYPE(gvgp_) == SVt_PVLV); \
+            assert(isGV_with_GP(gvgp_));				\
+            (gvgp_)->sv_u.svu_gp = (gp); }
 #  define GvFLAGS(gv)							\
-        (*({GV *const _gvflags = (GV *) (gv);				\
-            assert(SvTYPE(_gvflags) == SVt_PVGV || SvTYPE(_gvflags) == SVt_PVLV); \
-            assert(isGV_with_GP(_gvflags));				\
-            &(GvXPVGV(_gvflags)->xpv_cur);}))
+        (*({GV *const gvflags_ = (GV *) (gv);				\
+            assert(SvTYPE(gvflags_) == SVt_PVGV || SvTYPE(gvflags_) == SVt_PVLV); \
+            assert(isGV_with_GP(gvflags_));				\
+            &(GvXPVGV(gvflags_)->xpv_cur);}))
 #  define GvSTASH(gv)							\
-        (*({ GV * const _gvstash = (GV *) (gv);				\
-            assert(isGV_with_GP(_gvstash));				\
-            assert(SvTYPE(_gvstash) == SVt_PVGV || SvTYPE(_gvstash) >= SVt_PVLV); \
-            &(GvXPVGV(_gvstash)->xnv_u.xgv_stash);			\
+        (*({ GV * const gvstash_ = (GV *) (gv);				\
+            assert(isGV_with_GP(gvstash_));				\
+            assert(SvTYPE(gvstash_) == SVt_PVGV || SvTYPE(gvstash_) >= SVt_PVLV); \
+            &(GvXPVGV(gvstash_)->xnv_u.xgv_stash);			\
          }))
 #  define GvNAME_HEK(gv)						\
-    (*({ GV * const _gvname_hek = (GV *) (gv);				\
-           assert(isGV_with_GP(_gvname_hek));				\
-           assert(SvTYPE(_gvname_hek) == SVt_PVGV || SvTYPE(_gvname_hek) >= SVt_PVLV); \
-           &(GvXPVGV(_gvname_hek)->xiv_u.xivu_namehek);			\
+    (*({ GV * const gvname_hek_ = (GV *) (gv);				\
+           assert(isGV_with_GP(gvname_hek_));				\
+           assert(SvTYPE(gvname_hek_) == SVt_PVGV || SvTYPE(gvname_hek_) >= SVt_PVLV); \
+           &(GvXPVGV(gvname_hek_)->xiv_u.xivu_namehek);			\
          }))
 #  define GvNAME_get(gv)	({ assert(GvNAME_HEK(gv)); (char *)HEK_KEY(GvNAME_HEK(gv)); })
 #  define GvNAMELEN_get(gv)	({ assert(GvNAME_HEK(gv)); HEK_LEN(GvNAME_HEK(gv)); })
 #  define GvNAMEUTF8(gv)	({ assert(GvNAME_HEK(gv)); HEK_UTF8(GvNAME_HEK(gv)); })
 #else
-#  define GvGP(gv)	(0+(gv)->sv_u.svu_gp)
+#  define GvGP(gv)              ((GP *)(gv)->sv_u.svu_gp)
 #  define GvGP_set(gv,gp)	((gv)->sv_u.svu_gp = (gp))
 #  define GvFLAGS(gv)	(GvXPVGV(gv)->xpv_cur)
 #  define GvSTASH(gv)	(GvXPVGV(gv)->xnv_u.xgv_stash)
@@ -297,12 +297,9 @@ Return the CV from the GV.
 /* gv_fetchfile_flags() */
 #define GVF_NOADD       0x01    /* don't add the glob if it doesn't exist */
 
-#define Perl_gv_fullname3(mTHX, sv,gv,prefix)                           \
-        Perl_gv_fullname4(aTHX_ sv,gv,prefix,TRUE)
-#define Perl_gv_efullname3(mTHX, sv, gv, prefix)                        \
-        Perl_gv_efullname4(aTHX_ sv,gv,prefix,TRUE)
-#define Perl_gv_fetchmethod(mTHX, stash, name)                          \
-        Perl_gv_fetchmethod_autoload(aTHX_ stash, name, TRUE)
+#define gv_fullname3(sv,gv,prefix) gv_fullname4(sv,gv,prefix,TRUE)
+#define gv_efullname3(sv,gv,prefix) gv_efullname4(sv,gv,prefix,TRUE)
+#define gv_fetchmethod(stash, name) gv_fetchmethod_autoload(stash, name, TRUE)
 
 /*
 =for apidoc_defn Am|GV *|gv_fetchsv_nomg|SV *name|I32 flags|const svtype sv_type
@@ -346,10 +343,10 @@ Make sure there is a slot of the given type (AV, HV, IO, SV) in the GV C<gv>.
 =cut
 */
 
-#define Perl_gv_AVadd(mTHX, gv) Perl_gv_add_by_type(aTHX_ (gv), SVt_PVAV)
-#define Perl_gv_HVadd(mTHX, gv) Perl_gv_add_by_type(aTHX_ (gv), SVt_PVHV)
-#define Perl_gv_IOadd(mTHX, gv) Perl_gv_add_by_type(aTHX_ (gv), SVt_PVIO)
-#define Perl_gv_SVadd(mTHX, gv) Perl_gv_add_by_type(aTHX_ (gv), SVt_NULL)
+#define gv_AVadd(gv) gv_add_by_type((gv), SVt_PVAV)
+#define gv_HVadd(gv) gv_add_by_type((gv), SVt_PVHV)
+#define gv_IOadd(gv) gv_add_by_type((gv), SVt_PVIO)
+#define gv_SVadd(gv) gv_add_by_type((gv), SVt_NULL)
 
 /*
  * ex: set ts=8 sts=4 sw=4 et:

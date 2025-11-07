@@ -1097,7 +1097,7 @@ foreach my $test (@tests) {
                                           |$::UNICODE_DISALLOW_SURROGATE;
       $controlling_warning_category = 'non_unicode';
 
-      if ($will_overflow) {  # This is realy a malformation
+      if ($will_overflow) {  # This is really a malformation
           $non_cp_trailing_text = "if you see this, there is an error";
           $cp_message_qr = qr/\Q$non_cp_trailing_text\E/;
           $initially_malformed = 1;
@@ -2020,8 +2020,12 @@ foreach my $test (@tests) {
                         @warnings_gotten = @returned_warnings;
                     }
 
+                  SKIP: {
+                    skip "$0 doesn't handle _msgs functions AV returns", 1
+                                                    if $utf8_func =~ /_msgs/;
                     do_warnings_test(@expected_warnings)
                       or diag "Call was: " . utf8n_display_call($eval_text);
+                    }
                     undef @warnings_gotten;
 
                     # Check CHECK_ONLY results when the input is

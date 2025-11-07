@@ -1,3 +1,7 @@
+/*
+ * ex: set ts=8 sts=4 sw=4 et:
+ */
+
 #define PERL_IN_XS_APITEST
 
 /* We want to be able to test things that aren't API yet. */
@@ -1181,7 +1185,7 @@ static OP *THX_parse_keyword_subsignature(pTHX)
                 seen_nextstate++;
                 retop = op_append_list(OP_LIST, retop, newSVOP(OP_CONST, 0,
                     /* newSVpvf("nextstate:%s:%d", CopFILE(cCOPx(kid)), cCOPx(kid)->cop_line))); */
-                    newSVpvf("nextstate:%u", (unsigned int)cCOPx(kid)->cop_line)));
+                    newSVpvf("nextstate:%" LINE_Tf, CopLINE(cCOPx(kid)))));
                 break;
             case OP_ARGCHECK: {
                 struct op_argcheck_aux *p =
@@ -1200,9 +1204,27 @@ static OP *THX_parse_keyword_subsignature(pTHX)
                     newSVpvf(kid->op_flags & OPf_KIDS ? "argelem:%s:d" : "argelem:%s", namepv)));
                 break;
             }
-            default:
-                fprintf(stderr, "TODO: examine kid %p (optype=%s)\n", kid, PL_op_name[kid->op_type]);
+            case OP_MULTIPARAM: {
+                struct op_multiparam_aux *p =
+                    (struct op_multiparam_aux *)(cUNOP_AUXx(kid)->op_aux);
+                PADNAMELIST *names = PadlistNAMES(CvPADLIST(find_runcv(0)));
+                SV *retsv = newSVpvf("multiparam:%zu..%zu:%c",
+                        p->min_args, p->n_positional, p->slurpy ? p->slurpy : '-');
+                for (size_t paramidx = 0; paramidx < p->n_positional; paramidx++) {
+                    char *namepv = PadnamePV(padnamelist_fetch(names, p->param_padix[paramidx]));
+                    if(namepv)
+                        sv_catpvf(retsv, ":%s=%zu", namepv, paramidx);
+                    else
+                        sv_catpvf(retsv, ":(anon)=%zu", paramidx);
+                    if(paramidx >= p->min_args)
+                        sv_catpvs(retsv, "?");
+                }
+                if (p->slurpy_padix)
+                    sv_catpvf(retsv, ":%s=*",
+                        PadnamePV(padnamelist_fetch(names, p->slurpy_padix)));
+                retop = op_append_list(OP_LIST, retop, newSVOP(OP_CONST, 0, retsv));
                 break;
+            }
         }
     }
 
@@ -1597,9 +1619,20 @@ XSPP_wrapped(my_pp_anonlist, 0, 1)
 #include "const-c.inc"
 
 void
-destruct_test(pTHX_ void *p) {
-    warn("In destruct_test: %" SVf "\n", (SV*)p);
+destruct_test(pTHX_ SV *p) {
+    warn("In destruct_test: %" SVf "\n", p);
 }
+
+#if defined(USE_ITHREADS) && !defined(WIN32)
+
+static void *
+signal_thread_start(void *arg) {
+  PERL_UNUSED_ARG(arg);
+  raise(SIGUSR1);
+  return NULL;
+}
+
+#endif
 
 #ifdef PERL_USE_HWM
 #  define hwm_checks_enabled() true
@@ -1754,7 +1787,7 @@ test_valid_utf8_to_uvchr(s)
          */
         RETVAL = newAV_mortal();
 
-        ret = valid_utf8_to_uvchr((U8*) SvPV_nolen(s), &retlen);
+        ret = valid_utf8_to_uv((U8*) SvPV_nolen(s), &retlen);
 
         /* Returns the return value in [0]; <retlen> in [1] */
         av_push_simple(RETVAL, newSVuv(ret));
@@ -1940,6 +1973,65 @@ void
 xsreturn_empty()
     PPCODE:
         XSRETURN_EMPTY;
+
+void
+test_mismatch_xs_handshake_api_ver(...)
+    ALIAS:
+        test_mismatch_xs_handshake_bad_struct = 1
+        test_mismatch_xs_handshake_bad_struct_and_ver = 2
+    PPCODE:
+    if(ix == 0) {
+#ifdef MULTIPLICITY
+        Perl_xs_handshake(HS_KEYp(sizeof(PerlInterpreter),
+                                  TRUE, NULL, FALSE,
+                                  sizeof("v1.1337.0")-1,
+                                  sizeof("")-1),
+                                  HS_CXT, __FILE__, items, ax,
+                                  "v1.1337.0");
+#else
+        Perl_xs_handshake(HS_KEYp(sizeof(struct PerlHandShakeInterpreter),
+                                  FALSE, NULL, FALSE,
+                                  sizeof("v1.1337.0")-1,
+                                  sizeof("")-1),
+                                  HS_CXT, __FILE__, items, ax,
+                                  "v1.1337.0");
+#endif
+    }
+    else if(ix == 1) {
+#ifdef MULTIPLICITY
+        Perl_xs_handshake(HS_KEYp(sizeof(PerlInterpreter)+1,
+                                  TRUE, NULL, FALSE,
+                                  sizeof("v" PERL_API_VERSION_STRING)-1,
+                                  sizeof("")-1),
+                                  HS_CXT, __FILE__, items, ax,
+                                  "v" PERL_API_VERSION_STRING);
+#else
+        Perl_xs_handshake(HS_KEYp(sizeof(struct PerlHandShakeInterpreter)+1,
+                                  FALSE, NULL, FALSE,
+                                  sizeof("v" PERL_API_VERSION_STRING)-1,
+                                  sizeof("")-1),
+                                  HS_CXT, __FILE__, items, ax,
+                                  "v" PERL_API_VERSION_STRING);
+#endif
+    }
+    else {
+#ifdef MULTIPLICITY
+        Perl_xs_handshake(HS_KEYp(sizeof(PerlInterpreter)+1,
+                                  TRUE, NULL, FALSE,
+                                  sizeof("v1.1337.0")-1,
+                                  sizeof("")-1),
+                                  HS_CXT, __FILE__, items, ax,
+                                  "v1.1337.0");
+#else
+        Perl_xs_handshake(HS_KEYp(sizeof(struct PerlHandShakeInterpreter)+1,
+                                    FALSE, NULL, FALSE,
+                                    sizeof("v1.1337.0")-1,
+                                    sizeof("")-1),
+                                    HS_CXT, __FILE__, items, ax,
+                                    "v1.1337.0");
+#endif
+    }
+
 
 MODULE = XS::APItest:Hash               PACKAGE = XS::APItest::Hash
 
@@ -3792,6 +3884,25 @@ test_coplabel()
         if (len != 4) croak("fail # cop_fetch_label len");
         if (!utf8) croak("fail # cop_fetch_label utf8");
 
+void
+test_cop_warnings(bool already_on)
+    PREINIT:
+        COP *cop = PL_curcop;
+    CODE:
+        if(cop_has_warning(cop, WARN_UNINITIALIZED) ^ already_on)
+            croak("fail # cop_has_warning initial state");
+
+        /* This code modfies PL_curcop which is normally quite rude, but we'll
+         * allow it during the test run.
+         */
+        cop_enable_warning(cop, WARN_UNINITIALIZED);
+        if (!cop_has_warning(cop, WARN_UNINITIALIZED))
+            croak("fail # cop_enable_warning did not enable");
+
+        cop_disable_warning(cop, WARN_UNINITIALIZED);
+        if (cop_has_warning(cop, WARN_UNINITIALIZED))
+            croak("fail # cop_disable_warning did not disable");
+
 
 HV *
 example_cophh_2hv()
@@ -4305,6 +4416,21 @@ thread_id_matches()
 CODE:
     /* pthread_t might not be a scalar type */
     RETVAL = pthread_equal(pthread_self(), PL_main_thread);
+OUTPUT:
+    RETVAL
+
+pthread_t
+make_signal_thread()
+CODE:
+    if (pthread_create(&RETVAL, NULL, signal_thread_start, NULL) != 0)
+        XSRETURN_EMPTY;
+OUTPUT:
+    RETVAL
+
+int
+join_signal_thread(pthread_t tid)
+CODE:
+    RETVAL = pthread_join(tid, NULL);
 OUTPUT:
     RETVAL
 
@@ -4958,6 +5084,29 @@ modify_pv(IV pi, IV sz)
     PPCODE:
         /* used by op/pack.t when testing pack "p" */
         memset(INT2PTR(char *, pi), 'y', sz);
+
+STRLEN
+sv_regex_global_pos_get(SV *sv, U32 flags = 0)
+    CODE:
+        if(!sv_regex_global_pos_get(sv, &RETVAL, flags))
+            XSRETURN_UNDEF;
+    OUTPUT:
+        RETVAL
+
+void
+sv_regex_global_pos_set(SV *sv, STRLEN pos, U32 flags = 0)
+
+void
+sv_regex_global_pos_clear(SV *sv)
+
+SV *
+newSVpvf_blank()
+    CODE:
+        GCC_DIAG_IGNORE_STMT(-Wformat-zero-length);
+        RETVAL = newSVpvf("");
+        GCC_DIAG_RESTORE_STMT;
+    OUTPUT:
+        RETVAL
 
 MODULE = XS::APItest PACKAGE = XS::APItest::AUTOLOADtest
 
@@ -6615,7 +6764,7 @@ test_UTF8_IS_REPLACEMENT(char *s, STRLEN len)
 bool
 test_isQUOTEMETA(UV ord)
     CODE:
-        RETVAL = _isQUOTEMETA(ord);
+        RETVAL = isQUOTEMETA(ord);
     OUTPUT:
         RETVAL
 
@@ -8184,5 +8333,24 @@ IV
 get_savestack_ix()
     CODE:
         RETVAL = PL_savestack_ix;
+    OUTPUT:
+        RETVAL
+
+MODULE = XS::APItest            PACKAGE = XS::APItest::vstring
+
+bool
+SvVOK(SV *sv)
+
+SV *
+SvVSTRING(SV *sv)
+    CODE:
+    {
+        const char *vstr_pv;
+        STRLEN vstr_len;
+        if((vstr_pv = SvVSTRING(sv, vstr_len)))
+            RETVAL = newSVpvn(vstr_pv, vstr_len);
+        else
+            RETVAL = &PL_sv_undef;
+    }
     OUTPUT:
         RETVAL

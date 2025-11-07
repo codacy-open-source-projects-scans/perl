@@ -57,7 +57,7 @@ struct padnamelist {
 
 struct padname_fieldinfo;
 
-#define _PADNAME_BASE \
+#define PADNAME_BASE_ \
     char *	xpadn_pv;		\
     HV *	xpadn_ourstash;		\
     union {				\
@@ -73,19 +73,19 @@ struct padname_fieldinfo;
     U8		xpadn_flags
 
 struct padname {
-    _PADNAME_BASE;
+    PADNAME_BASE_;
 };
 
 struct padname_with_str {
 #ifdef PERL_PADNAME_MINIMAL
-    _PADNAME_BASE;
+    PADNAME_BASE_;
 #else
     struct padname	xpadn_padname;
 #endif
     char		xpadn_str[1];
 };
 
-#undef _PADNAME_BASE
+#undef PADNAME_BASE_
 
 #define PADNAME_FROM_PV(s) \
     ((PADNAME *)((s) - STRUCT_OFFSET(struct padname_with_str, xpadn_str)))
@@ -178,7 +178,7 @@ typedef enum {
  * indirectly affect pads. */
 
 /*
-=for apidoc m|void|SAVEPADSV	|PADOFFSET po
+=for apidoc m|void|SAVEPADSVANDMORTALIZE|PADOFFSET po
 Save a pad slot (used to restore after an iteration)
 
 =cut
