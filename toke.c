@@ -12477,7 +12477,6 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
      * which will probably mean horrible loss of precision due to
      * multiple fp operations. */
     bool hexfp = FALSE;
-    int total_bits = 0;
     int significant_bits = 0;
 #if NVSIZE == 8 && defined(HAS_QUAD) && defined(Uquad_t)
 #  define HEXFP_UQUAD
@@ -12488,8 +12487,6 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
     NV hexfp_nv = 0.0;
 #endif
     int hexfp_exp = 0;
-    UV high_non_zero = 0; /* highest digit */
-    int non_zero_integer_digits = 0;
     bool new_octal = FALSE;     /* octal with "0o" prefix */
 
     PERL_ARGS_ASSERT_SCAN_NUM;
@@ -12618,8 +12615,6 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
                         assert(shift >= 0);
                         x = u << shift;	/* make room for the digit */
 
-                        total_bits += shift;
-
                         if ((x >> shift) != u
                             && !(PL_hints & HINT_NEW_BINARY)) {
                             overflowed = TRUE;
@@ -12642,12 +12637,6 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
                          * amount. */
                         n += (NV) b;
                     }
-
-                    if (high_non_zero == 0 && b > 0)
-                        high_non_zero = b;
-
-                    if (high_non_zero)
-                        non_zero_integer_digits++;
 
                     /* this could be hexfp, but peek ahead
                      * to avoid matching ".." */
@@ -12674,23 +12663,12 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
                  * detection will shortly be more thorough with the
                  * underbar checks. */
                 const char* h = s;
-                significant_bits = non_zero_integer_digits * shift;
+                significant_bits = (u == 0) ? 0 : msbit_pos(u) + 1;
 #ifdef HEXFP_UQUAD
                 hexfp_uquad = u;
 #else /* HEXFP_NV */
                 hexfp_nv = u;
 #endif
-                /* Ignore the leading zero bits of
-                 * the high (first) non-zero digit. */
-                if (high_non_zero) {
-                    if (high_non_zero < 0x8)
-                        significant_bits--;
-                    if (high_non_zero < 0x4)
-                        significant_bits--;
-                    if (high_non_zero < 0x2)
-                        significant_bits--;
-                }
-
                 if (*h == '.') {
 #ifdef HEXFP_NV
                     NV nv_mult = 1.0;
@@ -12774,8 +12752,9 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
                     }
                 }
 
-                if ((total_bits > 0 || significant_bits > 0) &&
-                    isALPHA_FOLD_EQ(*h, 'p')) {
+                if (   (has_digs || significant_bits > 0)
+                    && isALPHA_FOLD_EQ(*h, 'p'))
+                {
                     bool negexp = FALSE;
                     h++;
                     if (*h == '+')
