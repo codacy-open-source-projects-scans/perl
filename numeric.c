@@ -365,7 +365,7 @@ S_output_non_portable(pTHX_ const U8 base)
 }
 
 UV
-Perl_grok_bin_oct_hex(pTHX_ const char *start,
+Perl_grok_bin_oct_hex(pTHX_ const char * const start,
                         STRLEN *len_p,
                         I32 *flags,
                         NV *result,
@@ -400,7 +400,8 @@ Perl_grok_bin_oct_hex(pTHX_ const char *start,
     *flags = 0;
 
     const bool allow_underscores =
-             cBOOL(input_flags & PERL_SCAN_ALLOW_UNDERSCORES);
+             cBOOL(input_flags & ( PERL_SCAN_ALLOW_UNDERSCORES
+                                  |PERL_SCAN_ALLOW_MEDIAL_UNDERSCORES_ONLY));
     const char * s = start;
     const char * e = start + *len_p;
 
@@ -427,6 +428,7 @@ Perl_grok_bin_oct_hex(pTHX_ const char *start,
 
     /* Unroll the loop so that the first 8 digits are branchless except for the
      * switch.  A ninth hex one overflows a 32 bit word. */
+  redo_switch:
     switch (e - s) {
       default:
           if (UNLIKELY(! generic_isCC_(*s, class_bit)))  break;
@@ -473,6 +475,15 @@ Perl_grok_bin_oct_hex(pTHX_ const char *start,
               return value;
           }
 
+          /* If we get here, and the accumulated value is still 0, it is
+           * because there are more leading zeros than the cases of this
+           * switch(),  These are common enough with these kinds of
+           * binary-style numbers that it is worth this extra conditional to
+           * continue absorbing them via the switch. */
+          if (value == 0) {
+              goto redo_switch;
+          }
+
           break;
     }
 
@@ -486,8 +497,6 @@ Perl_grok_bin_oct_hex(pTHX_ const char *start,
     bool overflowed = FALSE;
     NV value_nv = 0;
     const PERL_UINT_FAST8_T base = 1 << shift;  /* 2, 8, or 16 */
-    const UV max_div= UV_MAX / base;    /* Value above which, the next digit
-                                           processed would overflow */
 
     for (; s < e; s++) {
         if (generic_isCC_(*s, class_bit)) {
@@ -496,13 +505,20 @@ Perl_grok_bin_oct_hex(pTHX_ const char *start,
                With gcc seems to be much straighter code than old scan_hex.
                (khw suspects that adding a LIKELY() just above would do the
                same thing) */
-          redo:
-            if (LIKELY(value <= max_div)) {
-                value = (value << shift) | XDIGIT_VALUE(*s);
+          redo: ;
+
+            /* Make room for the next digit */
+            UV tentative_value = value << shift;
+
+            /* If shiftng back doesn't yield the previous value, it was
+             * because a bit got shifted off the left end, so overflowed.
+             * But if it worked, add the new digit. */
+            if (LIKELY((tentative_value >> shift) == value)) {
+                value = tentative_value | XDIGIT_VALUE(*s);
                     /* Note XDIGIT_VALUE() is branchless, works on binary
                      * and octal as well, so can be used here, without
                      * slowing those down */
-                factor *= 1 << shift;
+                factor *= base;
                 continue;
             }
 
@@ -519,13 +535,14 @@ Perl_grok_bin_oct_hex(pTHX_ const char *start,
              * 'value_nv' eventually, either when all digits are gone, or we
              * have overflowed this fresh start. */
             value = XDIGIT_VALUE(*s);
-            factor = 1 << shift;
+            factor = base;
 
             if (! overflowed) {
                 overflowed = TRUE;
-                if (   ! (input_flags & PERL_SCAN_SILENT_OVERFLOW)
-                    &&    ckWARN_d(WARN_OVERFLOW))
-                {
+                if (input_flags & PERL_SCAN_SILENT_OVERFLOW) {
+                    *flags |= PERL_SCAN_SILENT_OVERFLOW;
+                }
+                else if (ckWARN_d(WARN_OVERFLOW)) {
                     warner(packWARN(WARN_OVERFLOW),
                            "Integer overflow in %s number",
                            (base == 16) ? "hexadecimal"
@@ -545,11 +562,20 @@ Perl_grok_bin_oct_hex(pTHX_ const char *start,
                 /* Don't allow a leading underscore if the only-medial bit is
                  * set */
             && (   LIKELY(s > s0)
-                || UNLIKELY((input_flags & PERL_SCAN_ALLOW_MEDIAL_UNDERSCORES)
-                                        != PERL_SCAN_ALLOW_MEDIAL_UNDERSCORES)))
+                || UNLIKELY(! (  input_flags
+                               & PERL_SCAN_ALLOW_MEDIAL_UNDERSCORES_ONLY))))
         {
             ++s;
-            goto redo;
+
+            /* To get here with the value so-far being 0 means we've only had
+             * leading zeros, then an underscore.  We can continue with the
+             * branchless switch() instead of this loop */
+            if (value == 0) {
+                goto redo_switch;
+            }
+            else {
+                goto redo;
+            }
         }
 
         if (*s) {
@@ -588,10 +614,10 @@ Perl_grok_bin_oct_hex(pTHX_ const char *start,
 
     if (LIKELY(! overflowed)) {
 #if UVSIZE > 4
-        if (      UNLIKELY(value > 0xffffffff)
-            && ! (input_flags & PERL_SCAN_SILENT_NON_PORTABLE))
-        {
-            output_non_portable(base);
+        if (UNLIKELY(value > 0xffffffff)) {
+            if (! (input_flags & PERL_SCAN_SILENT_NON_PORTABLE)) {
+                output_non_portable(base);
+            }
             *flags |= PERL_SCAN_SILENT_NON_PORTABLE;
         }
 #endif

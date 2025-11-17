@@ -3731,16 +3731,25 @@ S_refkids(pTHX_ OP *o, I32 type)
 }
 
 
-/* Apply reference (autovivification) context to the subtree at o.
- * For example in
- *     push @{expression}, ....;
- * o will be the head of 'expression' and type will be OP_RV2AV.
- * It marks the op o (or a suitable child) as autovivifying, e.g. by
- * setting  OPf_MOD.
- * For OP_RV2AV/OP_PADAV and OP_RV2HV/OP_PADHV sets OPf_REF too if
- * set_op_ref is true.
+/* doref(): apply reference autovivification context (and scalar and
+ * lvalue context) to a subtree. For example, in:
  *
- * Also calls scalar(o).
+ *     @{expression} = ...;
+ *
+ * the expression is expected to return an AV ref. If the expression
+ * is (for example) $h{foo}, then the OP_HELEM op associated with the
+ * expression needs to be flagged with:
+ *    - OPf_MOD to indicate that it should autovivify if the element
+ *      doesn't exist
+ *    - OPpDEREF_AV to indicate that the autovivified return value should
+ *      be [] rather than undef.
+ *
+ * The 'o' parameter is the head of the expression and 'type' is the
+ * context to apply (OP_RV2AV in the example above).
+ *
+ * If 'set_op_ref' is true, it also sets the OPf_REF flag on OP_RV2[AH]V
+ * and OP_PAD[AH]V ops
+ *
  */
 
 OP *
@@ -3753,42 +3762,55 @@ Perl_doref(pTHX_ OP *o, I32 type, bool set_op_ref)
     if (PL_parser && PL_parser->error_count)
         return o;
 
+    /* iterate down the tree */
+
     while (1) {
         switch (o->op_type) {
         case OP_ENTERSUB:
             if ((type == OP_EXISTS || type == OP_DEFINED) &&
-                !(o->op_flags & OPf_STACKED)) {
+                !(o->op_flags & OPf_STACKED))
+            {
+                /* 'defined &foo' etc: downgrade from a func call
+                 * to just a special CV retrieval */
                 OpTYPE_set(o, OP_RV2CV);             /* entersub => rv2cv */
                 assert(cUNOPo->op_first->op_type == OP_NULL);
                 /* disable pushmark */
                 op_null(cLISTOPx(cUNOPo->op_first)->op_first);
                 o->op_flags |= OPf_SPECIAL;
             }
-            else if (type == OP_RV2SV || type == OP_RV2AV || type == OP_RV2HV){
-                o->op_private |= (type == OP_RV2AV ? OPpDEREF_AV
-                                  : type == OP_RV2HV ? OPpDEREF_HV
-                                  : OPpDEREF_SV);
-                o->op_flags |= OPf_MOD;
-            }
+            else
+                goto set_cxt;
 
             break;
 
         case OP_COND_EXPR:
+            /* OP_COND_EXPR is the only op where we have to propagate
+             * context to *both* branches. Recurse on the first branch,
+             * then iterate on the second branch.
+             */
             o = OpSIBLING(cUNOPo->op_first);
+            doref(o, type, set_op_ref);
+            o = OpSIBLING(o);
             continue;
 
         case OP_RV2SV:
             if (type == OP_DEFINED)
                 o->op_flags |= OPf_SPECIAL;		/* don't create GV */
             /* FALLTHROUGH */
+        case OP_AELEM:
+        case OP_HELEM:
         case OP_PADSV:
+        set_cxt:
+            /* if the parent wants an SV/AV/HV ref, set flags indicating
+             * that this op should autovivify such a value if need be */
             if (type == OP_RV2SV || type == OP_RV2AV || type == OP_RV2HV) {
                 o->op_private |= (type == OP_RV2AV ? OPpDEREF_AV
                                   : type == OP_RV2HV ? OPpDEREF_HV
                                   : OPpDEREF_SV);
                 o->op_flags |= OPf_MOD;
             }
-            if (o->op_flags & OPf_KIDS) {
+            if (o->op_flags & OPf_KIDS && o->op_type != OP_ENTERSUB) {
+                /* propagate the context of *this* op to its children */
                 type = o->op_type;
                 o = cUNOPo->op_first;
                 continue;
@@ -3820,18 +3842,6 @@ Perl_doref(pTHX_ OP *o, I32 type, bool set_op_ref)
              o = cBINOPo->op_first;
             continue;
 
-        case OP_AELEM:
-        case OP_HELEM:
-            if (type == OP_RV2SV || type == OP_RV2AV || type == OP_RV2HV) {
-                o->op_private |= (type == OP_RV2AV ? OPpDEREF_AV
-                                  : type == OP_RV2HV ? OPpDEREF_HV
-                                  : OPpDEREF_SV);
-                o->op_flags |= OPf_MOD;
-            }
-            type = o->op_type;
-            o = cBINOPo->op_first;
-            continue;;
-
         case OP_SCOPE:
         case OP_LEAVE:
             set_op_ref = FALSE;
@@ -3847,22 +3857,12 @@ Perl_doref(pTHX_ OP *o, I32 type, bool set_op_ref)
             break;
         } /* switch */
 
-        while (1) {
-            if (o == top_op)
-                return scalar(top_op); /* at top; no parents/siblings to try */
-            if (OpHAS_SIBLING(o)) {
-                o = o->op_sibparent;
-                /* Normally skip all siblings and go straight to the parent;
-                 * the only op that requires two children to be processed
-                 * is OP_COND_EXPR */
-                if (!OpHAS_SIBLING(o)
-                        && o->op_sibparent->op_type == OP_COND_EXPR)
-                    break;
-                continue;
-            }
-            o = o->op_sibparent; /* try parent's next sibling */
-        }
+        /* whole tree has been scanned for ref stuff; now propagate
+         * scalar context */
+        return scalar(top_op);
+
     } /* while */
+
 }
 
 

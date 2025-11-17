@@ -1099,6 +1099,99 @@ S_pm_description(pTHX_ const PMOP *pm)
 }
 
 
+/* S_get_cv_from_op(): a helper function for op_dump().
+ *
+ * Find the CV which the OP o is contained within.
+ *
+ * Since an op can be dumped at any time, there is no guarantee that the
+ * OP is associated with the current PL_curpad. So try to find the
+ * currently running CV or eval, and see if it contains the OP. Or if it's
+ * compile-time, see if the op is contained within one of the op subtrees
+ * on the parser stack.
+ *
+ * Return NULL if it can't be found.
+ *
+ * Sometimes the caller *does* know what CV is being dumped; if so, it
+ * is passed as rootcv.
+ *
+ * Since this may be called during debugging and things may not be in a
+ * sane state, be conservative, and if in doubt, return NULL.
+ */
+
+static CV *
+S_get_cv_from_op(pTHX_ const OP *o, CV *rootcv)
+{
+    if (rootcv)
+        return rootcv;
+
+    /* Find the root of the optree this op is embedded in. For a compiled
+     * sub, this root will typically be a leavesub or similar attached to
+     * a CV. If compiling, this may be a small subtree on the parser
+     * stack. Limit the number of hops, in case there is some sort of
+     * loop or other weirdness.
+     */
+    int n = 100;
+    OP *oproot = (OP*)o;
+    while (1) {
+        if (--n <= 0)
+            return NULL;
+        OP *p = op_parent(oproot);
+        if (!p)
+            break;
+        oproot = p;
+    }
+
+    /* We may be compiling; so first look for the op within the subtrees
+     * on the parse stack, if any */
+    if (PL_parser && PL_parser->stack) {
+        yy_stack_frame *ps;
+
+        for (ps = PL_parser->ps; ps > PL_parser->stack; ps--) {
+            if (ps->val.opval == oproot)
+                return ps->compcv;
+        }
+    }
+
+    /* Find the currently running CV or eval, if any, and see if our op
+     * is part of that CV's optree. If no contexts are found, we're
+     * probably running the main program.
+     */
+    I32 i;
+    for (i = cxstack_ix; i >= 0; i--) {
+        CV *cv;
+        const PERL_CONTEXT * const cx = &cxstack[i];
+        switch (CxTYPE(cx)) {
+        default:
+            continue;
+        case CXt_EVAL:
+            if (CxTRY(cx)) /* eval { } doesn't have a separate optree */
+                continue;
+            cv = cxstack[i].blk_eval.cv;
+            /* XXX note that an EVAL's CV doesn't actually hold a pointer
+             * to the optree's root; we have to hope that PL_eval_root
+             * does instead */
+            if (!cv || !CvEVAL(cv) || oproot != PL_eval_root)
+                continue;
+            return cv;
+        case CXt_SUB:
+            if (cx->cx_type & CXp_SUB_RE_FAKE)
+                continue;
+            /* FALLTHROUGH */
+        case CXt_FORMAT:
+            cv = cxstack[i].blk_sub.cv;
+            if (!cv || CvISXSUB(cv) || oproot != CvROOT(cv))
+                continue;
+            return cv;
+        }
+    }
+
+    if (PL_main_cv && PL_main_root == oproot)
+        return PL_main_cv;
+
+    return NULL;
+}
+
+
 /* S_get_sv_from_pad(): a helper function for op_dump().
  *
  * On threaded builds, try to find the SV indexed by the OP o (e.g. via
@@ -1127,90 +1220,15 @@ S_get_sv_from_pad(pTHX_ const OP *o, PADOFFSET po, CV *rootcv)
     if (!po)
         return NULL;
 
-    CV *cv = NULL;
-    int n;
-    OP *oproot;
-
-    if (rootcv) {
-        cv = rootcv;
-        goto got_cv;
-    }
-
-    /* Find the root of the optree this op is embedded in. For a compiled
-     * sub, this root will typically be a leavesub or similar attached to
-     * a CV. If compiling, this may be a small subtree on the parser
-     * stack. Limit the number of hops, in case there is some sort of
-     * loop or other weirdness.
-     */
-    n = 100;
-    oproot = (OP*)o;
-    while (1) {
-        if (--n <= 0)
-            return NULL;
-        OP *p = op_parent(oproot);
-        if (!p)
-            break;
-        oproot = p;
-    }
-
-    /* We may be compiling; so first look for the op within the subtrees
-     * on the parse stack, if any */
-    if (PL_parser && PL_parser->stack) {
-        yy_stack_frame *ps;
-
-        for (ps = PL_parser->ps; ps > PL_parser->stack; ps--) {
-            if (ps->val.opval == oproot) {
-                cv = ps->compcv;
-                if (!cv)
-                    return NULL; /* this shouldn't actually happen */
-                goto got_cv;
-            }
-        }
-    }
-
-    /* Find the currently running CV or eval, if any, and see if our op
-     * is part of that CV's optree. If no contexts are found, we're
-     * probably running the main program.
-     */
-    I32 i;
-    for (i = cxstack_ix; i >= 0; i--) {
-        const PERL_CONTEXT * const cx = &cxstack[i];
-        switch (CxTYPE(cx)) {
-        default:
-            continue;
-        case CXt_EVAL:
-            if (CxTRY(cx)) /* eval { } doesn't have a separate optree */
-                continue;
-            cv = cxstack[i].blk_eval.cv;
-            /* XXX note that an EVAL's CV doesn't actually hold a pointer
-             * to the optree's root; we have to hope that PL_eval_root
-             * does instead */
-            if (!cv || !CvEVAL(cv) || oproot != PL_eval_root)
-                continue;
-            goto got_cv;
-        case CXt_SUB:
-            if (cx->cx_type & CXp_SUB_RE_FAKE)
-                continue;
-            /* FALLTHROUGH */
-        case CXt_FORMAT:
-            cv = cxstack[i].blk_sub.cv;
-            if (!cv || CvISXSUB(cv) || oproot != CvROOT(cv))
-                continue;
-            goto got_cv;
-        }
-    }
-
-    if (PL_main_cv && PL_main_root == oproot) {
-        cv = PL_main_cv;
-        goto got_cv;
-    }
-    return NULL;
+    CV *cv = S_get_cv_from_op(aTHX_ o, rootcv);
+    if (!cv)
+        return NULL;
 
    /* Lookup the entry in the pad associated with this CV.
     * Note that for SVs moved into the pad, they are shared at all pad
     * depths, so we only have to look at depth 1 and not worry about
     * CvDEPTH(). */
-   got_cv:
+
     padlist = CvPADLIST(cv);
     if (!padlist)
         return NULL;
@@ -1267,7 +1285,9 @@ S_sequence_num(pTHX_ const OP *o)
 }
 
 
-
+/* forward declaration */
+STATIC void
+S_deb_padvar_cv(pTHX_ CV *cv, PADOFFSET off, int n, bool paren);
 
 
 const struct flag_to_name op_flags_names[] = {
@@ -1361,9 +1381,39 @@ S_do_op_dump_bar(pTHX_ I32 level, UV bar, PerlIO *file, const OP *o,
         }
     }
 
-    if (o->op_targ && optype != OP_NULL)
-            S_opdump_indent(aTHX_ o, level, bar, file, "TARG = %ld\n",
-                (long)o->op_targ);
+    if (o->op_targ && optype != OP_NULL) {
+        S_opdump_indent(aTHX_ o, level, bar, file, "TARG = %ld",
+            (long)o->op_targ);
+
+        /* Display the names of the lexical variables (if any)
+         * associated with op_targ */
+        int n = 1;
+
+        switch (o->op_type) {
+        case OP_PADRANGE:
+            n = o->op_private & OPpPADRANGE_COUNTMASK;
+            /* FALLTHROUGH */
+        case OP_PADSV:
+        case OP_PADAV:
+        case OP_PADHV:
+        case OP_ARGELEM:
+        case OP_PADSV_STORE:
+        case OP_AELEMFAST_LEX:
+          do_lex:
+            PerlIO_puts(file, " ");
+            S_deb_padvar_cv(aTHX_ S_get_cv_from_op(aTHX_ o, rootcv),
+                              o->op_targ,
+                              n, 1);
+            break;
+
+        default:
+            if (   (PL_opargs[o->op_type] & OA_TARGLEX)
+                && (o->op_private & OPpTARGET_MY))
+              goto do_lex;
+        }
+
+        PerlIO_puts(file, "\n");
+    }
 
     if (o->op_flags || o->op_slabbed || o->op_savefree || o->op_static) {
         SV * const tmpsv = newSVpvs("");
@@ -3254,13 +3304,13 @@ Perl_runops_debug(pTHX)
 }
 
 
-/* print the names of the n lexical vars starting at pad offset off */
+/* Print the names of the n lexical vars starting at pad offset off
+ * in the specified CV */
 
 STATIC void
-S_deb_padvar(pTHX_ PADOFFSET off, int n, bool paren)
+S_deb_padvar_cv(pTHX_ CV *cv, PADOFFSET off, int n, bool paren)
 {
     PADNAME *sv;
-    CV * const cv = deb_curcv(cxstack_ix);
     PADNAMELIST *comppad = NULL;
     int i;
 
@@ -3281,6 +3331,16 @@ S_deb_padvar(pTHX_ PADOFFSET off, int n, bool paren)
     }
     if (paren)
         PerlIO_printf(Perl_debug_log, ")");
+}
+
+
+/* Print the names of the n lexical vars starting at pad offset off n the
+ * currently executing CV */
+
+STATIC void
+S_deb_padvar(pTHX_ PADOFFSET off, int n, bool paren)
+{
+    S_deb_padvar_cv(aTHX_ deb_curcv(cxstack_ix), off, n, paren);
 }
 
 

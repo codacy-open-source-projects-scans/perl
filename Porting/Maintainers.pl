@@ -835,7 +835,7 @@ our %Modules = (
     },
 
     'Module::CoreList' => {
-        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20250923.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20251022.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
     },
 
@@ -1090,8 +1090,8 @@ our %Modules = (
     },
 
     'Term::Table' => {
-        'DISTRIBUTION' => 'EXODIST/Term-Table-0.025.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Sun Aug 31 22:13:35 2025',
+        'DISTRIBUTION' => 'EXODIST/Term-Table-0.027.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Sat Nov 15 21:20:44 2025',
         'FILES'        => q[cpan/Term-Table],
         'EXCLUDED'     => [
             qw( appveyor.yml ),
@@ -1121,8 +1121,8 @@ our %Modules = (
     },
 
     'Test::Simple' => {
-        'DISTRIBUTION' => 'EXODIST/Test-Simple-1.302214.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Fri Jun 27 06:54:11 2025',
+        'DISTRIBUTION' => 'EXODIST/Test-Simple-1.302215.tar.gz',
+        'SYNCINFO'     => 'tib on Fri Nov 14 12:18:03 2025',
         'FILES'        => q[cpan/Test-Simple],
         'EXCLUDED'     => [
             qr{^examples/},
@@ -1256,8 +1256,8 @@ our %Modules = (
     },
 
     'Time::Piece' => {
-        'DISTRIBUTION' => 'ESAYM/Time-Piece-1.39.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Sat Oct 25 12:20:55 2025',
+        'DISTRIBUTION' => 'ESAYM/Time-Piece-1.41.tar.gz',
+        'SYNCINFO'     => 'tib on Fri Nov 14 11:59:09 2025',
         'FILES'        => q[cpan/Time-Piece],
         'EXCLUDED'     => [ qw[reverse_deps.txt] ],
     },
