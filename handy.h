@@ -342,8 +342,15 @@ don't, so that you can portably take advantage of this C99 feature.
 #  define isPOWER_OF_2(n) ((n) && ((n) & ((n)-1)) == 0)
 #endif
 
-/* Returns a mask with the lowest n bits set */
-#define nBIT_MASK(n) ((UINTMAX_C(1) << (n)) - 1)
+/* Returns a mask with the lowest n bits set.  Avoids undefined behavior if n
+ * is, say, 64 on a 64-bit system, by:
+ *  1) shifting only 63 yielding 1000000...000
+ *  2) subtracting 1, yielding   0111111...111
+ *  3) shifting by 1, yielding   1111111...110
+ *  4) adding the final bit yielding all 1's */
+#define nBIT_MASK(n)                                                        \
+            (((n) == 0) ? 0 : (((UINTMAX_C(1) << ((n) - 1)) - 1) << 1) | 1)
+                            //  |_________________________|
 
 /* The largest unsigned number that will fit into n bits */
 #define nBIT_UMAX(n)  nBIT_MASK(n)
@@ -450,7 +457,7 @@ a string/length pair.
 
 
 /*
-=for apidoc_defn mx|void|lex_stuff_pvs|"pv"|U32 flags
+=for apidoc_defn Emx|void|lex_stuff_pvs|"pv"|U32 flags
 
 =cut
 */
@@ -683,8 +690,8 @@ based on the underlying C library functions):
 #define strnNE(s1,s2,l) (strncmp(s1,s2,l) != 0)
 #define strnEQ(s1,s2,l) (strncmp(s1,s2,l) == 0)
 
-#define memEQ(s1,s2,l) (memcmp(((const void *) (s1)), ((const void *) (s2)), l) == 0)
-#define memNE(s1,s2,l) (! memEQ(s1,s2,l))
+#define memNE(s1,s2,l) (memcmp(s1,s2,l) != 0)
+#define memEQ(s1,s2,l) (memcmp(s1,s2,l) == 0)
 
 /* memEQ and memNE where second comparand is a string constant */
 #define memEQs(s1, l, s2) \
@@ -2554,16 +2561,18 @@ typedef U32 line_t;
 /* Converts a character KNOWN to represent a hexadecimal digit (0-9, A-F, or
  * a-f) to its numeric value without using any branches.  The input is
  * validated only by an assert() in DEBUGGING builds.
- *
  * It works by right shifting and isolating the bit that is 0 for the digits,
  * and 1 for at least the alphas A-F, a-f.  The bit is shifted to the ones
  * position, and then to the eights position.  Both are added together to form
  * 0 if the input is '0'-'9' and to form 9 if alpha.  This is added to the
  * final four bits of the input to form the correct value. */
-#define XDIGIT_VALUE(c) (assert(isXDIGIT(c)),                               \
-           ((NATIVE_TO_LATIN1(c) >> 6) & 1)  /* 1 if alpha; 0 if not */     \
-         + ((NATIVE_TO_LATIN1(c) >> 3) & 8)  /* 8 if alpha; 0 if not */     \
-         + ((c) & 0xF))   /* 0-9 if input valid hex digit */
+
+#define XDIGIT_VALUE(c)                                                     \
+        (assert(isXDIGIT(c)),                                               \
+         ( (  (NATIVE_TO_LATIN1(c) & 0x40) >> 3) /* 8 if alpha; 0 if not */ \
+            | (NATIVE_TO_LATIN1(c) & 0x40) >> 6) /* 1 if alpha; 0 if not */ \
+                                       /* After OR: 9 if alpha, 0 if not */ \
+          + ((c) & 0xF))                 /* 0-9 if input valid hex digit */
 
 /* The argument is a string pointer, which is advanced. */
 #define READ_XDIGIT(s)  ((s)++, XDIGIT_VALUE(*((s) - 1)))

@@ -561,7 +561,7 @@ Commit your changes:
  $ git commit -a -m 'Bump the perl version in various places for 5.X.Y'
 
 At this point you may want to compare the commit with a previous bump to
-see if they look similar.  See commit f7cf42bb69 for an example of a
+see if they look similar.  See commit L<f7cf42bb69|https://github.com/Perl/perl5/commit/f7cf42bb69> for an example of a
 previous version bump.
 
 When the version number is bumped, you should also update Module::CoreList
@@ -1121,11 +1121,19 @@ paths.
 Note that the results may be different without a F<.git/> directory,
 which is why you should test from the tarball.
 
+=for checklist skip BLEAD-POINT
+
 =head4 Run the Installation Verification Procedure utility
 
  $ bin/perlivp
+ ...
+ All tests successful.
+ $
 
- # Or, perhaps:
+=for checklist skip RC MAINT BLEAD-FINAL
+
+=head4 Run the Installation Verification Procedure utility
+
  $ bin/perlivp5.X.Y
  ...
  All tests successful.
@@ -1153,14 +1161,23 @@ performing these actions:
 
  $ unset PERL5LIB PERL_MB_OPT PERL_LOCAL_LIB_ROOT PERL_MM_OPT
 
+=for checklist skip BLEAD-POINT
+
 =head4 Bootstrap the CPAN client
 
 Bootstrap the CPAN client on the clean install:
 
  $ bin/cpan
 
- # Or, perhaps:
+=for checklist skip RC MAINT BLEAD-FINAL
+
+=head4 Bootstrap the CPAN client
+
+Bootstrap the CPAN client on the clean install:
+
  $ bin/cpan5.X.Y
+
+=for checklist skip BLEAD-POINT
 
 =head4 Install the Inline module with CPAN and test it
 
@@ -1174,13 +1191,50 @@ Check that your perl can run this:
 
  $ bin/perl -lwe "use Inline C => q[int f() { return 42;}]; print f"
  42
- $
+
+=for checklist skip RC MAINT BLEAD-FINAL
+
+=head4 Install the Inline module with CPAN and test it
+
+Try installing a popular CPAN module that's reasonably complex and that
+has dependencies; for example:
+
+ CPAN> install Inline::C
+ CPAN> quit
+
+Check that your perl can run this:
+
+ $ bin/perl5.X.Y -lwe "use Inline C => q[int f() { return 42;}]; print f"
+ 42
+
+=for checklist skip BLEAD-POINT
 
 =head4 Make sure that perlbug works
 
 Test L<perlbug> with the following:
 
  $ bin/perlbug
+ ...
+ Subject: test bug report
+ Local perl administrator [yourself]:
+ Editor [vi]:
+ Module:
+ Category [core]:
+ Severity [low]:
+ (edit report)
+ Action (Send/Display/Edit/Subject/Save to File): f
+ Name of file to save message in [perlbug.rep]:
+
+Then carefully examine the output (in F<perlbug.rep]>), especially
+the "Locally applied patches" section.
+
+=for checklist skip RC MAINT BLEAD-FINAL
+
+=head4 Make sure that perlbug works
+
+Test L<perlbug> with the following:
+
+ $ bin/perlbug5.X.Y
  ...
  Subject: test bug report
  Local perl administrator [yourself]:
@@ -1325,11 +1379,12 @@ You can include the customary link to the release announcement even before your
 message reaches the web-visible archives by looking for the X-List-Archive
 header in your message after receiving it back via perl5-porters.
 
+=for checklist skip RC BLEAD-POINT
+
 =head3 Update the link to the latest perl on perlweb
 
-Submit a pull request to L<https://github.com/perlorg/perlweb>.  For a dev
-release, update the link in F<docs/dev/perl5/index.html>.  For a stable
-release, update F<docs/shared/tpl/stats.html>.
+Submit a pull request to L<https://github.com/perlorg/perlweb>. 
+Update the link in F<docs/dev/perl5/index.html> and F<docs/shared/tpl/stats.html>.
 
 =for checklist skip RC
 
@@ -1485,7 +1540,7 @@ Commit your changes:
  $ git commit -a -m 'Bump the perl version in various places for 5.X.Y'
 
 At this point you may want to compare the commit with a previous bump to
-see if they look similar.  See commit f7cf42bb69 for an example of a
+see if they look similar.  See commit L<f7cf42bb69|https://github.com/Perl/perl5/commit/f7cf42bb69> for an example of a
 previous version bump.
 
 When the version number is bumped, you should also update Module::CoreList

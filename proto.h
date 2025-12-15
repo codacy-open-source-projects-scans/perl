@@ -55,9 +55,6 @@ Perl_PerlLIO_open_cloexec(pTHX_ const char *file, int flag)
 #define PERL_ARGS_ASSERT_PERLLIO_OPEN_CLOEXEC   \
         assert(file)
 
-/* PERL_CALLCONV const XOP *
-Perl_custom_op_xop(pTHX_ const OP *o); */
-
 PERL_CALLCONV const char *
 Perl_langinfo(const nl_item item);
 #define PERL_ARGS_ASSERT_PERL_LANGINFO
@@ -790,9 +787,6 @@ Perl_die_unwind(pTHX_ SV *msv)
         __attribute__visibility__("hidden");
 #define PERL_ARGS_ASSERT_DIE_UNWIND             \
         assert(msv)
-
-/* PERL_CALLCONV bool
-Perl_do_aexec(pTHX_ SV *really, SV **mark, SV **sp); */
 
 PERL_CALLCONV bool
 Perl_do_aexec5(pTHX_ SV *really, SV **mark, SV **sp, int fd, int do_report)
@@ -1710,9 +1704,6 @@ Perl_hv_store_ent(pTHX_ HV *hv, SV *key, SV *val, U32 hash); */
 
 /* PERL_CALLCONV SV **
 Perl_hv_store_flags(pTHX_ HV *hv, const char *key, I32 klen, SV *val, U32 hash, int flags); */
-
-/* PERL_CALLCONV SV **
-Perl_hv_stores(pTHX_ HV *hv, const char * const key, SV *val); */
 
 /* PERL_CALLCONV void
 Perl_hv_undef(pTHX_ HV *hv); */
@@ -2648,9 +2639,6 @@ PERL_CALLCONV Pid_t
 Perl_my_fork(void);
 #define PERL_ARGS_ASSERT_MY_FORK
 
-/* PERL_CALLCONV I32
-Perl_my_lstat(pTHX); */
-
 PERL_CALLCONV I32
 Perl_my_lstat_flags(pTHX_ const U32 flags);
 #define PERL_ARGS_ASSERT_MY_LSTAT_FLAGS
@@ -2687,9 +2675,6 @@ Perl_my_snprintf(char *buffer, const Size_t len, const char *format, ...)
 PERL_CALLCONV int
 Perl_my_socketpair(int family, int type, int protocol, int fd[2]);
 #define PERL_ARGS_ASSERT_MY_SOCKETPAIR
-
-/* PERL_CALLCONV I32
-Perl_my_stat(pTHX); */
 
 PERL_CALLCONV I32
 Perl_my_stat_flags(pTHX_ const U32 flags);
@@ -3574,8 +3559,8 @@ PERL_CALLCONV Signal_t
 Perl_perly_sighandler(int sig, Siginfo_t *info, void *uap, bool safe);
 #define PERL_ARGS_ASSERT_PERLY_SIGHANDLER
 
-/* PERL_CALLCONV const char * const
-Perl_phase_name(pTHX_ enum perl_phase); */
+/* PERL_CALLCONV const char *
+Perl_phase_name(pTHX_ enum perl_phase phase); */
 
 PERL_CALLCONV void
 Perl_pmop_dump(pTHX_ PMOP *pm);
@@ -3607,7 +3592,7 @@ Perl_pregexec(pTHX_ REGEXP * const prog, char *stringarg, char *strend, char *st
 #define PERL_ARGS_ASSERT_PREGEXEC               \
         assert(prog); assert(stringarg); assert(strend); assert(strbeg); \
         assert(screamer); assert(strbeg <= stringarg); \
-        assert(stringarg < strend)
+        assert(stringarg <= strend)
 
 PERL_CALLCONV void
 Perl_pregfree(pTHX_ REGEXP *r);
@@ -6177,10 +6162,16 @@ Perl_invlist_search_(SV * const invlist, const UV cp)
 PERL_CALLCONV SV *
 Perl_add_range_to_invlist_(pTHX_ SV *invlist, UV start, UV end)
         __attribute__warn_unused_result__;
+/* PERL_CALLCONV void
+invlist_intersection_(pTHX_ SV * const a, SV * const b, SV **i); */
 PERL_CALLCONV void
 Perl_invlist_intersection_maybe_complement_2nd_(pTHX_ SV * const a, SV * const b, const bool complement_b, SV **i);
 PERL_CALLCONV void
 Perl_invlist_invert_(pTHX_ SV * const invlist);
+/* PERL_CALLCONV void
+invlist_subtract_(pTHX_ SV * const a, SV * const b, SV **result); */
+/* PERL_CALLCONV void
+invlist_union_(pTHX_ SV * const a, SV * const b, SV **output); */
 PERL_CALLCONV void
 Perl_invlist_union_maybe_complement_2nd_(pTHX_ SV * const a, SV * const b, const bool complement_b, SV **output);
 PERL_CALLCONV SV *
@@ -6884,20 +6875,11 @@ S_do_trans_simple(pTHX_ SV * const sv, const OPtrans_map * const tbl)
     defined(PERL_IN_REGCOMP_ANY) || defined(PERL_IN_UTF8_C)
 # define PERL_ARGS_ASSERT_ADD_RANGE_TO_INVLIST_
 
-/* PERL_CALLCONV void
-invlist_intersection_(pTHX_ SV * const a, SV * const b, SV **i); */
-
 # define PERL_ARGS_ASSERT_INVLIST_INTERSECTION_MAYBE_COMPLEMENT_2ND_ \
         assert(b); assert(i)
 
 # define PERL_ARGS_ASSERT_INVLIST_INVERT_       \
         assert(invlist)
-
-/* PERL_CALLCONV void
-invlist_subtract_(pTHX_ SV * const a, SV * const b, SV **result); */
-
-/* PERL_CALLCONV void
-invlist_union_(pTHX_ SV * const a, SV * const b, SV **output); */
 
 # define PERL_ARGS_ASSERT_INVLIST_UNION_MAYBE_COMPLEMENT_2ND_ \
         assert(b); assert(output)
@@ -8090,7 +8072,7 @@ S_get_num(pTHX_ const char *patptr, SSize_t *lenptr)
 STATIC const char *
 S_group_end(pTHX_ const char *patptr, const char *patend, char ender);
 # define PERL_ARGS_ASSERT_GROUP_END             \
-        assert(patptr); assert(patend); assert(patptr < patend)
+        assert(patptr); assert(patend); assert(patptr <= patend)
 
 STATIC SV *
 S_is_an_int(pTHX_ const char *s, STRLEN l)
@@ -10749,9 +10731,6 @@ PERL_CALLCONV bool
 Perl_dump_c_backtrace(pTHX_ PerlIO *fp, int max_depth, int skip);
 # define PERL_ARGS_ASSERT_DUMP_C_BACKTRACE      \
         assert(fp)
-
-/* PERL_CALLCONV void
-free_c_backtrace(pTHX_ Perl_c_backtrace *bt); */
 
 PERL_CALLCONV Perl_c_backtrace *
 Perl_get_c_backtrace(pTHX_ int max_depth, int skip)
