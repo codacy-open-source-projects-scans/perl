@@ -3726,17 +3726,14 @@ delimit its argument.  C<goto("NE")."XT"> is equivalent to C<goto NEXT>.
 Also, unlike most named operators, this has the same precedence as
 assignment.
 
-Use of C<goto LABEL> or C<goto EXPR> to jump into a construct is
-deprecated and will issue a warning; it will become a fatal error in
-Perl 5.42. While still available, it may not be used to
-go into any construct that requires initialization, such as a
-subroutine, a C<foreach> loop, or a C<given>
-block.  In general, it may not be used to jump into the parameter
-of a binary or list operator, but it may be used to jump into the
-I<first> parameter of a binary operator.  (The C<=>
-assignment operator's "first" operand is its right-hand
-operand.)  It also can't be used to go into a
-construct that is optimized away.
+Use of C<goto LABEL> or C<goto EXPR> to jump into a construct becomes an
+exception in Perl 5.44; a fatal error notification is emitted.  It may not be
+used to go into any construct that requires initialization, such as a
+subroutine, a C<foreach> loop, or a C<given> block.  In general, it may not be
+used to jump into the parameter of a binary or list operator, but it may be
+used to jump into the I<first> parameter of a binary operator.  (The C<=>
+assignment operator's "first" operand is its right-hand operand.)  It also
+can't be used to go into a construct that is optimized away.
 
 The C<goto &NAME> form is quite different from the other forms of
 C<goto>.  In fact, it isn't a goto in the normal sense at
@@ -7111,6 +7108,7 @@ would have semantics similar to the following:
                 croak $@ ? "$@Compilation failed in require"
                          : "Can't locate $filename: $!\n";
             }
+            return 1 if $feature_module_true_enabled_in_file;
             if (!$result) {
                 delete $INC{$filename};
                 croak "$filename did not return true value";
@@ -7135,6 +7133,11 @@ itself with this issue. See L<feature> for more details. Note that this
 affects the compilation unit within which the feature is used, and using
 it before requiring a module will not change the behavior of existing
 modules that do not themselves also use it.
+
+In this usage, the (truthy) result of the required file will be returned,
+but this should not be relied upon as it will not be returned in subsequent
+C<require> calls on the same file or with the 'module_true' feature enabled.
+To run a file and retrieve its return value, use L<C<do>|/do EXPR>.
 
 If EXPR is a bareword, C<require> assumes a F<.pm>
 extension and replaces C<::> with C</> in the filename for you,
