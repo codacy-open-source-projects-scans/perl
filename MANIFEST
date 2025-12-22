@@ -4211,8 +4211,6 @@ dist/ExtUtils-ParseXS/t/104-map_type.t				ExtUtils::ParseXS tests
 dist/ExtUtils-ParseXS/t/105-valid_proto_string.t		ExtUtils::ParseXS tests
 dist/ExtUtils-ParseXS/t/106-process_typemaps.t			ExtUtils::ParseXS tests
 dist/ExtUtils-ParseXS/t/108-map_type.t				ExtUtils::ParseXS tests
-dist/ExtUtils-ParseXS/t/109-standard_XS_defs.t			ExtUtils::ParseXS tests
-dist/ExtUtils-ParseXS/t/111-analyze_preprocessor_statements.t	ExtUtils::ParseXS tests
 dist/ExtUtils-ParseXS/t/112-set_cond.t				ExtUtils::ParseXS tests
 dist/ExtUtils-ParseXS/t/113-check_cond_preproc_statements.t	ExtUtils::ParseXS tests
 dist/ExtUtils-ParseXS/t/114-blurt_death_Warn.t			ExtUtils::ParseXS tests
@@ -5775,6 +5773,7 @@ pod/perl5432delta.pod			Perl changes in version 5.43.2
 pod/perl5433delta.pod			Perl changes in version 5.43.3
 pod/perl5434delta.pod			Perl changes in version 5.43.4
 pod/perl5435delta.pod			Perl changes in version 5.43.5
+pod/perl5436delta.pod			Perl changes in version 5.43.6
 pod/perl561delta.pod			Perl changes in version 5.6.1
 pod/perl56delta.pod			Perl changes in version 5.6
 pod/perl581delta.pod			Perl changes in version 5.8.1
