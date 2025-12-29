@@ -465,6 +465,9 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
     NV value_nv = 0;
     const PERL_UINT_FAST8_T base = 1 << shift;  /* 2, 8, or 16 */
 
+    /* Value above which, the next digit processed would overflow */
+    UV max_div = UV_MAX >> shift;
+
     for (; s < e; s++) {
         if (generic_isCC_(*s, class_bit)) {
             /* Write it in this wonky order with a goto to attempt to get the
@@ -473,18 +476,12 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
                (khw suspects that adding a LIKELY() just above would do the
                same thing) */
           redo: ;
-
-            /* Make room for the next digit */
-            UV tentative_value = value << shift;
-
-            /* If shiftng back doesn't yield the previous value, it was
-             * because a bit got shifted off the left end, so overflowed.
-             * But if it worked, add the new digit. */
-            if (LIKELY((tentative_value >> shift) == value)) {
-                value = tentative_value | XDIGIT_VALUE(*s);
-                    /* Note XDIGIT_VALUE() is branchless, works on binary
-                     * and octal as well, so can be used here, without
-                     * slowing those down */
+            if (LIKELY(value <= max_div)) {
+                /* Note XDIGIT_VALUE() is branchless, works on binary and
+                 * octal as well, so can be used here, without noticeably
+                 * slowing those down (it does have unnecessary shifts, ANDSs,
+                 * and additions for those) */
+                value = (value << shift) | XDIGIT_VALUE(*s);
                 factor *= base;
                 continue;
             }
@@ -521,14 +518,13 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
             continue;
         }
 
-        if (   *s == '_'
+        /* Handle non-trailing underscores when those are accepted */
+        if (   UNLIKELY(*s == '_')
             && s < e - 1
             && allow_underscores
             && generic_isCC_(s[1], class_bit)
-
-                /* Don't allow a leading underscore if the only-medial bit is
-                 * set */
             && (   LIKELY(s > s0)
+                   /* Including initial underscores if those are accepted */
                 || UNLIKELY(! (  input_flags
                                & PERL_SCAN_ALLOW_MEDIAL_UNDERSCORES_ONLY))))
         {
@@ -537,7 +533,7 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
             /* To get here with the value so-far being 0 means we've only had
              * leading zeros, then an underscore.  We can continue with the
              * branchless switch() instead of this loop */
-            if (value == 0) {
+            if (UNLIKELY(value == 0)) {
                 goto redo_switch;
             }
             else {
@@ -545,6 +541,9 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
             }
         }
 
+        /* We get here when done with the parse, or it got interrupted by a
+         * non-digit or a digit that is outside the bounds of the base, like a
+         * digit 2 in a binary number */
         if (*s) {
             if (   ! (input_flags & PERL_SCAN_SILENT_ILLDIGIT)
                 &&    ckWARN(WARN_DIGIT))
@@ -563,7 +562,8 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
                      * scanning as soon as non-octal characters are seen,
                      * complain only if someone seems to want to use the digits
                      * eight and nine.  Since we know it is not octal, then if
-                     * isDIGIT, must be an 8 or 9). */
+                     * isDIGIT, must be an 8 or 9). khw: XXX why not DWIM for
+                     * other bases as well? */
                     warner(packWARN(WARN_DIGIT),
                            "Illegal octal digit '%c' ignored", *s);
                 }
@@ -574,8 +574,9 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
             }
         }
 
+        /* Error, so quit parsing */
         break;
-    }
+    }   /* End of parsing loop */
 
     *len_p = s - start;
 

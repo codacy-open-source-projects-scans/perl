@@ -3124,7 +3124,7 @@ Adp	|NV	|scan_bin	|NN const char *start			\
 Adp	|NV	|scan_hex	|NN const char *start			\
 				|STRLEN len				\
 				|NN STRLEN *retlen
-Cp	|char * |scan_num	|NN const char *s			\
+Cp	|char * |scan_num	|NN const char *start			\
 				|NN YYSTYPE *lvalp
 Adp	|NV	|scan_oct	|NN const char *start			\
 				|STRLEN len				\
@@ -3880,7 +3880,7 @@ Adip	|bool	|utf8_to_bytes_overwrite				\
 Adip	|bool	|utf8_to_bytes_temp_pv					\
 				|NN U8 const **s_ptr			\
 				|NN STRLEN *lenp
-EMXp	|U8 *	|utf16_to_utf8	|NN U8 *p				\
+Emp	|U8 *	|utf16_to_utf8	|NN U8 *p				\
 				|NN U8 *d				\
 				|Size_t bytelen 			\
 				|NN Size_t *newlen
@@ -3898,7 +3898,7 @@ EXpx	|U8 *	|utf8_to_utf16_base					\
 				|NN Size_t *newlen			\
 				|const bool high			\
 				|const bool low
-EMXp	|U8 *	|utf16_to_utf8_reversed 				\
+Emp	|U8 *	|utf16_to_utf8_reversed 				\
 				|NN U8 *p				\
 				|NN U8 *d				\
 				|Size_t bytelen 			\
