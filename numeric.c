@@ -393,11 +393,13 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
         }
     }
 
-    const char * const s0 = s; /* Where the significant digits start */
-    UV value = 0;
+    const char * const s0 = s;  /* Where the significant digits start */
+    UV value = 0;               /* Running total */
 
-    /* Unroll the loop so that the first 8 digits are branchless except for the
-     * switch.  A ninth hex one overflows a 32 bit word. */
+    /* Unroll the loop so that numbers with 8 or fewer digits can be handled
+     * with the minimum amount of work.  Anything higher would require extra
+     * overhead to deal with the possibility of generating portability
+     * warnings for numbers above 32 bits, which is reached at 8 hex digits */
   redo_switch:
     switch (e - s) {
       default:
@@ -455,9 +457,14 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
           }
 
           break;
-    }
+    }   /* End of switch on the first so-many characters */
 
-    /* In overflows, this keeps track of how much to multiply the overflowed NV
+    /* The loop below accumulates the integral running total of the result,
+     * digit by digit.  If this total overflows, it is added to an NV
+     * approximation, and the loop starts over, looking at the next batch of
+     * digits, until they overflow, and so on.
+     *
+     * In overflows, this keeps track of how much to multiply the overflowed NV
      * by as we continue to parse the remaining digits */
     NV factor = 0.0;
 
@@ -465,9 +472,11 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
     NV value_nv = 0;
     const PERL_UINT_FAST8_T base = 1 << shift;  /* 2, 8, or 16 */
 
-    /* Value above which, the next digit processed would overflow */
+    /* As long as the running total is less than this, the next digit will
+     * fit. */
     UV max_div = UV_MAX >> shift;
 
+    /* Loop through the characters */
     for (; s < e; s++) {
         if (generic_isCC_(*s, class_bit)) {
             /* Write it in this wonky order with a goto to attempt to get the
@@ -476,6 +485,7 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
                (khw suspects that adding a LIKELY() just above would do the
                same thing) */
           redo: ;
+            /* If there is room for this digit, accumulate it and repeat */
             if (LIKELY(value <= max_div)) {
                 /* Note XDIGIT_VALUE() is branchless, works on binary and
                  * octal as well, so can be used here, without noticeably
@@ -495,28 +505,16 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
             value_nv += (NV) value;
 
             /* Then we keep accumulating digits, until all are parsed.  We
-             * start over using the current input value.  This will be added to
-             * 'value_nv' eventually, either when all digits are gone, or we
-             * have overflowed this fresh start. */
+             * start over using the current input value as the initial digit.
+             * This will be added to 'value_nv' eventually, either when all
+             * digits are gone, or we have overflowed this fresh start.  This
+             * method uses the fewest floating point multiplications possible,
+             * losing the least precision. */
             value = XDIGIT_VALUE(*s);
             factor = base;
-
-            if (! overflowed) {
-                overflowed = TRUE;
-                if (input_flags & PERL_SCAN_SILENT_OVERFLOW) {
-                    *flags |= PERL_SCAN_SILENT_OVERFLOW;
-                }
-                else if (ckWARN_d(WARN_OVERFLOW)) {
-                    warner(packWARN(WARN_OVERFLOW),
-                           "Integer overflow in %s number",
-                           (base == 16) ? "hexadecimal"
-                                        : (base == 2)
-                                          ? "binary"
-                                          : "octal");
-                }
-            }
+            overflowed = TRUE;
             continue;
-        }
+        } /* End of handling legal digit */
 
         /* Handle non-trailing underscores when those are accepted */
         if (   UNLIKELY(*s == '_')
@@ -543,66 +541,87 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
 
         /* We get here when done with the parse, or it got interrupted by a
          * non-digit or a digit that is outside the bounds of the base, like a
-         * digit 2 in a binary number */
-        if (*s) {
-            if (   ! (input_flags & PERL_SCAN_SILENT_ILLDIGIT)
-                &&    ckWARN(WARN_DIGIT))
-            {
-                if (base != 8) {
-                    warner(packWARN(WARN_DIGIT),
-                           "Illegal %s digit '%c' ignored",
-                           ((base == 2)
-                            ? "binary"
-                            : "hexadecimal"),
-                           *s);
-                }
-                else if (isDIGIT(*s)) { /* octal base */
-
-                    /* Allow \octal to work the DWIM way (that is, stop
-                     * scanning as soon as non-octal characters are seen,
-                     * complain only if someone seems to want to use the digits
-                     * eight and nine.  Since we know it is not octal, then if
-                     * isDIGIT, must be an 8 or 9). khw: XXX why not DWIM for
-                     * other bases as well? */
-                    warner(packWARN(WARN_DIGIT),
-                           "Illegal octal digit '%c' ignored", *s);
-                }
-            }
-
-            if (input_flags & PERL_SCAN_NOTIFY_ILLDIGIT) {
-                *flags |= PERL_SCAN_NOTIFY_ILLDIGIT;
-            }
-        }
-
-        /* Error, so quit parsing */
+         * digit 2 in a binary number.  In either case, we are done with the
+         * loop */
         break;
     }   /* End of parsing loop */
 
-    *len_p = s - start;
+    bool do_non_portable_output = false;
 
-    if (LIKELY(! overflowed)) {
+    if (UNLIKELY(overflowed)) {
+
+        /* Calculate the final overflow approximation */
+        value_nv *= factor;
+        value_nv += (NV) value;
+
+        *flags |= PERL_SCAN_GREATER_THAN_UV_MAX
+               |  PERL_SCAN_SILENT_NON_PORTABLE;
+
+        if (result)
+            *result = value_nv;
+
+        if (input_flags & PERL_SCAN_SILENT_OVERFLOW) {
+            *flags |= PERL_SCAN_SILENT_OVERFLOW;
+        }
+        else if (ckWARN_d(WARN_OVERFLOW)) {
+            warner(packWARN(WARN_OVERFLOW),
+                    "Integer overflow in %s number",
+                    (base == 16) ? "hexadecimal"
+                                : (base == 2)
+                                    ? "binary"
+                                    : "octal");
+        }
+
+        value = UV_MAX;
+        do_non_portable_output = true;
+    }
+    else {
 #if UVSIZE > 4
         if (UNLIKELY(value > 0xffffffff)) {
             if (! (input_flags & PERL_SCAN_SILENT_NON_PORTABLE)) {
-                output_non_portable(base);
+                do_non_portable_output = true;
             }
             *flags |= PERL_SCAN_SILENT_NON_PORTABLE;
         }
 #endif
-        return value;
     }
 
-    /* Overflowed: Calculate the final overflow approximation */
-    value_nv *= factor;
-    value_nv += (NV) value;
+    if (s < e && *s) {  /* *s is to keep a terminating NUL from warning */
+        if (   ! (input_flags & PERL_SCAN_SILENT_ILLDIGIT)
+            &&    ckWARN(WARN_DIGIT))
+        {
+            if (base != 8) {
+                warner(packWARN(WARN_DIGIT),
+                        "Illegal %s digit '%c' ignored",
+                        ((base == 2)
+                        ? "binary"
+                        : "hexadecimal"),
+                        *s);
+            }
+            else if (isDIGIT(*s)) { /* octal base */
 
-    output_non_portable(base);
+                /* Allow \octal to work the DWIM way (that is, stop scanning
+                 * as soon as non-octal characters are seen, complain only if
+                 * someone seems to want to use the digits eight and nine.
+                 * Since we know it is not octal, then if isDIGIT, must be an
+                 * 8 or 9). khw: XXX why not DWIM for other bases as well? */
+                warner(packWARN(WARN_DIGIT),
+                        "Illegal octal digit '%c' ignored", *s);
+            }
+        }
 
-    *flags |= PERL_SCAN_GREATER_THAN_UV_MAX
-           |  PERL_SCAN_SILENT_NON_PORTABLE;
-    if (result)
-        *result = value_nv;
-    return UV_MAX;
+        if (input_flags & PERL_SCAN_NOTIFY_ILLDIGIT) {
+            *flags |= PERL_SCAN_NOTIFY_ILLDIGIT;
+        }
+    }
+
+    if (UNLIKELY(do_non_portable_output)) {
+        output_non_portable(base);
+    }
+
+    /* s here points to e or to the first illegal character */
+    *len_p = s - start;
+    return value;
 }
 
 /*
