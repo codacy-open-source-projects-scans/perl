@@ -62,7 +62,7 @@ static const char* const opclassnames[] = {
 };
 
 static const size_t opsizes[] = {
-    0,	
+    0,
     sizeof(OP),
     sizeof(UNOP),
     sizeof(BINOP),
@@ -647,7 +647,7 @@ formfeed()
     PPCODE:
 	PUSHs(make_sv_object(aTHX_ GvSV(gv_fetchpvs("\f", GV_ADD, SVt_PV))));
 
-long 
+long
 amagic_generation()
     CODE:
 	RETVAL = PL_amagic_generation;
@@ -728,7 +728,7 @@ opnumber(name)
 const char *	name
 CODE:
 {
- int i; 
+ int i;
  IV  result = -1;
  ST(0) = sv_newmortal();
  if (strBEGINs(name,"pp_"))
@@ -1033,11 +1033,21 @@ next(o)
                                             - (char*)tbl,
                                             SVs_TEMP);
 		}
-		else
-		    ret = newSVpvn_flags(cPVOPo->op_pv, strlen(cPVOPo->op_pv), SVs_TEMP);
+                else {
+                    U32 label_utf8 = (cPVOPo->op_private & OPpPV_IS_UTF8)
+                        ? SVf_UTF8 : 0;
+
+                    ret = newSVpvn_flags(cPVOPo->op_pv, strlen(cPVOPo->op_pv),
+                                         SVs_TEMP | label_utf8);
+                }
 		break;
 	    case 42: /* B::COP::label */
-		ret = sv_2mortal(newSVpv(CopLABEL(cCOPo),0));
+                {
+                    STRLEN len;
+                    U32 flags;
+                    const char *pv = CopLABEL_len_flags(cCOPo, &len, &flags);
+                    ret = newSVpvn_flags(pv, len, SVs_TEMP | (flags & SVf_UTF8));
+                }
 		break;
 	    case 43: /* B::COP::arybase */
 		ret = sv_2mortal(newSVuv(0));
@@ -1188,6 +1198,49 @@ string(o, cv)
                 ret = sv_2mortal(ret);
                 break;
             }
+
+        case OP_MULTIPARAM:
+        {
+            struct op_multiparam_aux *aux = (struct op_multiparam_aux *)cUNOP_AUXo->op_aux;
+            size_t min_args = aux->min_args;
+            size_t n_positional = aux->n_positional;
+            size_t n_named      = aux->n_named;
+            PADNAME **pns = PadnamelistARRAY(PadlistNAMES(CvPADLIST(cv)));
+
+            ret = newSVpvs_flags("", SVs_TEMP);
+            if(!n_positional && !n_named)
+                sv_catpvf(ret, "0"); /* omit trailing space */
+            else if(min_args < n_positional)
+                sv_catpvf(ret, "%zd..%zd ", min_args, n_positional);
+            else
+                sv_catpvf(ret, "%zd ", n_positional);
+
+            for(size_t i = 0; i < n_positional; i++) {
+                if(i)
+                    sv_catpvs(ret, ",");
+                PADOFFSET padix = aux->param_padix[i];
+                if(padix)
+                    sv_catpvf(ret, "%" PNf, PNfARG(pns[padix]));
+                else
+                    sv_catpvs(ret, "$");
+            }
+
+            for(size_t i = 0; i < n_named; i++) {
+                struct op_multiparam_named_aux *named = aux->named + i;
+                if(n_positional || i)
+                    sv_catpvs(ret, ",");
+
+                sv_catpvf(ret, ":%.*s", (int)named->namelen, named->namepv);
+            }
+
+            if(aux->slurpy) {
+                if(n_positional || n_named)
+                    sv_catpvf(ret, ",");
+                sv_catpvf(ret, "%" PNf, PNfARG(pns[aux->slurpy_padix]));
+            }
+
+            break;
+        }
 
         default:
             ret = sv_2mortal(newSVpvn("", 0));
@@ -1447,7 +1500,7 @@ SvTRUE(sv)
 bool
 SvTRUE_nomg(sv)
     B::SV   sv
-	
+
 MODULE = B	PACKAGE = B::IV		PREFIX = Sv
 
 IV
@@ -1503,7 +1556,7 @@ MODULE = B	PACKAGE = B::IV
 
 #define PVAV_max_ix	sv_SSize_tp | STRUCT_OFFSET(struct xpvav, xav_max)
 
-#define PVCV_stash_ix	sv_SVp | STRUCT_OFFSET(struct xpvcv, xcv_stash) 
+#define PVCV_stash_ix	sv_SVp | STRUCT_OFFSET(struct xpvcv, xcv_stash)
 #define PVCV_gv_ix	sv_SVp | STRUCT_OFFSET(struct xpvcv, xcv_gv_u.xcv_gv)
 #define PVCV_file_ix	sv_char_pp | STRUCT_OFFSET(struct xpvcv, xcv_file)
 #define PVCV_outside_ix	sv_SVp | STRUCT_OFFSET(struct xpvcv, xcv_outside)

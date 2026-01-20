@@ -1,26 +1,26 @@
 : BEGIN{die "You meant to run regen/embed.pl"} # Stop early if fed to perl.
 :
-: WARNING:  The meanings of some flags have been changed as of v5.31.0
+: ALL NON-STATIC FUNCTIONS DEFINED BY PERL NEED TO BE LISTED IN THIS FILE.
 :
 : This file is known to be processed by regen/embed.pl, autodoc.pl,
 : makedef.pl, Devel::PPPort, and porting/diag.t.
 :
 : This file contains entries for various functions, macros, typedefs, and
-: arrays defined by perl.  Each entry includes the name, parameters, and
+: other values defined by perl.  Each entry includes the name, parameters, and
 : various attributes about it.  In most functions listed here, the name is a
 : short name, and the function's real name is the short one, prefixed by either
 : 'Perl_' (for publicly visible functions) or 'S_' (for internal-to-a-file
 : static ones).  In many instances a macro is defined that is the name in this
 : file, and which expands to call the real (full) name, with any appropriate
-: thread context paramaters, thus hiding that detail from the typical code.
+: thread context parameters, thus hiding that detail from the typical code.
 :
 : Many macros (as opposed to functions) listed here are the complete full name,
 : though we may want to start converting those to have full names.
 :
-: All non-static functions defined by perl need to be listed in this file.
 : embed.pl uses the entries here to construct:
 :   1) proto.h to declare to the compiler the function interfaces; and
-:   2) embed.h to create short name macros
+:   2) embed.h to create short name macros, and to control the visibility of
+:      other macros
 :
 : Static functions internal to a file need not appear here, but there is
 : benefit to declaring them here:
@@ -72,8 +72,14 @@
 : backport the fixed version to modules.  The only disadvantage khw can think
 : of is the namespace pollution one.
 :
-: WARNING: Any macro created in a header file is visible to XS code, unless
-: care is taken to wrap it within C preprocessor guards like the following
+: The default for any macro created after v5.43.6 is to hide it from all but
+: the Perl core.  Use the visibility-affecting flags described below to change
+: that.
+:
+: WARNING: The default hiding of symbols from XS code applies only to functions
+: and macros.  Other types of values that are created in a header file, such as
+: typedefs and enum names, will be visible to XS code, unless care is taken to
+: wrap them within C preprocessor guards like the following
 :
 :    #if defined(PERL_CORE)
 :    ...
@@ -92,56 +98,49 @@
 : file they are intended for, and the generated PERL_ARGS_ macros will only
 : be available to inline functions in the appropriate context.
 :
-: From time to time it may be necessary to change or expand which files can
-: see a function, therefore we prefer the '#if defined()' form of condition
-: instead of the '#ifdef' form as the latter only works with one symbol and
-: the former can be combined with more than one.  It is also why you may see
-: functions with an 's' or 'i' export type grouped together into a single
-: conditional block separate from most of the other functions from the same
-: file with 'p' in them.
+: The 'A' flag is used to make an element visible everywhere on all platforms.
+:	  This flag should be used to make it part of Perl's API contract with
+:	  XS developers.  The documentation for these is usually placed in
+:	  perlapi.  If no documentation exists, that fact is also noted in
+:	  perlapi.
 :
-: The 'A' flag is used to make a function and its short name visible everywhere
-:         on all platforms.  This should be used to make it part of Perl's API
-:         contract with XS developers.  The documentation for these is usually
-:         placed in perlapi.  If no documentation exists, that fact is also
-:         noted in perlapi.
+:         Functions require one of the /[iIpS]/ flags to give callers a name to
+:         use that won't possibly collide with their own
 :
-:         These require one of the /[iIpS]/ flags to give callers a name to use
-:         that won't possibly collide with their own
+: The 'C' flag is used instead for elements that need to be accessible
+:	  everywhere, typically because they are called from a publicly
+:	  available macro or inline function, but they are not for public use
+:	  by themselves.  The documentation for these is placed in perlintern.
+:	  If no documentation exists, that fact is also noted in perlintern.
 :
-: The 'C' flag is used instead for functions and their short names that need to
-:         be accessible everywhere, typically because they are called from a
-:         publicly available macro or inline function, but they are not for
-:         public use by themselves.  The documentation for these is placed in
-:         perlintern.  If no documentation exists, that fact is also noted in
-:         perlintern.
+:	  Use the 'X' flag instead to suppress the short name for functions
+:	  outside the core
 :
-:	  Use the 'X' flag instead to suppress the short name outside the core
-:
-:         These require one of the /[iIpS]/ flags to give callers a name to use
-:         that won't possibly collide with their own
+:         Functions require one of the /[iIpS]/ flags to give callers a name to
+:         use that won't possibly collide with their own
 :
 :         Some of these have been constructed so that the wrapper macro names
 :         begin with an underscore to lessen the chances of a name collision.
 :         However, this is contrary to the C standard, and those should be
 :         changed.
 :
-: The 'E' flag is used instead for a function and its short name that is
-:         supposed to be used only in the core plus extensions compiled with
-:         the PERL_EXT symbol defined.  Again, on some platforms, the function
-:         will be visible everywhere, so one of the /[iIpS]/ flags are
-:         generally needed.  Also note that an XS writer can always cheat and
-:         pretend to be an extension by #defining PERL_EXT.
+: The 'E' flag is used instead for elements that are supposed to be used only
+:	  in the core, plus extensions compiled with the PERL_EXT symbol
+:	  defined.  Again, on some platforms, functions marked with this will
+:	  be visible everywhere, so one of the /[iIpS]/ flags is generally
+:	  needed.  Also note that an XS writer can always cheat and pretend to
+:	  be an extension by #defining PERL_EXT.
 :
-: The 'X' flag is similar to the 'C' flag in that the function (whose entry
-:         better have the 'p' flag) is accessible everywhere on all platforms.
-:         However the short name macro that normally gets generated is
-:         suppressed outside the core.  (Except it is also visible in PERL_EXT
-:         extensions if the 'E' flag is also specified.)  This flag is used for
-:         functions that are called from a public macro, the name of which
-:         isn't derived from the function name.  You'll have to write the macro
-:         yourself, and from within it, refer to the function in its full
-:         'Perl_' form with any necessary thread context parameter.
+: The 'X' flag applies only to functions.  It is similar to the 'C' flag in
+:	  that the function (whose entry better have the 'p' flag) is
+:	  accessible everywhere on all platforms.  However the short name macro
+:	  that normally gets generated is suppressed outside the core.  (Except
+:	  it is also visible in PERL_EXT extensions if the 'E' flag is also
+:	  specified.)  This flag is used for functions that are called from a
+:	  public macro, the name of which isn't derived from the function name.
+:	  You'll have to write the macro yourself, and from within it, refer to
+:	  the function in its full 'Perl_' form with any necessary thread
+:	  context parameter.
 :
 : AUTOMATIC SORTING and FORMATTING of this file
 :
@@ -423,15 +422,15 @@
 : The remainder of these introductory comments detail all the possible flags:
 :
 :   'A'  Both long and short names are accessible fully everywhere (usually
-:        part of the public API). Requires one of /[iIpS]/ flags.  If the
-:	 function is not part of the public API, instead use 'C', 'E', or 'X'.
+:        part of the public API).  If this element is a function, this requires
+:        one of /[iIpS]/ flags.  If the element is not part of the public API,
+:        instead use 'C', 'E', or 'X'.
 :
 :        * adds entry to the list of symbols available on all platforms unless
 :          'e' or 'm' are also specified;
 :        * any doc entry goes in perlapi.pod rather than perlintern.pod. If
 :          there isn't a doc entry, autodoc.pl lists this in perlapi as
-:          existing and being undocumented; unless 'x' is also specified, in
-:          which case it simply isn't listed.
+:          existing and being undocumented.
 :        * makes the short name defined for everywhere, not just for PERL_CORE
 :          or PERL_EXT
 :
@@ -475,32 +474,33 @@
 :        * create PERL_ARGS_ASSERT_foo;
 :        * add embed.h entry (unless overridden by the 'M' or 'o' flags)
 :
-:   'C'  Intended for core use only. This indicates to XS writers that they
-:        shouldn't be using this function. Devel::PPPort informs them of this,
-:        for example. Some functions have to be accessible everywhere even if
-:        they are not intended for public use. An example is helper functions
-:        that are called from inline ones that are publicly available.
-:        Requires one of /[iIpS]/ flags.
+:   'C'  Intended for core use only.  XS writers may not even know they exist,
+:	 since they don't get documented in perlapi.  But should they try
+:	 to use them anyway, Devel::PPPort informs them that this is a mistake.
+:	 Some functions have to be accessible everywhere even if they are not
+:	 intended for public use. An example is helper functions that are
+:	 called from inline ones that are publicly available.  Requires one of
+:	 the /[iIpS]/ flags if the element is a function.
 :
 :        * add entry to the list of symbols available on all platforms unless e
 :          or m are also specified;
 :        * any doc entry goes in perlintern.pod rather than perlapi.pod. If
 :          there isn't a doc entry, autodoc.pl lists this in perlintern as
 :          existing and being undocumented
-:        * makes the short name defined for everywhere, not just for PERL_CORE
-:          or PERL_EXT
+:        * makes the function's short name defined for everywhere, not just for
+:	   PERL_CORE or PERL_EXT
 :
-:   'D'  Function is deprecated.
+:   'D'  The element is deprecated.
 :
-:	(Add a comment to the function source when adding this flag indicating
-:	what release it is first being deprecated in.  This will prevent having
-:	to dig up this information when deciding if enough releases have passed
-:	to actually remove the function.)
+:	(You should add a comment to the source when adding this flag
+:	indicating what release it is first being deprecated in.  This will
+:	prevent having to dig up this information when deciding if enough
+:	releases have passed to actually remove it.)
 :
 :        proto.h: add __attribute__deprecated__
 :        autodoc.pl adds a note to this effect in the doc entry
 :
-:   'd'  Function has documentation (somewhere) in the source:
+:   'd'  Element has documentation (somewhere) in the source:
 :
 :        Enables 'no docs for foo" warning in autodoc.pl if the documentation
 :        isn't found.
@@ -584,11 +584,20 @@
 :        instead you define the macro as 'PERL_FOO' (all uppercase), the
 :        embed.h entry will use all uppercase.
 :
+:	 The default visibility of macros created before 5.43.8 is visible
+:	 everywhere, so the visibility flags are ignored.  Starting in that
+:	 release, the default visibility of newly created macros is core-only,
+:	 so the visibility flags do have effect.  To cause a pre-5.43.8 symbol
+:	 to be affected by a visibility flag, remove the symbol from its
+:	 override list in regen/embed.pl.
+:
 :         suppress proto.h entry (actually, not suppressed, but commented out)
 :         suppress entry in the list of exported symbols available on all
 :             platforms
 :         suppress embed.h entry (when no 'p' flag), as the implementation
 :             should furnish the macro
+:	  #undef this symbol in embed.h as needed to match the specified
+:	  visibility.
 :
 :   'M'  The implementation is furnishing its own macro instead of relying on
 :        the automatically generated short name macro (which simply expands to
@@ -739,13 +748,15 @@
 :
 :   'x'  Experimental, may change:
 :
-:          Any doc entry is marked that it may change. An undocumented
-:          experimental function is listed in perlintern rather than perlapi,
-:          even if it is allegedly API.
+:          Any doc entry is marked that this element may change.
 :
-:   'y'  Typedef.  The element names a type rather than being a macro
+:   'y'  Typedef.  The element names a type rather than being a function or
+:	 macro.  These are always visible to XS code unless guarded by
+:	 preprocessor directives,
 :
 :   '@'  The element names an array rather than being a macro or function.
+:	 These are always visible to XS code unless guarded by preprocessor
+:	 directives,
 :
 :          autodoc.pl automatically suppresses any usage information.
 :
@@ -1407,7 +1418,7 @@ Cp	|GP *	|gp_ref 	|NULLOK GP *gp
 ATdp	|bool	|grok_atoUV	|NN const char *pv			\
 				|NN UV *valptr				\
 				|NULLOK const char **endptr
-AMdp	|UV	|grok_bin	|NN const char *start			\
+Adip	|UV	|grok_bin	|NN const char *start			\
 				|NN STRLEN *len_p			\
 				|NN I32 *flags				\
 				|NULLOK NV *result
@@ -1419,7 +1430,7 @@ Cp	|UV	|grok_bin_oct_hex					\
 				|const unsigned shift			\
 				|const U8 lookup_bit			\
 				|const char prefix
-AMdp	|UV	|grok_hex	|NN const char *start			\
+Adip	|UV	|grok_hex	|NN const char *start			\
 				|NN STRLEN *len_p			\
 				|NN I32 *flags				\
 				|NULLOK NV *result
@@ -1434,9 +1445,9 @@ Adp	|int	|grok_number_flags					\
 				|NULLOK UV *valuep			\
 				|U32 flags
 ARdp	|bool	|grok_numeric_radix					\
-				|NN const char **sp			\
-				|NN const char *send
-AMdp	|UV	|grok_oct	|NN const char *start			\
+				|SPTR const char **sp			\
+				|EPTRge const char *send
+Adip	|UV	|grok_oct	|NN const char *start			\
 				|NN STRLEN *len_p			\
 				|NN I32 *flags				\
 				|NULLOK NV *result
@@ -2566,6 +2577,8 @@ Adp	|OP *	|op_sibling_splice					\
 px	|OP *	|op_unscope	|NULLOK OP *o
 ARdpx	|OP *	|op_wrap_finally|NN OP *block				\
 				|NN OP *finally
+p	|void	|output_non_portable					\
+				|const U8 shift
 : Used in perly.y
 dp	|void	|package	|NN OP *name				\
 				|NULLOK OP *version
@@ -3830,13 +3843,13 @@ ARTdip	|U8 *	|utf8_hop_back_overshoot				\
 				|SPTR const U8 * const start		\
 				|NULLOK SSize_t *remaining
 ARTdmp	|U8 *	|utf8_hop_forward					\
-				|NN const U8 *s 			\
+				|SPTR const U8 *s			\
 				|SSize_t off				\
-				|NN const U8 * const end
+				|EPTRge const U8 * const end
 ARTdip	|U8 *	|utf8_hop_forward_overshoot				\
-				|NN const U8 *s 			\
+				|SPTR const U8 *s			\
 				|SSize_t off				\
-				|NN const U8 * const end		\
+				|EPTRge const U8 * const end		\
 				|NULLOK SSize_t *remaining
 ARTdip	|U8 *	|utf8_hop_overshoot					\
 				|MPTR const U8 *s			\
@@ -4289,8 +4302,8 @@ ep	|void	|Slab_to_rw	|NN OPSLAB * const slab
 # endif
 #endif /* defined(PERL_CORE) */
 #if defined(PERL_CORE) || defined(PERL_EXT)
-ERXdp	|bool	|isSCRIPT_RUN	|NN const U8 *s 			\
-				|NN const U8 *send			\
+ERXdp	|bool	|isSCRIPT_RUN	|SPTR const U8 *s			\
+				|EPTRge const U8 *send			\
 				|const bool utf8_target
 ERTXdip |bool	|is_utf8_non_invariant_string				\
 				|NN const U8 * const s			\
@@ -4301,8 +4314,8 @@ Ei	|STRLEN |sv_or_pv_pos_u2b					\
 				|STRLEN pos				\
 				|NULLOK STRLEN *lenp
 ERTdi	|Size_t |variant_under_utf8_count				\
-				|NN const U8 * const s			\
-				|NN const U8 * const e
+				|SPTR const U8 * const s		\
+				|EPTRge const U8 * const e
 # if !defined(HAS_MEMRCHR)
 ETei	|void * |my_memrchr	|NN const char *s			\
 				|const char c				\
@@ -4541,7 +4554,7 @@ ERXp	|bool	|grok_bslash_c	|const char source			\
 				|NN const char **message		\
 				|NULLOK U32 *packed_warn
 ERXp	|bool	|grok_bslash_o	|SPTR char **s				\
-				|EPTRge const char * const send 	\
+				|EPTRgt const char * const send 	\
 				|NN UV *uv				\
 				|NN const char **message		\
 				|NULLOK U32 *packed_warn		\
@@ -4549,7 +4562,7 @@ ERXp	|bool	|grok_bslash_o	|SPTR char **s				\
 				|const bool allow_UV_MAX		\
 				|const bool utf8
 ERXp	|bool	|grok_bslash_x	|SPTR char **s				\
-				|EPTRge const char * const send 	\
+				|EPTRgt const char * const send 	\
 				|NN UV *uv				\
 				|NN const char **message		\
 				|NULLOK U32 *packed_warn		\
@@ -4977,10 +4990,6 @@ Sd	|AV *	|mro_get_linear_isa_dfs 				\
 				|NN HV *stash				\
 				|U32 level
 #endif
-#if defined(PERL_IN_NUMERIC_C)
-S	|void	|output_non_portable					\
-				|const U8 shift
-#endif
 #if defined(PERL_IN_OP_C)
 S	|void	|apply_attrs	|NN HV *stash				\
 				|NN SV *target				\
@@ -5305,8 +5314,8 @@ IR	|bool	|should_we_output_Debug_r				\
 #if defined(PERL_IN_PP_PACK_C)
 S	|int	|div128 	|NN SV *pnum				\
 				|NN bool *done
-ST	|char	|first_symbol	|NN const char *pat			\
-				|NN const char *patend
+ST	|char	|first_symbol	|SPTR const char *pat			\
+				|EPTRge const char *patend
 RS	|const char *|get_num	|NN const char *patptr			\
 				|NN SSize_t *lenptr
 S	|const char *|group_end |SPTR const char *patptr		\
@@ -5322,8 +5331,8 @@ RST	|char * |my_bytes_to_utf8					\
 				|STRLEN len				\
 				|NN char *dest				\
 				|const bool needs_swap
-ST	|bool	|need_utf8	|NN const char *pat			\
-				|NN const char *patend
+ST	|bool	|need_utf8	|SPTR const char *pat			\
+				|EPTRge const char *patend
 S	|bool	|next_symbol	|NN struct tempsym *symptr
 S	|SV **	|pack_rec	|NN SV *cat				\
 				|NN struct tempsym *symptr		\
@@ -5518,7 +5527,7 @@ ETi	|Size_t |find_first_differing_byte_pos				\
 ES	|U32	|get_quantifier_value					\
 				|NN RExC_state_t *pRExC_state		\
 				|SPTR const char *start 		\
-				|EPTRge const char *end
+				|EPTRgt const char *end
 ES	|bool	|grok_bslash_N	|NN RExC_state_t *pRExC_state		\
 				|NULLOK regnode_offset *nodep		\
 				|NULLOK UV *code_point_p		\
@@ -5706,7 +5715,7 @@ ETXp	|UV	|to_fold_latin1_|const U8 c				\
 #endif
 #if defined(PERL_IN_REGCOMP_C) || defined(PERL_IN_TOKE_C)
 ERTXp	|bool	|regcurly	|SPTR const char *s			\
-				|EPTRge const char *e			\
+				|EPTRgt const char *e			\
 				|NULLOK const char *result[5]
 #endif
 #if defined(PERL_IN_REGCOMP_DEBUG_C) && defined(DEBUGGING)
@@ -5926,12 +5935,12 @@ EWi	|void	|unwind_paren	|NN regexp *rex 			\
 ES	|void	|debug_start_match					\
 				|NN const REGEXP *prog			\
 				|const bool do_utf8			\
-				|NN const char *start			\
-				|NN const char *end			\
+				|SPTR const char *start 		\
+				|EPTRge const char *end 		\
 				|NN const char *blurb
-ES	|void	|dump_exec_pos	|NN const char *locinput		\
+ES	|void	|dump_exec_pos	|SPTR const char *locinput		\
 				|NN const regnode *scan 		\
-				|NN const char *loc_regeol		\
+				|EPTRge const char *loc_regeol		\
 				|NN const char *loc_bostr		\
 				|NN const char *loc_reg_starttry	\
 				|const bool do_utf8			\
@@ -6062,7 +6071,7 @@ S	|bool	|sv_2iuv_common |NN SV * const sv
 S	|STRLEN |sv_pos_b2u_midway					\
 				|SPTR const U8 * const s		\
 				|MPTR const U8 * const target		\
-				|NN const U8 *end			\
+				|EPTRge const U8 *end			\
 				|STRLEN endu
 S	|STRLEN |sv_pos_u2b_cached					\
 				|NN SV * const sv			\

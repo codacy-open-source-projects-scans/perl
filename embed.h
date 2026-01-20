@@ -281,6 +281,9 @@
 #   undef case_98_SBOX32
 #   undef case_99_SBOX32
 #   undef case_9_SBOX32
+#   undef CC_UNDERSCORE_
+#   undef isFOO_or_UNDERSCORE_
+#   undef USE_STDIO
 #   if !defined(PERL_EXT)
 #     undef invlist_intersection_
 #     undef invlist_subtract_
@@ -446,11 +449,14 @@
 # define gp_free(a)                             Perl_gp_free(aTHX_ a)
 # define gp_ref(a)                              Perl_gp_ref(aTHX_ a)
 # define grok_atoUV                             Perl_grok_atoUV
+# define grok_bin(a,b,c,d)                      Perl_grok_bin(aTHX_ a,b,c,d)
 # define grok_bin_oct_hex(a,b,c,d,e,f,g)        Perl_grok_bin_oct_hex(aTHX_ a,b,c,d,e,f,g)
+# define grok_hex(a,b,c,d)                      Perl_grok_hex(aTHX_ a,b,c,d)
 # define grok_infnan(a,b)                       Perl_grok_infnan(aTHX_ a,b)
 # define grok_number(a,b,c)                     Perl_grok_number(aTHX_ a,b,c)
 # define grok_number_flags(a,b,c,d)             Perl_grok_number_flags(aTHX_ a,b,c,d)
 # define grok_numeric_radix(a,b)                Perl_grok_numeric_radix(aTHX_ a,b)
+# define grok_oct(a,b,c,d)                      Perl_grok_oct(aTHX_ a,b,c,d)
 # define gv_add_by_type(a,b)                    Perl_gv_add_by_type(aTHX_ a,b)
 # define gv_autoload_pv(a,b,c)                  Perl_gv_autoload_pv(aTHX_ a,b,c)
 # define gv_autoload_pvn(a,b,c,d)               Perl_gv_autoload_pvn(aTHX_ a,b,c,d)
@@ -1328,6 +1334,7 @@
 #   define oopsAV(a)                            Perl_oopsAV(aTHX_ a)
 #   define oopsHV(a)                            Perl_oopsHV(aTHX_ a)
 #   define op_unscope(a)                        Perl_op_unscope(aTHX_ a)
+#   define output_non_portable(a)               Perl_output_non_portable(aTHX_ a)
 #   define package(a,b)                         Perl_package(aTHX_ a,b)
 #   define pad_add_weakref(a)                   Perl_pad_add_weakref(aTHX_ a)
 #   define pad_block_start(a)                   Perl_pad_block_start(aTHX_ a)
@@ -1679,9 +1686,6 @@
 #     define mro_clean_isarev(a,b,c,d,e,f)      S_mro_clean_isarev(aTHX_ a,b,c,d,e,f)
 #     define mro_gather_and_rename(a,b,c,d,e)   S_mro_gather_and_rename(aTHX_ a,b,c,d,e)
 #     define mro_get_linear_isa_dfs(a,b)        S_mro_get_linear_isa_dfs(aTHX_ a,b)
-#   endif
-#   if defined(PERL_IN_NUMERIC_C)
-#     define output_non_portable(a)             S_output_non_portable(aTHX_ a)
 #   endif
 #   if defined(PERL_IN_OP_C)
 #     define apply_attrs(a,b,c)                 S_apply_attrs(aTHX_ a,b,c)

@@ -2417,7 +2417,7 @@ S_force_version(pTHX_ char *s, int guessing)
     if (*d == 'v')
         d++;
     if (isDIGIT(*d)) {
-        while (isDIGIT(*d) || *d == '_' || *d == '.')
+        while (isDIGIT_or_UNDERSCORE(*d) || *d == '.')
             d++;
         if (*d == ';' || isSPACE(*d) || *d == '{' || *d == '}' || !*d) {
             SV *ver;
@@ -9833,7 +9833,7 @@ yyl_try(pTHX_ char *s)
     case 'v':
         if (isDIGIT(s[1]) && PL_expect != XOPERATOR) {
             char *start = s + 2;
-            while (isDIGIT(*start) || *start == '_')
+            while (isDIGIT_or_UNDERSCORE(*start))
                 start++;
             if (*start == '.' && isDIGIT(start[1])) {
                 s = scan_num(s, &pl_yylval);
@@ -12456,18 +12456,58 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
     NV nv;				/* number read, as a double */
     SV *sv = NULL;			/* place to put the converted number */
     bool floatit;			/* boolean: int or float? */
-    const char *lastub = NULL;		/* position of last underbar */
     static const char* const number_too_long = "Number too long";
     bool warned_about_underscore = 0;
     I32 shift = 0; /* shift per digit for hex/oct/bin, hoisted here for fp */
-#define WARN_ABOUT_UNDERSCORE() \
-        do { \
-            if (!warned_about_underscore) { \
-                warned_about_underscore = 1; \
-                ck_warner(packWARN(WARN_SYNTAX), \
+
+#define WARN_ABOUT_UNDERSCORE()                         \
+        STMT_START {                                    \
+            if (!warned_about_underscore) {             \
+                warned_about_underscore = 1;            \
+                ck_warner(packWARN(WARN_SYNTAX),        \
                           "Misplaced _ in number");     \
-            } \
-        } while(0)
+            }                                           \
+        } STMT_END
+
+/* Call this when we're not expecting an underscore, but are willing to
+ * tolerate one if found, but raising a warning about it.  It absorbs any
+ * adjacent underscores up to PL_bufend, advancing 's' to point to the byte
+ * after the final underscore */
+#define SUFFER_AN_UNDERSCORE_HERE(s)                        \
+        STMT_START {                                        \
+            if (*(s) == '_') {                              \
+                WARN_ABOUT_UNDERSCORE();                    \
+                                                            \
+                /* Absorb any adjacent underscores */       \
+                do {                                        \
+                    (s)++;                                  \
+                } while ((s) < PL_bufend && *(s) == '_');   \
+            }                                               \
+        } STMT_END
+
+/* Call this when we're not expecting an underscore in the previous byte
+ * position, but are willing to tolerate one if found, but raising a warning
+ * about it. */
+#define SUFFER_AN_UNDERSCORE_JUST_BEFORE_HERE(s)            \
+        STMT_START {                                        \
+            if (*((s) - 1) == '_') {                        \
+                WARN_ABOUT_UNDERSCORE();                    \
+            }                                               \
+        } STMT_END
+
+/* Call this when we have an underscore, and a single one is fine.  Tolerate
+ * adjacent subsequent ones, but raise a warning if any are found.  It
+ * advances 's' to point to the byte after the final underscore */
+#define HANDLE_UNDERSCORE(s)                            \
+        STMT_START {                                    \
+            assert(*(s) == '_');                        \
+            (s)++;                                      \
+                                                        \
+            /* Any underscore adjacent to this one is   \
+             * wrong */                                 \
+            SUFFER_AN_UNDERSCORE_HERE(s);               \
+        } STMT_END
+
     /* Hexadecimal floating point.
      *
      * In many places (where we have quads and NV is IEEE 754 double)
@@ -12499,315 +12539,315 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
 
     /* We use the first character to decide what type of number this is */
 
-    switch (*s) {
-    default:
-        croak("panic: scan_num, *s=%d", *s);
+    if (*s == 'v') {
+      vstring:
+        sv = newSV(5); /* preallocate storage space */
+        ENTER_with_name("scan_vstring");
+        SAVEFREESV(sv);
+        s = scan_vstring(s, PL_bufend, sv);
+        SvREFCNT_inc_simple_void_NN(sv);
+        LEAVE_with_name("scan_vstring");
+    }
+    else if (*s == '0') {
 
-    /* if it starts with a 0, it could be an octal number, a decimal in
-       0.13 disguise, or a hexadecimal number, or a binary number. */
-    case '0':
-        {
-          /* variables:
-             u		holds the "number so far"
-             overflowed	was the number more than we can hold?
+        /* if it starts with a 0, it could be an octal number, a decimal in
+           0.13 disguise, or a hexadecimal number, or a binary number.
+         *
+         * variables:
+         * u		holds the "number so far"
+         * overflowed	was the number more than we can hold?
 
-             Shift is used when we add a digit.  It also serves as an "are
-             we in octal/hex/binary?" indicator to disallow hex characters
-             when in octal mode.
-           */
-            NV n = 0.0;
-            UV u = 0;
-            bool overflowed = FALSE;
-            bool just_zero  = TRUE;	/* just plain 0 or binary number? */
-            bool has_digs = FALSE;
-            static const NV nvshift[5] = { 1.0, 2.0, 4.0, 8.0, 16.0 };
-            static const char* const bases[5] =
-              { "", "binary", "", "octal", "hexadecimal" };
-            static const char* const Bases[5] =
-              { "", "Binary", "", "Octal", "Hexadecimal" };
-            static const char* const maxima[5] =
-              { "",
-                "0b11111111111111111111111111111111",
-                "",
-                "037777777777",
-                "0xffffffff" };
+         * Shift is used when we add a digit.  It also serves as an "are
+         * we in octal/hex/binary?" indicator to disallow hex characters
+         * when in octal mode.
+         */
+        NV n = 0.0;
+        UV u = 0;
+        bool overflowed = FALSE;
+        bool just_zero  = TRUE;	/* just plain 0 or binary number? */
+        bool has_digs = FALSE;
+        static const NV nvshift[5] = { 1.0, 2.0, 4.0, 8.0, 16.0 };
+        static const char* const bases[5] =
+          { "", "binary", "", "octal", "hexadecimal" };
 
-            /* check for hex */
-            if (isALPHA_FOLD_EQ(s[1], 'x')) {
-                shift = 4;
-                s += 2;
-                just_zero = FALSE;
-            } else if (isALPHA_FOLD_EQ(s[1], 'b')) {
-                shift = 1;
-                s += 2;
-                just_zero = FALSE;
-            }
-            /* check for a decimal in disguise */
-            else if (s[1] == '.' || isALPHA_FOLD_EQ(s[1], 'e'))
-                goto decimal;
-            /* so it must be octal */
-            else {
-                shift = 3;
+        /* check for hex */
+        if (isALPHA_FOLD_EQ(s[1], 'x')) {
+            shift = 4;
+            s += 2;
+            just_zero = FALSE;
+        } else if (isALPHA_FOLD_EQ(s[1], 'b')) {
+            shift = 1;
+            s += 2;
+            just_zero = FALSE;
+        }
+        /* check for a decimal in disguise */
+        else if (s[1] == '.' || isALPHA_FOLD_EQ(s[1], 'e'))
+            goto decimal;
+        /* so it must be octal */
+        else {
+            shift = 3;
+            s++;
+            if (isALPHA_FOLD_EQ(*s, 'o')) {
                 s++;
-                if (isALPHA_FOLD_EQ(*s, 'o')) {
-                    s++;
-                    just_zero = FALSE;
-                    new_octal = TRUE;
-                }
+                just_zero = FALSE;
+                new_octal = TRUE;
             }
+        }
 
-            if (*s == '_') {
-                WARN_ABOUT_UNDERSCORE();
-               lastub = s++;
-            }
+        SUFFER_AN_UNDERSCORE_HERE(s);
 
-            /* read the rest of the number */
-            for (;;) {
-                /* x is used in the overflow test,
-                   b is the digit we're adding on. */
-                UV x, b;
+        /* read the rest of the number */
+        for (;;) {
+            /* x is used in the overflow test,
+               b is the digit we're adding on. */
+            UV x, b;
 
-                switch (*s) {
+            switch (*s) {
 
-                /* if we don't mention it, we're done */
-                default:
+            /* if we don't mention it, we're done */
+            default:
+                goto out;
+
+            /* _ are ignored -- but warned about if consecutive */
+            case '_':
+                HANDLE_UNDERSCORE(s);
+                break;
+
+            /* 8 and 9 are not octal */
+            case '8': case '9':
+                if (shift == 3)
+                    yyerror(form("Illegal octal digit '%c'", *s));
+                /* FALLTHROUGH */
+
+            /* octal digits */
+            case '2': case '3': case '4':
+            case '5': case '6': case '7':
+                if (shift == 1)
+                    yyerror(form("Illegal binary digit '%c'", *s));
+                /* FALLTHROUGH */
+
+            case '0': case '1':
+                b = *s++ & 15;		/* ASCII digit -> value of digit */
+                goto digit;
+
+            /* hex digits */
+            case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
+            case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
+                /* make sure they said 0x */
+                if (shift != 4)
                     goto out;
+                b = (*s++ & 7) + 9;
 
-                /* _ are ignored -- but warned about if consecutive */
-                case '_':
-                    if (lastub && s == lastub + 1)
-                        WARN_ABOUT_UNDERSCORE();
-                    lastub = s++;
-                    break;
+                /* Prepare to put the digit we have onto the end
+                   of the number so far.  We check for overflows.
+                */
 
-                /* 8 and 9 are not octal */
-                case '8': case '9':
-                    if (shift == 3)
-                        yyerror(form("Illegal octal digit '%c'", *s));
-                    /* FALLTHROUGH */
+              digit:
+                just_zero = FALSE;
+                has_digs = TRUE;
+                if (!overflowed) {
+                    assert(shift >= 0);
+                    x = u << shift;	/* make room for the digit */
 
-                /* octal digits */
-                case '2': case '3': case '4':
-                case '5': case '6': case '7':
-                    if (shift == 1)
-                        yyerror(form("Illegal binary digit '%c'", *s));
-                    /* FALLTHROUGH */
-
-                case '0': case '1':
-                    b = *s++ & 15;		/* ASCII digit -> value of digit */
-                    goto digit;
-
-                /* hex digits */
-                case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
-                case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
-                    /* make sure they said 0x */
-                    if (shift != 4)
-                        goto out;
-                    b = (*s++ & 7) + 9;
-
-                    /* Prepare to put the digit we have onto the end
-                       of the number so far.  We check for overflows.
-                    */
-
-                  digit:
-                    just_zero = FALSE;
-                    has_digs = TRUE;
-                    if (!overflowed) {
-                        assert(shift >= 0);
-                        x = u << shift;	/* make room for the digit */
-
-                        if ((x >> shift) != u
-                            && !(PL_hints & HINT_NEW_BINARY)) {
-                            overflowed = TRUE;
-                            n = (NV) u;
-                            ck_warner_d(packWARN(WARN_OVERFLOW),
-                                        "Integer overflow in %s number",
-                                        bases[shift]);
-                        } else
-                            u = x | b;		/* add the digit to the end */
-                    }
-                    if (overflowed) {
-                        n *= nvshift[shift];
-                        /* If an NV has not enough bits in its
-                         * mantissa to represent an UV this summing of
-                         * small low-order numbers is a waste of time
-                         * (because the NV cannot preserve the
-                         * low-order bits anyway): we could just
-                         * remember when did we overflow and in the
-                         * end just multiply n by the right
-                         * amount. */
-                        n += (NV) b;
-                        significant_bits += shift;
-                    }
-
-                    /* this could be hexfp, but peek ahead
-                     * to avoid matching ".." */
-                    if (UNLIKELY(HEXFP_PEEK(s))) {
-                        goto out;
-                    }
-
-                    break;
+                    if ((x >> shift) != u
+                        && !(PL_hints & HINT_NEW_BINARY)) {
+                        overflowed = TRUE;
+                        n = (NV) u;
+                        ck_warner_d(packWARN(WARN_OVERFLOW),
+                                    "Integer overflow in %s number",
+                                    bases[shift]);
+                    } else
+                        u = x | b;		/* add the digit to the end */
                 }
+                if (overflowed) {
+                    n *= nvshift[shift];
+                    /* If an NV has not enough bits in its
+                     * mantissa to represent an UV this summing of
+                     * small low-order numbers is a waste of time
+                     * (because the NV cannot preserve the
+                     * low-order bits anyway): we could just
+                     * remember when did we overflow and in the
+                     * end just multiply n by the right
+                     * amount. */
+                    n += (NV) b;
+                    significant_bits += shift;
+                }
+
+                /* this could be hexfp, but peek ahead
+                 * to avoid matching ".." */
+                if (UNLIKELY(HEXFP_PEEK(s))) {
+                    goto out;
+                }
+
+                break;
             }
+        }
 
-          /* if we get here, we had success: make a scalar value from
-             the number.
-          */
-          out:
+      /* if we get here, we had success: make a scalar value from
+         the number.
+      */
+      out:
 
-            /* final misplaced underbar check */
-            if (s[-1] == '_')
-                WARN_ABOUT_UNDERSCORE();
+                /* final misplaced underbar check */
+                SUFFER_AN_UNDERSCORE_JUST_BEFORE_HERE(s);
 
-            if (UNLIKELY(HEXFP_PEEK(s))) {
-                /* Do sloppy (on the underbars) but quick detection
-                 * (and value construction) for hexfp, the decimal
-                 * detection will shortly be more thorough with the
-                 * underbar checks. */
-                const char* h = s;
-                if (u != 0)
-                    significant_bits += msbit_pos(u) + 1;
+                if (UNLIKELY(HEXFP_PEEK(s))) {
+                    /* Do sloppy (on the underbars) but quick detection
+                     * (and value construction) for hexfp, the decimal
+                     * detection will shortly be more thorough with the
+                     * underbar checks. */
+                    const char* h = s;
+                    if (u != 0)
+                        significant_bits += msbit_pos(u) + 1;
 #ifdef HEXFP_UQUAD
-                hexfp_uquad = overflowed ? (Uquad_t)n : u;
+                    hexfp_uquad = overflowed ? (Uquad_t)n : u;
 #else /* HEXFP_NV */
-                hexfp_nv = overflowed ? n : (NV)u;
+                    hexfp_nv = overflowed ? n : (NV)u;
 #endif
-                if (*h == '.') {
+                    if (*h == '.') {
 #ifdef HEXFP_NV
-                    NV nv_mult = 1.0;
+                        NV nv_mult = 1.0;
 #endif
-                    bool accumulate = TRUE;
-                    U8 b = 0; /* silence compiler warning */
-                    int lim = 1 << shift;
-                    for (h++; ((isXDIGIT(*h) && (b = XDIGIT_VALUE(*h)) < lim) ||
-                               *h == '_'); h++) {
-                        if (isXDIGIT(*h)) {
-                            significant_bits += shift;
+                        bool accumulate = TRUE;
+                        U8 b = 0; /* silence compiler warning */
+                        int lim = 1 << shift;
+                        for (h++;
+                             (   (   isXDIGIT(*h)
+                                  && (b = XDIGIT_VALUE(*h)) < lim)
+                              || *h == '_');
+                             h++)
+                        {
+                            if (isXDIGIT(*h)) {
+                                significant_bits += shift;
 #ifdef HEXFP_UQUAD
-                            if (accumulate) {
-                                if (significant_bits < NV_MANT_DIG) {
-                                    /* We are in the long "run" of xdigits,
-                                     * accumulate the full four bits. */
-                                    assert(shift >= 0);
-                                    hexfp_uquad <<= shift;
-                                    hexfp_uquad |= b;
-                                    hexfp_frac_bits += shift;
-                                } else if (significant_bits - shift < NV_MANT_DIG) {
-                                    /* We are at a hexdigit either at,
-                                     * or straddling, the edge of mantissa.
-                                     * We will try grabbing as many as
-                                     * possible bits. */
-                                    int tail =
-                                      significant_bits - NV_MANT_DIG;
-                                    if (tail <= 0)
-                                       tail += shift;
-                                    assert(tail >= 0);
-                                    hexfp_uquad <<= tail;
-                                    assert((shift - tail) >= 0);
-                                    hexfp_uquad |= b >> (shift - tail);
-                                    hexfp_frac_bits += tail;
+                                if (accumulate) {
+                                    if (significant_bits < NV_MANT_DIG) {
+                                        /* We are in the long "run" of xdigits,
+                                         * accumulate the full four bits. */
+                                        assert(shift >= 0);
+                                        hexfp_uquad <<= shift;
+                                        hexfp_uquad |= b;
+                                        hexfp_frac_bits += shift;
+                                    } else if (   significant_bits - shift
+                                               < NV_MANT_DIG)
+                                    {
+                                        /* We are at a hexdigit either at,
+                                         * or straddling, the edge of mantissa.
+                                         * We will try grabbing as many as
+                                         * possible bits. */
+                                        int tail =
+                                          significant_bits - NV_MANT_DIG;
+                                        if (tail <= 0)
+                                           tail += shift;
+                                        assert(tail >= 0);
+                                        hexfp_uquad <<= tail;
+                                        assert((shift - tail) >= 0);
+                                        hexfp_uquad |= b >> (shift - tail);
+                                        hexfp_frac_bits += tail;
 
-                                    /* Ignore the trailing zero bits
-                                     * of the last non-zero xdigit.
-                                     *
-                                     * The assumption here is that if
-                                     * one has input of e.g. the xdigit
-                                     * eight (0x8), there is only one
-                                     * bit being input, not the full
-                                     * four bits.  Conversely, if one
-                                     * specifies a zero xdigit, the
-                                     * assumption is that one really
-                                     * wants all those bits to be zero. */
-                                    if (b) {
-                                        if ((b & 0x1) == 0x0) {
-                                            significant_bits--;
-                                            if ((b & 0x2) == 0x0) {
+                                        /* Ignore the trailing zero bits
+                                         * of the last non-zero xdigit.
+                                         *
+                                         * The assumption here is that if
+                                         * one has input of e.g. the xdigit
+                                         * eight (0x8), there is only one
+                                         * bit being input, not the full
+                                         * four bits.  Conversely, if one
+                                         * specifies a zero xdigit, the
+                                         * assumption is that one really
+                                         * wants all those bits to be zero. */
+                                        if (b) {
+                                            if ((b & 0x1) == 0x0) {
                                                 significant_bits--;
-                                                if ((b & 0x4) == 0x0) {
+                                                if ((b & 0x2) == 0x0) {
                                                     significant_bits--;
+                                                    if ((b & 0x4) == 0x0) {
+                                                        significant_bits--;
+                                                    }
                                                 }
                                             }
                                         }
+
+                                        accumulate = FALSE;
                                     }
-
-                                    accumulate = FALSE;
+                                } else {
+                                    /* Keep skipping the xdigits, and
+                                     * accumulating the significant bits,
+                                     * but do not shift the uquad
+                                     * (which would catastrophically drop
+                                     * high-order bits) or accumulate the
+                                     * xdigits anymore. */
                                 }
-                            } else {
-                                /* Keep skipping the xdigits, and
-                                 * accumulating the significant bits,
-                                 * but do not shift the uquad
-                                 * (which would catastrophically drop
-                                 * high-order bits) or accumulate the
-                                 * xdigits anymore. */
-                            }
 #else /* HEXFP_NV */
-                            if (accumulate) {
-                                nv_mult /= nvshift[shift];
-                                if (nv_mult > 0.0)
-                                    hexfp_nv += b * nv_mult;
-                                else
-                                    accumulate = FALSE;
-                            }
+                                if (accumulate) {
+                                    nv_mult /= nvshift[shift];
+                                    if (nv_mult > 0.0)
+                                        hexfp_nv += b * nv_mult;
+                                    else
+                                        accumulate = FALSE;
+                                }
 #endif
+                            }
+                            if (significant_bits >= NV_MANT_DIG)
+                                accumulate = FALSE;
                         }
-                        if (significant_bits >= NV_MANT_DIG)
-                            accumulate = FALSE;
                     }
-                }
 
-                if (   (has_digs || significant_bits > 0)
-                    && isALPHA_FOLD_EQ(*h, 'p'))
-                {
-                    bool negexp = FALSE;
-                    h++;
-                    if (*h == '+')
+                    if (   (has_digs || significant_bits > 0)
+                        && isALPHA_FOLD_EQ(*h, 'p'))
+                    {
+                        bool negexp = FALSE;
                         h++;
-                    else if (*h == '-') {
-                        negexp = TRUE;
-                        h++;
-                    }
-                    if (isDIGIT(*h)) {
-                        while (isDIGIT(*h) || *h == '_') {
-                            if (isDIGIT(*h)) {
-                                hexfp_exp *= 10;
-                                hexfp_exp += *h - '0';
-#ifdef NV_MIN_EXP
-                                if (negexp
-                                    && -hexfp_exp < NV_MIN_EXP - 1) {
-                                    /* NOTE: this means that the exponent
-                                     * underflow warning happens for
-                                     * the IEEE 754 subnormals (denormals),
-                                     * because DBL_MIN_EXP etc are the lowest
-                                     * possible binary (or, rather, DBL_RADIX-base)
-                                     * exponent for normals, not subnormals.
-                                     *
-                                     * This may or may not be a good thing. */
-                                    ck_warner(packWARN(WARN_OVERFLOW),
-                                              "Hexadecimal float: exponent underflow");
-                                    break;
-                                }
-#endif
-#ifdef NV_MAX_EXP
-                                if (!negexp
-                                    && hexfp_exp > NV_MAX_EXP - 1) {
-                                    ck_warner(packWARN(WARN_OVERFLOW),
-                                              "Hexadecimal float: exponent overflow");
-                                    break;
-                                }
-#endif
-                            }
+                        if (*h == '+')
+                            h++;
+                        else if (*h == '-') {
+                            negexp = TRUE;
                             h++;
                         }
-                        if (negexp)
-                            hexfp_exp = -hexfp_exp;
-#ifdef HEXFP_UQUAD
-                        hexfp_exp -= hexfp_frac_bits;
+                        if (isDIGIT(*h)) {
+                            while (isDIGIT_or_UNDERSCORE(*h)) {
+                                if (isDIGIT(*h)) {
+                                    hexfp_exp *= 10;
+                                    hexfp_exp += *h - '0';
+#ifdef NV_MIN_EXP
+                                    if (negexp
+                                        && -hexfp_exp < NV_MIN_EXP - 1) {
+                                        /* NOTE: this means that the exponent
+                                         * underflow warning happens for the
+                                         * IEEE 754 subnormals (denormals),
+                                         * because DBL_MIN_EXP etc are the
+                                         * lowest possible binary (or, rather,
+                                         * DBL_RADIX-base) exponent for
+                                         * normals, not subnormals.
+                                         *
+                                         * This may or may not be a good
+                                         * thing. */
+                                        ck_warner(packWARN(WARN_OVERFLOW),
+                                      "Hexadecimal float: exponent underflow");
+                                        break;
+                                    }
 #endif
-                        hexfp = TRUE;
-                        goto decimal;
+#ifdef NV_MAX_EXP
+                                    if (!negexp
+                                        && hexfp_exp > NV_MAX_EXP - 1) {
+                                        ck_warner(packWARN(WARN_OVERFLOW),
+                                      "Hexadecimal float: exponent overflow");
+                                        break;
+                                    }
+#endif
+                                }
+                                h++;
+                            }
+                            if (negexp)
+                                hexfp_exp = -hexfp_exp;
+#ifdef HEXFP_UQUAD
+                            hexfp_exp -= hexfp_frac_bits;
+#endif
+                            hexfp = TRUE;
+                            goto decimal;
+                        }
                     }
                 }
-            }
 
             if (!just_zero && !has_digs) {
                 /* 0x, 0o or 0b with no digits, treat it as an error.
@@ -12826,38 +12866,29 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
 
             if (overflowed) {
                 if (n > 4294967295.0)
-                    ck_warner(packWARN(WARN_PORTABLE),
-                              "%s number > %s non-portable",
-                              Bases[shift],
-                              new_octal ? "0o37777777777" : maxima[shift]);
+                    output_non_portable(1 << shift);
                 sv = newSVnv(n);
             }
             else {
 #if UVSIZE > 4
                 if (u > 0xffffffff)
-                    ck_warner(packWARN(WARN_PORTABLE),
-                              "%s number > %s non-portable",
-                              Bases[shift],
-                              new_octal ? "0o37777777777" : maxima[shift]);
+                    output_non_portable(1 << shift);
 #endif
                 sv = newSVuv(u);
             }
-            if (just_zero && (PL_hints & HINT_NEW_INTEGER))
-                sv = new_constant(start, s - start, "integer",
-                                  sv, NULL, NULL, 0, NULL);
-            else if (PL_hints & HINT_NEW_BINARY)
-                sv = new_constant(start, s - start, "binary",
-                                  sv, NULL, NULL, 0, NULL);
-        }
-        break;
-
-    /*
-      handle decimal numbers.
-      we're also sent here when we read a 0 as the first digit
-    */
-    case '1': case '2': case '3': case '4': case '5':
-    case '6': case '7': case '8': case '9': case '.':
+        if (just_zero && (PL_hints & HINT_NEW_INTEGER))
+            sv = new_constant(start, s - start, "integer",
+                              sv, NULL, NULL, 0, NULL);
+        else if (PL_hints & HINT_NEW_BINARY)
+            sv = new_constant(start, s - start, "binary",
+                              sv, NULL, NULL, 0, NULL);
+    }
+    else if (isDIGIT_A(*s) || *s == '.') {
       decimal:
+
+        /* handle decimal numbers.
+           we're also sent here when we read a 0 as the first digit
+         */
         d = PL_tokenbuf;
         e = C_ARRAY_END(PL_tokenbuf) - 6; /* room for various punctuation */
         floatit = FALSE;
@@ -12887,17 +12918,14 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
         }
 
         /* read next group of digits and _ and copy into d */
-        while (isDIGIT(*s)
-               || *s == '_'
+        while (   isDIGIT_or_UNDERSCORE(*s)
                || UNLIKELY(hexfp && isXDIGIT(*s)))
         {
             /* skip underscores, checking for misplaced ones
                if -w is on
             */
             if (*s == '_') {
-                if (lastub && s == lastub + 1)
-                    WARN_ABOUT_UNDERSCORE();
-                lastub = s++;
+                HANDLE_UNDERSCORE(s);
             }
             else {
                 /* check for end of fixed-length buffer */
@@ -12909,8 +12937,9 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
         }
 
         /* final misplaced underbar check */
-        if (lastub && s == lastub + 1)
-            WARN_ABOUT_UNDERSCORE();
+        if (s > start) {  /* Can get here without advancing s */
+            SUFFER_AN_UNDERSCORE_JUST_BEFORE_HERE(s);
+        }
 
         /* read a decimal portion if there is one.  avoid
            3..5 being interpreted as the number 3. followed
@@ -12920,32 +12949,25 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
             floatit = TRUE;
             *d++ = *s++;
 
-            if (*s == '_') {
-                WARN_ABOUT_UNDERSCORE();
-                lastub = s;
-            }
+            SUFFER_AN_UNDERSCORE_HERE(s);
 
             /* copy, ignoring underbars, until we run out of digits.
             */
-            for (; isDIGIT(*s)
-                   || *s == '_'
-                   || UNLIKELY(hexfp && isXDIGIT(*s));
-                 s++)
+            while (   isDIGIT_or_UNDERSCORE(*s)
+                   || UNLIKELY(hexfp && isXDIGIT(*s)))
             {
                 /* fixed length buffer check */
                 if (d >= e)
                     croak("%s", number_too_long);
                 if (*s == '_') {
-                   if (lastub && s == lastub + 1)
-                        WARN_ABOUT_UNDERSCORE();
-                   lastub = s;
+                    HANDLE_UNDERSCORE(s);
                 }
                 else
-                    *d++ = *s;
+                    *d++ = *s++;
             }
-            /* fractional part ending in underbar? */
-            if (s[-1] == '_')
-                WARN_ABOUT_UNDERSCORE();
+
+            SUFFER_AN_UNDERSCORE_JUST_BEFORE_HERE(s);
+
             if (*s == '.' && isDIGIT(s[1])) {
                 /* oops, it's really a v-string, but without the "v" */
                 s = start;
@@ -12976,36 +12998,29 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
 
 
             /* stray preinitial _ */
-            if (*s == '_') {
-                WARN_ABOUT_UNDERSCORE();
-                lastub = s++;
-            }
+            SUFFER_AN_UNDERSCORE_HERE(s);
 
             /* allow positive or negative exponent */
             if (*s == '+' || *s == '-')
                 *d++ = *s++;
 
             /* stray initial _ */
-            if (*s == '_') {
-                WARN_ABOUT_UNDERSCORE();
-                lastub = s++;
-            }
+            SUFFER_AN_UNDERSCORE_HERE(s);
 
             /* read digits of exponent */
-            while (isDIGIT(*s) || *s == '_') {
+            while (isDIGIT_or_UNDERSCORE(*s)) {
                 if (isDIGIT(*s)) {
                     ++exp_digits;
                     if (d >= e)
                         croak("%s", number_too_long);
                     *d++ = *s++;
                 }
-                else {
-                   if (((lastub && s == lastub + 1)
-                        || (!isDIGIT(s[1]) && s[1] != '_')))
-                        WARN_ABOUT_UNDERSCORE();
-                   lastub = s++;
+                else {  /* Must be an underscore */
+                    HANDLE_UNDERSCORE(s);
                 }
             }
+
+            SUFFER_AN_UNDERSCORE_JUST_BEFORE_HERE(s);
 
             if (!exp_digits) {
                 /* no exponent digits, the [eEpP] could be for something else,
@@ -13074,18 +13089,9 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
             sv = S_new_constant(aTHX_ PL_tokenbuf, d - PL_tokenbuf,
                                 key, keylen, sv, NULL, NULL, 0, NULL);
         }
-        break;
-
-    /* if it starts with a v, it could be a v-string */
-    case 'v':
-    vstring:
-                sv = newSV(5); /* preallocate storage space */
-                ENTER_with_name("scan_vstring");
-                SAVEFREESV(sv);
-                s = scan_vstring(s, PL_bufend, sv);
-                SvREFCNT_inc_simple_void_NN(sv);
-                LEAVE_with_name("scan_vstring");
-        break;
+    }
+    else {
+        croak("panic: scan_num, *s=%c", *s);
     }
 
     /* make the op for the constant and return */
@@ -13800,7 +13806,7 @@ Perl_scan_vstring(pTHX_ const char *s, const char *const e, SV *sv)
     PERL_ARGS_ASSERT_SCAN_VSTRING;
 
     if (*pos == 'v') pos++;  /* get past 'v' */
-    while (pos < e && (isDIGIT(*pos) || *pos == '_'))
+    while (pos < e && isDIGIT_or_UNDERSCORE(*pos))
         pos++;
     if ( *pos != '.') {
         /* this may not be a v-string if followed by => */
@@ -13851,7 +13857,7 @@ Perl_scan_vstring(pTHX_ const char *s, const char *const e, SV *sv)
                  s = pos;
                  break;
             }
-            while (pos < e && (isDIGIT(*pos) || *pos == '_'))
+            while (pos < e && isDIGIT_or_UNDERSCORE(*pos))
                  pos++;
         }
         SvPOK_on(sv);

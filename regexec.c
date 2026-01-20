@@ -3516,7 +3516,7 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
         croak("panic: unknown regstclass %d", (int)OP(c));
     } /* End of switch on node type */
 
-    return 0;
+    return NULL;
 
   got_it:
     return s;
@@ -3694,7 +3694,7 @@ I32
 Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, char *strend,
               char *strbeg, SSize_t minend, SV *sv, void *data, U32 flags)
 /* stringarg: the point in the string at which to begin matching */
-/* strend:    pointer to null at end of string */
+/* strend:    pointer to NUL at end of string */
 /* strbeg:    real beginning of string */
 /* minend:    end of match must be >= minend bytes after stringarg. */
 /* sv:        SV being matched: only used for utf8 flag, pos() etc; string
@@ -11761,6 +11761,8 @@ it are from the Inherited or Common scripts.
 bool
 Perl_isSCRIPT_RUN(pTHX_ const U8 * s, const U8 * send, const bool utf8_target)
 {
+    PERL_ARGS_ASSERT_ISSCRIPT_RUN;
+
     /* Basically, it looks at each character in the sequence to see if the
      * above conditions are met; if not it fails.  It uses an inversion map to
      * find the enum corresponding to the script of each character.  But this
