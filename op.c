@@ -1092,6 +1092,7 @@ Perl_op_clear(pTHX_ OP *o)
     case OP_ENTERTRY:
     case OP_ENTEREVAL:	/* Was holding hints. */
     case OP_ARGDEFELEM:	/* Was holding signature index. */
+    case OP_ITER:       /* Was holding multivariable itervar count */
         o->op_targ = 0;
         break;
     default:
@@ -3078,6 +3079,27 @@ S_potential_mod_type(I32 type)
 }
 
 
+#define check_or_warn_refaliasing() S_check_or_warn_refaliasing(aTHX)
+PERL_STATIC_INLINE void
+S_check_or_warn_refaliasing(pTHX)
+{
+    if (!FEATURE_REFALIASING_IS_ENABLED)
+        croak("Experimental aliasing via reference not enabled");
+    ck_warner_d(packWARN(WARN_EXPERIMENTAL__REFALIASING),
+            "Aliasing via reference is experimental");
+}
+
+#define check_or_warn_declared_refs() S_check_or_warn_declared_refs(aTHX)
+PERL_STATIC_INLINE void
+S_check_or_warn_declared_refs(pTHX)
+{
+    if (!FEATURE_MYREF_IS_ENABLED)
+        croak("The experimental declared_refs feature is not enabled");
+    ck_warner_d(packWARN(WARN_EXPERIMENTAL__DECLARED_REFS),
+            "Declaring references is experimental");
+}
+
+
 /*
 =for apidoc op_lvalue
 
@@ -3506,11 +3528,7 @@ Perl_op_lvalue_flags(pTHX_ OP *o, I32 type, U32 flags)
     case OP_SREFGEN:
         if (type == OP_NULL) { /* local */
           local_refgen:
-            if (!FEATURE_MYREF_IS_ENABLED)
-                croak("The experimental declared_refs "
-                                 "feature is not enabled");
-            ck_warner_d(packWARN(WARN_EXPERIMENTAL__DECLARED_REFS),
-                        "Declaring references is experimental");
+            check_or_warn_declared_refs();
             next_kid = cUNOPo->op_first;
             goto do_next;
         }
@@ -3530,13 +3548,8 @@ Perl_op_lvalue_flags(pTHX_ OP *o, I32 type, U32 flags)
         {
             const U8 ec = PL_parser ? PL_parser->error_count : 0;
             S_lvref(aTHX_ kid, type);
-            if (!PL_parser || PL_parser->error_count == ec) {
-                if (!FEATURE_REFALIASING_IS_ENABLED)
-                    croak(
-                       "Experimental aliasing via reference not enabled");
-                ck_warner_d(packWARN(WARN_EXPERIMENTAL__REFALIASING),
-                            "Aliasing via reference is experimental");
-            }
+            if (!PL_parser || PL_parser->error_count == ec)
+                check_or_warn_refaliasing();
         }
         if (o->op_type == OP_REFGEN)
             op_null(cUNOPx(cUNOPo->op_first)->op_first); /* pushmark */
@@ -4172,11 +4185,7 @@ S_my_kid(pTHX_ OP *o, OP *attrs, OP **imopsp)
         return o;
     }
     else if (type == OP_REFGEN || type == OP_SREFGEN) {
-        if (!FEATURE_MYREF_IS_ENABLED)
-            croak("The experimental declared_refs "
-                             "feature is not enabled");
-        ck_warner_d(packWARN(WARN_EXPERIMENTAL__DECLARED_REFS),
-                    "Declaring references is experimental");
+        check_or_warn_declared_refs();
         /* Kid is a nulled OP_LIST, handled above.  */
         my_kid(cUNOPo->op_first, attrs, imopsp);
         return o;
@@ -9642,10 +9651,10 @@ Perl_newRANGE(pTHX_ I32 flags, OP *left, OP *right)
 
     range->op_targ =
         pad_add_name_pvn("$", 1, padadd_NO_DUP_CHECK|padadd_STATE, 0, 0);
-    sv_upgrade(PAD_SV(range->op_targ), SVt_PVNV);
+    SvUPGRADE(PAD_SV(range->op_targ), SVt_PVNV);
     flip->op_targ =
         pad_add_name_pvn("$", 1, padadd_NO_DUP_CHECK|padadd_STATE, 0, 0);;
-    sv_upgrade(PAD_SV(flip->op_targ), SVt_PVNV);
+    SvUPGRADE(PAD_SV(flip->op_targ), SVt_PVNV);
     SvPADTMP_on(PAD_SV(flip->op_targ));
 
     flip->op_private =  left->op_type == OP_CONST ? OPpFLIP_LINENUM : 0;
@@ -9998,6 +10007,7 @@ Perl_newFOROP(pTHX_ I32 flags, OP *sv, OP *expr, OP *block, OP *cont)
     I32 enteriterpflags = 0;
     U8 iterpflags = 0;
     bool parens = 0;
+    U32 refalias_mask = 0;
 
     PERL_ARGS_ASSERT_NEWFOROP;
 
@@ -10029,62 +10039,105 @@ Perl_newFOROP(pTHX_ I32 flags, OP *sv, OP *expr, OP *block, OP *cont)
             sv = NULL;
             PAD_COMPNAME_GEN_set(padoff, PERL_INT_MAX);
         }
-        else if (sv->op_type == OP_NULL && sv->op_targ == OP_SREFGEN)
-            NOOP;
+        else if (OP_TYPE_IS_OR_WAS(sv, OP_SREFGEN)) {
+            /* for \VAR or for my \VAR, with or without parens */
+            /* sv should be OP_NULL[OP_NULL[OP_LVREF]]. We can distinguish
+             * the 'my' version by the LVINTRO flag */
+            assert(cUNOPx(sv)->op_first);
+            assert(cUNOPx(cUNOPx(sv)->op_first)->op_first);
+
+            OP *varop = cUNOPx(cUNOPx(sv)->op_first)->op_first;
+            /* This is either OP_LVREF or one of the OP_PADxV ops */
+            assert(varop->op_type == OP_LVREF ||
+                    (varop->op_type == OP_PADSV ||
+                     varop->op_type == OP_PADAV ||
+                     varop->op_type == OP_PADHV));
+
+            if(varop->op_type != OP_LVREF || varop->op_private & OPpLVAL_INTRO) {  /* for my \VAR */
+                /* Throw away the sv op subtree and turn this into a simple
+                 * padoffset + OPpITER_REFALIAS flag */
+                iterpflags = OPpITER_REFALIAS;
+                enteriterpflags = OPpLVAL_INTRO;
+                padoff = varop->op_targ;
+                varop->op_targ = 0;
+                op_free(sv);
+                sv = NULL;
+            }
+            /* else TODO(leonerd): still do something about the non-my version? */
+        }
         else if (sv->op_type == OP_LIST) {
             LISTOP *list = cLISTOPx(sv);
             OP *pushmark = list->op_first;
-            OP *first_padsv;
-            UNOP *padsv;
-            PADOFFSET i;
 
             enteriterpflags = OPpLVAL_INTRO; /* for my ($k, $v) () */
             parens = 1;
 
             if (!pushmark || pushmark->op_type != OP_PUSHMARK) {
-                croak("panic: newFORLOOP, found %s, expecting pushmark",
+                croak("panic: newFOROP, found %s, expecting pushmark",
                            pushmark ? PL_op_desc[pushmark->op_type] : "NULL");
             }
-            first_padsv = OpSIBLING(pushmark);
-            if (!first_padsv || first_padsv->op_type != OP_PADSV) {
-                croak("panic: newFORLOOP, found %s, expecting padsv",
-                           first_padsv ? PL_op_desc[first_padsv->op_type] : "NULL");
+
+            for (OP *kid = OpSIBLING(pushmark); kid; kid = OpSIBLING(kid)) {
+                bool kid_refalias = false;
+                OP *padxv;
+                if (kid->op_type == OP_SREFGEN) {
+                    /* kid == SREFGEN[NULL[PADxV]] */
+                    assert(kUNOP->op_first);
+                    padxv = cUNOPx(kUNOP->op_first)->op_first;
+                    assert(padxv);
+
+                    if(padxv->op_type != OP_PADSV &&
+                       padxv->op_type != OP_PADAV &&
+                       padxv->op_type != OP_PADHV)
+                        croak("panic: newFOROP, found refgen(%s) at %zd, expecting refgen(padxv)",
+                                PL_op_desc[kUNOP->op_first->op_type],
+                                how_many_more + 1);
+                    if(!(iterpflags & OPpITER_REFALIAS)) {
+                        check_or_warn_declared_refs();
+                        check_or_warn_refaliasing();
+                    }
+                    iterpflags |= OPpITER_REFALIAS;
+                    kid_refalias = true;
+                }
+                else if (kid->op_type == OP_PADSV)
+                    padxv = kid;
+                else
+                    croak("panic: newFOROP, found %s at %zd, expecting padsv",
+                               PL_op_desc[kid->op_type],
+                               how_many_more + 1);
+
+                assert(padxv->op_targ);
+
+                if (!padoff) {
+                    /* first */
+                    padoff = padxv->op_targ;
+                }
+                else {
+                    /* subsequent */
+                    how_many_more++;
+                    if (padxv->op_targ != padoff + how_many_more) {
+                        croak("panic: newFOROP, padsv at %zd targ is %zd, not %zd",
+                                   how_many_more, padxv->op_targ, padoff + how_many_more);
+                    }
+                }
+                if (kid_refalias) {
+                    if((how_many_more + 1) > 24)
+                        croak("Cannot use declared reference iterator variables in foreach loop past the 24th variable");
+                    refalias_mask |= (1 << how_many_more);
+                }
             }
-            padoff = first_padsv->op_targ;
-
-            /* There should be at least one more PADSV to find, and the ops
-               should have consecutive values in targ: */
-            padsv = cUNOPx(OpSIBLING(first_padsv));
-            do {
-                if (!padsv || padsv->op_type != OP_PADSV) {
-                    croak("panic: newFORLOOP, found %s at %zd, expecting padsv",
-                               padsv ? PL_op_desc[padsv->op_type] : "NULL",
-                               how_many_more);
-                }
-                ++how_many_more;
-                if (padsv->op_targ != padoff + how_many_more) {
-                    croak("panic: newFORLOOP, padsv at %zd targ is %zd, not %zd",
-                               how_many_more, padsv->op_targ, padoff + how_many_more);
-                }
-
-                padsv = cUNOPx(OpSIBLING(padsv));
-            } while (padsv);
 
             /* OK, this optree has the shape that we expected. So now *we*
                "claim" the Pad slots: */
-            first_padsv->op_targ = 0;
-            PAD_COMPNAME_GEN_set(padoff, PERL_INT_MAX);
+            for (OP *kid = OpSIBLING(pushmark); kid; kid = OpSIBLING(kid)) {
+                OP *padxv = (kid->op_type == OP_PADSV) ? kid :
+                            (kid->op_type == OP_SREFGEN) ? cUNOPx(kUNOP->op_first)->op_first :
+                            NULL;
+                assert(padxv);
 
-            i = padoff;
-
-            padsv = cUNOPx(OpSIBLING(first_padsv));
-            do {
-                ++i;
-                padsv->op_targ = 0;
-                PAD_COMPNAME_GEN_set(i, PERL_INT_MAX);
-
-                padsv = cUNOPx(OpSIBLING(padsv));
-            } while (padsv);
+                PAD_COMPNAME_GEN_set(padxv->op_targ, PERL_INT_MAX);
+                padxv->op_targ = 0;
+            }
 
             op_free(sv);
             sv = NULL;
@@ -10229,8 +10282,16 @@ Perl_newFOROP(pTHX_ I32 flags, OP *sv, OP *expr, OP *block, OP *cont)
     if (parens)
         /* hint to deparser that this is:  for my (...) ... */
         loop->op_flags |= OPf_PARENS;
+
     iter = newOP(OP_ITER, (U32)iterpflags << 8);
-    iter->op_targ = how_many_more;
+    if(iterpflags & OPpITER_REFALIAS) {
+        if(how_many_more > 0xFF)
+            croak("Cannot use more than 256 iterator variables on a foreach loop if any are declared refs");
+        iter->op_targ = (how_many_more) | (refalias_mask << 8);
+    }
+    else
+        iter->op_targ = how_many_more;
+
     return newWHILEOP(flags, 1, loop, iter, block, cont, 0);
 }
 
@@ -14293,11 +14354,7 @@ Perl_ck_refassign(pTHX_ OP *o)
                                  OP_DESC(varop)));
         return o;
     }
-    if (!FEATURE_REFALIASING_IS_ENABLED)
-        croak(
-                  "Experimental aliasing via reference not enabled");
-    ck_warner_d(packWARN(WARN_EXPERIMENTAL__REFALIASING),
-                "Aliasing via reference is experimental");
+    check_or_warn_refaliasing();
     if (stacked) {
         o->op_flags |= OPf_STACKED;
         op_sibling_splice(o, right, 1, varop);
