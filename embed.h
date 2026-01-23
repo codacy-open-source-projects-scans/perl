@@ -25,266 +25,11 @@
  * earlier when this file was #included with this symbol undefined */
 #if defined(PERL_DO_UNDEFS)
 # if !defined(PERL_CORE)
-#   undef case_100_SBOX32
-#   undef case_101_SBOX32
-#   undef case_102_SBOX32
-#   undef case_103_SBOX32
-#   undef case_104_SBOX32
-#   undef case_105_SBOX32
-#   undef case_106_SBOX32
-#   undef case_107_SBOX32
-#   undef case_108_SBOX32
-#   undef case_109_SBOX32
-#   undef case_10_SBOX32
-#   undef case_110_SBOX32
-#   undef case_111_SBOX32
-#   undef case_112_SBOX32
-#   undef case_113_SBOX32
-#   undef case_114_SBOX32
-#   undef case_115_SBOX32
-#   undef case_116_SBOX32
-#   undef case_117_SBOX32
-#   undef case_118_SBOX32
-#   undef case_119_SBOX32
-#   undef case_11_SBOX32
-#   undef case_120_SBOX32
-#   undef case_121_SBOX32
-#   undef case_122_SBOX32
-#   undef case_123_SBOX32
-#   undef case_124_SBOX32
-#   undef case_125_SBOX32
-#   undef case_126_SBOX32
-#   undef case_127_SBOX32
-#   undef case_128_SBOX32
-#   undef case_129_SBOX32
-#   undef case_12_SBOX32
-#   undef case_130_SBOX32
-#   undef case_131_SBOX32
-#   undef case_132_SBOX32
-#   undef case_133_SBOX32
-#   undef case_134_SBOX32
-#   undef case_135_SBOX32
-#   undef case_136_SBOX32
-#   undef case_137_SBOX32
-#   undef case_138_SBOX32
-#   undef case_139_SBOX32
-#   undef case_13_SBOX32
-#   undef case_140_SBOX32
-#   undef case_141_SBOX32
-#   undef case_142_SBOX32
-#   undef case_143_SBOX32
-#   undef case_144_SBOX32
-#   undef case_145_SBOX32
-#   undef case_146_SBOX32
-#   undef case_147_SBOX32
-#   undef case_148_SBOX32
-#   undef case_149_SBOX32
-#   undef case_14_SBOX32
-#   undef case_150_SBOX32
-#   undef case_151_SBOX32
-#   undef case_152_SBOX32
-#   undef case_153_SBOX32
-#   undef case_154_SBOX32
-#   undef case_155_SBOX32
-#   undef case_156_SBOX32
-#   undef case_157_SBOX32
-#   undef case_158_SBOX32
-#   undef case_159_SBOX32
-#   undef case_15_SBOX32
-#   undef case_160_SBOX32
-#   undef case_161_SBOX32
-#   undef case_162_SBOX32
-#   undef case_163_SBOX32
-#   undef case_164_SBOX32
-#   undef case_165_SBOX32
-#   undef case_166_SBOX32
-#   undef case_167_SBOX32
-#   undef case_168_SBOX32
-#   undef case_169_SBOX32
-#   undef case_16_SBOX32
-#   undef case_170_SBOX32
-#   undef case_171_SBOX32
-#   undef case_172_SBOX32
-#   undef case_173_SBOX32
-#   undef case_174_SBOX32
-#   undef case_175_SBOX32
-#   undef case_176_SBOX32
-#   undef case_177_SBOX32
-#   undef case_178_SBOX32
-#   undef case_179_SBOX32
-#   undef case_17_SBOX32
-#   undef case_180_SBOX32
-#   undef case_181_SBOX32
-#   undef case_182_SBOX32
-#   undef case_183_SBOX32
-#   undef case_184_SBOX32
-#   undef case_185_SBOX32
-#   undef case_186_SBOX32
-#   undef case_187_SBOX32
-#   undef case_188_SBOX32
-#   undef case_189_SBOX32
-#   undef case_18_SBOX32
-#   undef case_190_SBOX32
-#   undef case_191_SBOX32
-#   undef case_192_SBOX32
-#   undef case_193_SBOX32
-#   undef case_194_SBOX32
-#   undef case_195_SBOX32
-#   undef case_196_SBOX32
-#   undef case_197_SBOX32
-#   undef case_198_SBOX32
-#   undef case_199_SBOX32
-#   undef case_19_SBOX32
-#   undef case_1_SBOX32
-#   undef case_200_SBOX32
-#   undef case_201_SBOX32
-#   undef case_202_SBOX32
-#   undef case_203_SBOX32
-#   undef case_204_SBOX32
-#   undef case_205_SBOX32
-#   undef case_206_SBOX32
-#   undef case_207_SBOX32
-#   undef case_208_SBOX32
-#   undef case_209_SBOX32
-#   undef case_20_SBOX32
-#   undef case_210_SBOX32
-#   undef case_211_SBOX32
-#   undef case_212_SBOX32
-#   undef case_213_SBOX32
-#   undef case_214_SBOX32
-#   undef case_215_SBOX32
-#   undef case_216_SBOX32
-#   undef case_217_SBOX32
-#   undef case_218_SBOX32
-#   undef case_219_SBOX32
-#   undef case_21_SBOX32
-#   undef case_220_SBOX32
-#   undef case_221_SBOX32
-#   undef case_222_SBOX32
-#   undef case_223_SBOX32
-#   undef case_224_SBOX32
-#   undef case_225_SBOX32
-#   undef case_226_SBOX32
-#   undef case_227_SBOX32
-#   undef case_228_SBOX32
-#   undef case_229_SBOX32
-#   undef case_22_SBOX32
-#   undef case_230_SBOX32
-#   undef case_231_SBOX32
-#   undef case_232_SBOX32
-#   undef case_233_SBOX32
-#   undef case_234_SBOX32
-#   undef case_235_SBOX32
-#   undef case_236_SBOX32
-#   undef case_237_SBOX32
-#   undef case_238_SBOX32
-#   undef case_239_SBOX32
-#   undef case_23_SBOX32
-#   undef case_240_SBOX32
-#   undef case_241_SBOX32
-#   undef case_242_SBOX32
-#   undef case_243_SBOX32
-#   undef case_244_SBOX32
-#   undef case_245_SBOX32
-#   undef case_246_SBOX32
-#   undef case_247_SBOX32
-#   undef case_248_SBOX32
-#   undef case_249_SBOX32
-#   undef case_24_SBOX32
-#   undef case_250_SBOX32
-#   undef case_251_SBOX32
-#   undef case_252_SBOX32
-#   undef case_253_SBOX32
-#   undef case_254_SBOX32
-#   undef case_255_SBOX32
-#   undef case_256_SBOX32
-#   undef case_25_SBOX32
-#   undef case_26_SBOX32
-#   undef case_27_SBOX32
-#   undef case_28_SBOX32
-#   undef case_29_SBOX32
-#   undef case_2_SBOX32
-#   undef case_30_SBOX32
-#   undef case_31_SBOX32
-#   undef case_32_SBOX32
-#   undef case_33_SBOX32
-#   undef case_34_SBOX32
-#   undef case_35_SBOX32
-#   undef case_36_SBOX32
-#   undef case_37_SBOX32
-#   undef case_38_SBOX32
-#   undef case_39_SBOX32
-#   undef case_3_SBOX32
-#   undef case_40_SBOX32
-#   undef case_41_SBOX32
-#   undef case_42_SBOX32
-#   undef case_43_SBOX32
-#   undef case_44_SBOX32
-#   undef case_45_SBOX32
-#   undef case_46_SBOX32
-#   undef case_47_SBOX32
-#   undef case_48_SBOX32
-#   undef case_49_SBOX32
-#   undef case_4_SBOX32
-#   undef case_50_SBOX32
-#   undef case_51_SBOX32
-#   undef case_52_SBOX32
-#   undef case_53_SBOX32
-#   undef case_54_SBOX32
-#   undef case_55_SBOX32
-#   undef case_56_SBOX32
-#   undef case_57_SBOX32
-#   undef case_58_SBOX32
-#   undef case_59_SBOX32
-#   undef case_5_SBOX32
-#   undef case_60_SBOX32
-#   undef case_61_SBOX32
-#   undef case_62_SBOX32
-#   undef case_63_SBOX32
-#   undef case_64_SBOX32
-#   undef case_65_SBOX32
-#   undef case_66_SBOX32
-#   undef case_67_SBOX32
-#   undef case_68_SBOX32
-#   undef case_69_SBOX32
-#   undef case_6_SBOX32
-#   undef case_70_SBOX32
-#   undef case_71_SBOX32
-#   undef case_72_SBOX32
-#   undef case_73_SBOX32
-#   undef case_74_SBOX32
-#   undef case_75_SBOX32
-#   undef case_76_SBOX32
-#   undef case_77_SBOX32
-#   undef case_78_SBOX32
-#   undef case_79_SBOX32
-#   undef case_7_SBOX32
-#   undef case_80_SBOX32
-#   undef case_81_SBOX32
-#   undef case_82_SBOX32
-#   undef case_83_SBOX32
-#   undef case_84_SBOX32
-#   undef case_85_SBOX32
-#   undef case_86_SBOX32
-#   undef case_87_SBOX32
-#   undef case_88_SBOX32
-#   undef case_89_SBOX32
-#   undef case_8_SBOX32
-#   undef case_90_SBOX32
-#   undef case_91_SBOX32
-#   undef case_92_SBOX32
-#   undef case_93_SBOX32
-#   undef case_94_SBOX32
-#   undef case_95_SBOX32
-#   undef case_96_SBOX32
-#   undef case_97_SBOX32
-#   undef case_98_SBOX32
-#   undef case_99_SBOX32
-#   undef case_9_SBOX32
 #   undef CC_UNDERSCORE_
 #   undef isFOO_or_UNDERSCORE_
-#   undef USE_STDIO
+#   undef sv_2num
 #   if !defined(PERL_EXT)
+#     undef GV_CACHE_ONLY
 #     undef invlist_intersection_
 #     undef invlist_subtract_
 #     undef invlist_union_
@@ -932,7 +677,13 @@
 # define sv_newmortal()                         Perl_sv_newmortal(aTHX)
 # define sv_newref(a)                           Perl_sv_newref(aTHX_ a)
 # define sv_nosharing(a)                        Perl_sv_nosharing(aTHX_ a)
+# define sv_numcmp_flags(a,b,c)                 Perl_sv_numcmp_flags(aTHX_ a,b,c)
 # define sv_numeq_flags(a,b,c)                  Perl_sv_numeq_flags(aTHX_ a,b,c)
+# define sv_numge_flags(a,b,c)                  Perl_sv_numge_flags(aTHX_ a,b,c)
+# define sv_numgt_flags(a,b,c)                  Perl_sv_numgt_flags(aTHX_ a,b,c)
+# define sv_numle_flags(a,b,c)                  Perl_sv_numle_flags(aTHX_ a,b,c)
+# define sv_numlt_flags(a,b,c)                  Perl_sv_numlt_flags(aTHX_ a,b,c)
+# define sv_numne_flags(a,b,c)                  Perl_sv_numne_flags(aTHX_ a,b,c)
 # define sv_peek(a)                             Perl_sv_peek(aTHX_ a)
 # define sv_pos_b2u(a,b)                        Perl_sv_pos_b2u(aTHX_ a,b)
 # define sv_pos_b2u_flags(a,b,c)                Perl_sv_pos_b2u_flags(aTHX_ a,b,c)
@@ -1386,7 +1137,7 @@
 #   define subsignature_append_slurpy(a,b)      Perl_subsignature_append_slurpy(aTHX_ a,b)
 #   define subsignature_finish()                Perl_subsignature_finish(aTHX)
 #   define subsignature_start()                 Perl_subsignature_start(aTHX)
-#   define sv_2num(a)                           Perl_sv_2num(aTHX_ a)
+#   define sv_2num_flags(a,b)                   Perl_sv_2num_flags(aTHX_ a,b)
 #   define sv_clean_all()                       Perl_sv_clean_all(aTHX)
 #   define sv_clean_objs()                      Perl_sv_clean_objs(aTHX)
 #   define sv_del_backref(a,b)                  Perl_sv_del_backref(aTHX_ a,b)
@@ -1705,6 +1456,7 @@
 #     define forget_pmop(a)                     S_forget_pmop(aTHX_ a)
 #     define gen_constant_list(a)               S_gen_constant_list(aTHX_ a)
 #     define inplace_aassign(a)                 S_inplace_aassign(aTHX_ a)
+#     define is_dup_mode                        S_is_dup_mode
 #     define is_handle_constructor              S_is_handle_constructor
 #     define is_standard_filehandle_name        S_is_standard_filehandle_name
 #     define listkids(a)                        S_listkids(aTHX_ a)
@@ -1905,6 +1657,7 @@
 #     define sv_2iuv_common(a)                  S_sv_2iuv_common(aTHX_ a)
 #     define sv_add_arena(a,b,c)                S_sv_add_arena(aTHX_ a,b,c)
 #     define sv_display(a,b,c)                  S_sv_display(aTHX_ a,b,c)
+#     define sv_numcmp_common(a,b,c,d,e)        S_sv_numcmp_common(aTHX_ a,b,c,d,e)
 #     define sv_pos_b2u_midway(a,b,c,d)         S_sv_pos_b2u_midway(aTHX_ a,b,c,d)
 #     define sv_pos_u2b_cached(a,b,c,d,e,f,g)   S_sv_pos_u2b_cached(aTHX_ a,b,c,d,e,f,g)
 #     define sv_pos_u2b_forwards                S_sv_pos_u2b_forwards
@@ -2048,6 +1801,11 @@
 #   if defined(USE_QUADMATH)
 #     define quadmath_format_needed             Perl_quadmath_format_needed
 #     define quadmath_format_valid              Perl_quadmath_format_valid
+#   endif
+#   if defined(USE_THREADS)
+#     define Perl_sv_2num(mTHX,a)               sv_2num(a)
+#   else
+#     define Perl_sv_2num                       sv_2num
 #   endif
 #   if defined(WIN32)
 #     define get_win32_message_utf8ness(a)      Perl_get_win32_message_utf8ness(aTHX_ a)
@@ -2599,7 +2357,13 @@
 #   define Perl_sv_force_normal(mTHX,a)         sv_force_normal(a)
 #   define Perl_sv_insert(mTHX,a,b,c,d,e)       sv_insert(a,b,c,d,e)
 #   define Perl_sv_mortalcopy(mTHX,a)           sv_mortalcopy(a)
+#   define Perl_sv_numcmp(mTHX,a,b)             sv_numcmp(a,b)
 #   define Perl_sv_numeq(mTHX,a,b)              sv_numeq(a,b)
+#   define Perl_sv_numge(mTHX,a,b)              sv_numge(a,b)
+#   define Perl_sv_numgt(mTHX,a,b)              sv_numgt(a,b)
+#   define Perl_sv_numle(mTHX,a,b)              sv_numle(a,b)
+#   define Perl_sv_numlt(mTHX,a,b)              sv_numlt(a,b)
+#   define Perl_sv_numne(mTHX,a,b)              sv_numne(a,b)
 #   define Perl_sv_pv(mTHX,a)                   sv_pv(a)
 #   define Perl_sv_pvbyte(mTHX,a)               sv_pvbyte(a)
 #   define Perl_sv_pvn_force(mTHX,a,b)          sv_pvn_force(a,b)
@@ -2703,7 +2467,13 @@
 #   define Perl_sv_force_normal                 sv_force_normal
 #   define Perl_sv_insert                       sv_insert
 #   define Perl_sv_mortalcopy                   sv_mortalcopy
+#   define Perl_sv_numcmp                       sv_numcmp
 #   define Perl_sv_numeq                        sv_numeq
+#   define Perl_sv_numge                        sv_numge
+#   define Perl_sv_numgt                        sv_numgt
+#   define Perl_sv_numle                        sv_numle
+#   define Perl_sv_numlt                        sv_numlt
+#   define Perl_sv_numne                        sv_numne
 #   define Perl_sv_pv                           sv_pv
 #   define Perl_sv_pvbyte                       sv_pvbyte
 #   define Perl_sv_pvn_force                    sv_pvn_force

@@ -1259,7 +1259,7 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start, STRLEN *len_p, I32 *flags,
 PERL_CALLCONV int
 Perl_grok_infnan(pTHX_ const char **sp, const char *send);
 #define PERL_ARGS_ASSERT_GROK_INFNAN            \
-        assert(sp); assert(send)
+        assert(sp); assert(*sp); assert(send); assert(*sp <= send)
 
 PERL_CALLCONV int
 Perl_grok_number(pTHX_ const char *pv, STRLEN len, UV *valuep);
@@ -3337,7 +3337,7 @@ PERL_CALLCONV void
 Perl_packlist(pTHX_ SV *cat, const char *pat, const char *patend, SV **beglist, SV **endlist);
 #define PERL_ARGS_ASSERT_PACKLIST               \
         assert(cat); assert(pat); assert(patend); assert(beglist); \
-        assert(endlist)
+        assert(endlist); assert(pat <= patend); assert(*patend == '\0')
 
 PERL_CALLCONV PADOFFSET
 Perl_pad_add_anon(pTHX_ CV *func, I32 optype);
@@ -4406,9 +4406,9 @@ Perl_sv_2mortal(pTHX_ SV * const sv);
 #define PERL_ARGS_ASSERT_SV_2MORTAL
 
 PERL_CALLCONV SV *
-Perl_sv_2num(pTHX_ SV * const sv)
+Perl_sv_2num_flags(pTHX_ SV * const sv, int flags)
         __attribute__visibility__("hidden");
-#define PERL_ARGS_ASSERT_SV_2NUM                \
+#define PERL_ARGS_ASSERT_SV_2NUM_FLAGS          \
         assert(sv)
 
 PERL_CALLCONV NV
@@ -4787,12 +4787,54 @@ PERL_CALLCONV void
 Perl_sv_nosharing(pTHX_ SV *sv);
 #define PERL_ARGS_ASSERT_SV_NOSHARING
 
+/* PERL_CALLCONV I32
+Perl_sv_numcmp(pTHX_ SV *sv1, SV *sv2); */
+
+PERL_CALLCONV I32
+Perl_sv_numcmp_flags(pTHX_ SV *sv1, SV *sv2, const U32 flags);
+#define PERL_ARGS_ASSERT_SV_NUMCMP_FLAGS
+
 /* PERL_CALLCONV bool
 Perl_sv_numeq(pTHX_ SV *sv1, SV *sv2); */
 
 PERL_CALLCONV bool
 Perl_sv_numeq_flags(pTHX_ SV *sv1, SV *sv2, const U32 flags);
 #define PERL_ARGS_ASSERT_SV_NUMEQ_FLAGS
+
+/* PERL_CALLCONV bool
+Perl_sv_numge(pTHX_ SV *sv1, SV *sv2); */
+
+PERL_CALLCONV bool
+Perl_sv_numge_flags(pTHX_ SV *sv1, SV *sv2, const U32 flags);
+#define PERL_ARGS_ASSERT_SV_NUMGE_FLAGS
+
+/* PERL_CALLCONV bool
+Perl_sv_numgt(pTHX_ SV *sv1, SV *sv2); */
+
+PERL_CALLCONV bool
+Perl_sv_numgt_flags(pTHX_ SV *sv1, SV *sv2, const U32 flags);
+#define PERL_ARGS_ASSERT_SV_NUMGT_FLAGS
+
+/* PERL_CALLCONV bool
+Perl_sv_numle(pTHX_ SV *sv1, SV *sv2); */
+
+PERL_CALLCONV bool
+Perl_sv_numle_flags(pTHX_ SV *sv1, SV *sv2, const U32 flags);
+#define PERL_ARGS_ASSERT_SV_NUMLE_FLAGS
+
+/* PERL_CALLCONV bool
+Perl_sv_numlt(pTHX_ SV *sv1, SV *sv2); */
+
+PERL_CALLCONV bool
+Perl_sv_numlt_flags(pTHX_ SV *sv1, SV *sv2, const U32 flags);
+#define PERL_ARGS_ASSERT_SV_NUMLT_FLAGS
+
+/* PERL_CALLCONV bool
+Perl_sv_numne(pTHX_ SV *sv1, SV *sv2); */
+
+PERL_CALLCONV bool
+Perl_sv_numne_flags(pTHX_ SV *sv1, SV *sv2, const U32 flags);
+#define PERL_ARGS_ASSERT_SV_NUMNE_FLAGS
 
 PERL_CALLCONV char *
 Perl_sv_peek(pTHX_ SV *sv);
@@ -7507,6 +7549,11 @@ S_inplace_aassign(pTHX_ OP *o);
         assert(o)
 
 STATIC bool
+S_is_dup_mode(const OP *o);
+# define PERL_ARGS_ASSERT_IS_DUP_MODE           \
+        assert(o)
+
+STATIC bool
 S_is_handle_constructor(const OP *o, I32 numargs)
         __attribute__warn_unused_result__;
 # define PERL_ARGS_ASSERT_IS_HANDLE_CONSTRUCTOR \
@@ -8392,7 +8439,8 @@ Perl_invlist_clone(pTHX_ SV * const invlist, SV *newlist);
 
 # define PERL_ARGS_ASSERT_EXECUTE_WILDCARD      \
         assert(prog); assert(stringarg); assert(strend); assert(strbeg); \
-        assert(screamer); assert(strbeg <= stringarg)
+        assert(screamer); assert(strbeg <= stringarg); \
+        assert(stringarg <= strend); assert(*strend == '\0')
 
 # define PERL_ARGS_ASSERT_GET_QUANTIFIER_VALUE  \
         assert(pRExC_state); assert(start); assert(end); assert(start < end)
@@ -9229,6 +9277,11 @@ S_sv_display(pTHX_ SV * const sv, char *tmpbuf, STRLEN tmpbuf_size);
 # define PERL_ARGS_ASSERT_SV_DISPLAY            \
         assert(sv); assert(tmpbuf)
 
+STATIC bool
+S_sv_numcmp_common(pTHX_ SV **sv1, SV **sv2, const U32 flags, int method, SV **result);
+# define PERL_ARGS_ASSERT_SV_NUMCMP_COMMON      \
+        assert(result)
+
 STATIC STRLEN
 S_sv_pos_b2u_midway(pTHX_ const U8 * const s, const U8 * const target, const U8 *end, STRLEN endu);
 # define PERL_ARGS_ASSERT_SV_POS_B2U_MIDWAY     \
@@ -9400,7 +9453,7 @@ S_get_and_check_backslash_N_name_wrapper(pTHX_ const char *s, const char * const
 STATIC void
 S_incline(pTHX_ const char *s, const char *end);
 # define PERL_ARGS_ASSERT_INCLINE               \
-        assert(s); assert(end); assert(s <= end)
+        assert(s); assert(end); assert(s <= end); assert(*end == '\0')
 
 STATIC int
 S_intuit_method(pTHX_ char *start, SV *ioname, CV *cv);
@@ -9410,7 +9463,7 @@ S_intuit_method(pTHX_ char *start, SV *ioname, CV *cv);
 STATIC int
 S_intuit_more(pTHX_ char *s, char *e, U8 caller_context, char *caller_s, Size_t caller_length);
 # define PERL_ARGS_ASSERT_INTUIT_MORE           \
-        assert(s); assert(e)
+        assert(s); assert(e); assert(s <= e); assert(*e == '\0')
 
 STATIC bool
 S_is_existing_identifier(pTHX_ char *s, Size_t len, char sigil, bool is_utf8);

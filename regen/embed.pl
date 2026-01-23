@@ -12,10 +12,18 @@
 #    intrpvar.h
 #    perlvars.h
 #    regen/opcodes
+#    All top level .c files in MANIFEST
+#    Most top level .h files in MANIFEST, exception list %skip_files below
+#    Some pod files, listed in @pod_list below
 #
 # Accepts the standard regen_lib -q and -v args.
 #
 # This script is normally invoked from regen.pl.
+
+# See database of global and static function prototypes in embed.fnc
+# This is used to generate prototype headers under various configurations,
+# export symbols lists for different platforms, and macros to provide an
+# implicit interpreter context argument.
 #
 # We strive to not pollute the namespace of XS modules.  To that end, embed.h
 # (in cooperation with perl.h) keeps all macro names out of that namespace
@@ -37,8 +45,6 @@ BEGIN {
     require './regen/regen_lib.pl';
     require './regen/embed_lib.pl';
 }
-
-my @az = ('a'..'z');
 
 # This program has historically generated compatibility macros for a few
 # functions of the form Perl_FOO(pTHX_ ...).  Those macros would be named
@@ -70,11 +76,10 @@ $has_compat_macro{$_} = 1 for @have_compatibility_macros;
 my %perl_compats;   # Have 'perl_' prefix
 
 # This program inspects various top-level header files, except those on this
-# list.
+# list.  These are all machine-generated, or not relevant for our purposes.
 my %skip_files;
 $skip_files{$_} = 1 for qw(
                             charclass_invlists.inc
-                            config.h
                             embed.h
                             fakesdio.h
                             nostdio.h
@@ -104,39 +109,69 @@ my @pod_list = qw(
                    pod/perlreapi.pod
                  );
 
-# This is a list of symbols that are not documented to be available for
+# A regular expression that matches names that are externally visible, but
+# Perl reserves for itself.  Generally, we want things to be delimitted on
+# both sides to show it isn't part of a larger word such as 'hyperlink',
+# 'perlustrate', or 'properly'.  Underscores delimit besides the typical ^ or
+# \b.  All caps PERL has looser rules to accommodate the many existing symbols
+# where everything is jammed together, and the less likelihood that something
+# with all caps is innocently referring to something unrelated to Perl.
+my $names_reserved_for_perl_use_re =
+                         qr/  ^ (  PL_ \w+ \b
+                                 | perl_        # The underscore delimits
+                                 | Perl [_A-Z]  # Uppercase delimits here too
+                                 | PERL [A-Z]+ [[:alpha:]] ( \b | _ )
+                                )
+
+                              # The \d is for PERL5, for example
+                            | ( _ | \b )  PERL ( _ | \b | \d+ )
+
+                              # This is for obsolete and deprecated uses
+                            | ( _ | \b ) CPERL (arg | scope) ( _ | \b )
+                          /x;
+
+# This program looks at C preprocessor conditional expressions.  It turns out
+# that many of those it cares about can be evaluated by knowing some
+# conventions used in our source.  This hash allows for information beyond
+# those conventions to be known.  Each key is a file, and its value is a
+# sub-hash.  Each key in that is a condition name which occurs in the source
+# as '#ifdef foo' or some variation on that. And the value of that key is 0 if
+# 'foo' is to be considered undefined while parsing the file; or 1 if the
+# symbol is to be considered to be defined.  Things to put in here might be to
+# set to 0 file-scope symbols that are only defined during development, such
+# as ones that turn on a special debugging mode.
+my %per_file_definitions = (
+        'perl.h'             => { 'H_PERL' => 0 },
+);
+
+# Below is a list of symbols that are not documented to be available for
 # modules to use, but are nevertheless currently not kept by embed.h from
 # being visible to the world.
 #
 # Strive to make this list empty.
 #
 # The list does not include symbols that we have documented as being reserved
-# for perl's use, namely those that begin with 'PL_' or contain qr/perl/i.
+# for perl's use, namely those that match the pattern just above.
 # There are two parts of the list; the second part contains the symbols which
 # have a trailing underscore; the first part those without.
 #
-# For all modules that aren't deliberating using particular names, all the
+# For all modules that aren't deliberately using particular names, all the
 # other symbols on it are namespace pollutants.
-
 my @unresolved_visibility_overrides = qw(
     _
     ABORT
     ABS_IV_MIN
     ALIGNED_TYPE
     ALIGNED_TYPE_NAME
+    ALLOC_THREAD_KEY
     ALL_PARENS_COUNTED
     ALWAYS_WARN_SUPER
     AMG_CALLun
-    AMG_CALLunary
     AMGfallNEVER
     AMGfallNO
     AMGfallYES
-    AMGf_assign
-    AMGf_noleft
-    AMGf_noright
     AMGf_numarg
     AMGf_numeric
-    AMGf_unary
     AMGf_want_list
     AMG_id2name
     AMG_id2namelen
@@ -171,6 +206,7 @@ my @unresolved_visibility_overrides = qw(
     aTHXx
     AT_LEAST_ASCII_RESTRICTED
     AT_LEAST_UNI_SEMANTICS
+    Atoul
     AvARYLEN
     AvMAX
     AvREAL
@@ -215,8 +251,9 @@ my @unresolved_visibility_overrides = qw(
     BOM_UTF8_FIRST_BYTE
     BOM_UTF8_TAIL
     BSD_GETPGRP
+    BSDish
     BSD_SETPGRP
-    BYTES_REMAINING_IN_WORD
+    BYTEORDER
     CALL_BLOCK_HOOKS
     CALL_FPTR
     CALLREGCOMP
@@ -256,6 +293,7 @@ my @unresolved_visibility_overrides = qw(
     cCOP
     cCOPo
     cCOPx
+    C_FAC_POSIX
     cGVOP_gv
     cGVOPo_gv
     cGVOPx_gv
@@ -313,6 +351,11 @@ my @unresolved_visibility_overrides = qw(
     COMBINING_DOT_ABOVE_UTF8
     COMBINING_GRAVE_ACCENT_UTF8
     COMBINING_GREEK_YPOGEGRAMMENI_UTF8
+    COND_BROADCAST
+    COND_DESTROY
+    COND_INIT
+    COND_SIGNAL
+    COND_WAIT
     CONTINUE_PAT_MOD
     COP_FEATURE_SIZE
     CopFEATURES_setfrom
@@ -360,6 +403,7 @@ my @unresolved_visibility_overrides = qw(
     CTIME_LOCK
     CTIME_UNLOCK
     Ctl
+    CTYPE256
     cUNOP
     cUNOP_AUX
     cUNOP_AUXo
@@ -579,6 +623,8 @@ my @unresolved_visibility_overrides = qw(
     DEBUG_PEEP
     DEBUG_p_FLAG
     DEBUG_P_FLAG
+    DEBUG_POST_STMTS
+    DEBUG_PRE_STMTS
     DEBUG_p_TEST
     DEBUG_P_TEST
     DEBUG_Pv
@@ -595,6 +641,7 @@ my @unresolved_visibility_overrides = qw(
     DEBUG_R_TEST
     DEBUG_s
     DEBUG_S
+    DEBUG_SBOX32_HASH
     DEBUG_SCOPE
     DEBUG_s_FLAG
     DEBUG_S_FLAG
@@ -633,6 +680,7 @@ my @unresolved_visibility_overrides = qw(
     DEBUG_y_TEST
     DEBUG_yv
     DEBUG_yv_TEST
+    DEBUG_ZAPHOD32_HASH
     DEFAULT_PAT_MOD
     DEFERRED_COULD_BE_OFFICIAL_MARKERc
     DEFERRED_COULD_BE_OFFICIAL_MARKERs
@@ -642,6 +690,7 @@ my @unresolved_visibility_overrides = qw(
     DEPENDS_PAT_MOD
     DEPENDS_PAT_MODS
     DEPENDS_SEMANTICS
+    DETACH
     DIE
     DISABLE_LC_NUMERIC_CHANGES
     dJMPENV
@@ -685,6 +734,7 @@ my @unresolved_visibility_overrides = qw(
     dPOPXnnrl
     dPOPXssrl
     DPTR2FPTR
+    dSAVEDERRNO
     dSAVE_ERRNO
     dSS_ADD
     dTARG
@@ -703,13 +753,10 @@ my @unresolved_visibility_overrides = qw(
     eC
     eI
     EIGHT_BIT_UTF8_TO_NATIVE
-    ELEMENT_RANGE_MATCHES_INVLIST
     EMBEDMYMALLOC
-    EMULATE_THREAD_SAFE_LOCALES
     ENDGRENT_R_HAS_FPTR
     ENDPWENT_R_HAS_FPTR
     ENV_INIT
-    environ
     ENV_LOCK
     ENV_READ_LOCK
     ENV_READ_UNLOCK
@@ -724,6 +771,7 @@ my @unresolved_visibility_overrides = qw(
     EVAL_NULL
     EVAL_RE_REPARSING
     EVAL_WARNONLY
+    EXEC_ARGV_CAST
     EXEC_PAT_MOD
     EXEC_PAT_MODS
     EXPECT
@@ -789,9 +837,11 @@ my @unresolved_visibility_overrides = qw(
     free_and_set_cop_warnings
     free_c_backtrace
     FreeOp
-    FROM_INTERNAL_SIZE
+    FREE_THREAD_KEY
+    FSEEKSIZE
     F_sin_amg
     F_sqrt_amg
+    Fstat
     FULL_TRIE_STUDY
     fwrite1
     G_ARRAY
@@ -1000,25 +1050,35 @@ my @unresolved_visibility_overrides = qw(
     HAS_CHOWN
     HAS_EXTENDED_OS_ERRNO
     HAS_EXTRA_LONG_UTF8
+    HAS_GETPGRP
     HAS_GROUP
+    HAS_HTONL
+    HAS_HTONS
     HAS_IOCTL
     HAS_KILL
     HAS_NONLATIN1_FOLD_CLOSURE
-    HAS_NONLATIN1_SIMPLE_FOLD_CLOSURE
+    HAS_NTOHL
+    HAS_NTOHS
     HAS_PASSWD
     HAS_POSIX_2008_LOCALE
     HAS_PTHREAD_UNCHECKED_GETSPECIFIC_NP
+    HAS_SETPGRP
+    HAS_SETREGID
+    HAS_SETREUID
     HAS_UTIME
     HAS_WAIT
     hasWARNBIT
     HASWIDTH
-    HE_ARENA_ROOT_IX
     HEK_BASESIZE
     HeKEY_hek
     HeKEY_sv
+    HEKf
+    HEKf256
+    HEKf256_QUOTEDPREFIX
     HEKfARG
     HeKFLAGS
     HEK_FLAGS
+    HEKf_QUOTEDPREFIX
     HEK_HASH
     HEK_KEY
     HEK_LEN
@@ -1080,8 +1140,6 @@ my @unresolved_visibility_overrides = qw(
     HSm_XSVERLEN
     HS_XSVERLEN_MAX
     htoni
-    htonl
-    htons
     htovl
     htovs
     HvAMAGIC
@@ -1125,6 +1183,7 @@ my @unresolved_visibility_overrides = qw(
     HvLAZYDEL_off
     HvLAZYDEL_on
     HvMAX
+    HvNAME_HEK
     HvNAME_HEK_NN
     HvPLACEHOLDERS
     HvPLACEHOLDERS_get
@@ -1151,10 +1210,19 @@ my @unresolved_visibility_overrides = qw(
     I_LIMITS
     ILLEGAL_UTF8_BYTE
     IN_BYTES
+    INCLUDE_PROTOTYPES
     INCMARK
+    INCPUSH_APPLLIB_EXP
+    INCPUSH_APPLLIB_OLD_EXP
+    INCPUSH_ARCHLIB_EXP
+    INCPUSH_PRIVLIB_EXP
+    INCPUSH_SITEARCH_EXP
+    INCPUSH_SITELIB_EXP
+    INCPUSH_SITELIB_STEM
     INFNAN_NV_U8_DECL
     INFNAN_U8_NV_DECL
     init_os_extras
+    INIT_THREADS
     INIT_TRACK_MEMPOOL
     IN_LC
     IN_LC_ALL_COMPILETIME
@@ -1176,6 +1244,7 @@ my @unresolved_visibility_overrides = qw(
     IN_UTF8_TURKIC_LOCALE
     INVLIST_INDEX
     IoANY
+    IOCPARM_LEN
     IOf_ARGV
     IOf_DIDTOP
     IOf_FAKE_DIRP
@@ -1191,6 +1260,7 @@ my @unresolved_visibility_overrides = qw(
     IoTYPE_SOCKET
     IoTYPE_STD
     IoTYPE_WRONLY
+    IPERLSYS_H
     isALNUMC_LC_utf8_safe
     isALNUMC_uni
     isALNUMC_utf8
@@ -1237,8 +1307,8 @@ my @unresolved_visibility_overrides = qw(
     isIDFIRST_lazy_if_safe
     isIDFIRST_LC_utf8
     isIDFIRST_uni
-    IS_IN_SOME_FOLD_L1
     is_LARGER_NON_CHARS_utf8
+    is_LAX_VERSION
     isLEXWARN_off
     isLEXWARN_on
     is_LNBREAK_latin1_safe
@@ -1250,8 +1320,6 @@ my @unresolved_visibility_overrides = qw(
     is_MULTI_CHAR_FOLD_utf8_safe
     isNON_BRACE_QUANTIFIER
     is_NONCHAR_utf8_safe
-    IS_NON_FINAL_FOLD
-    isnormal
     IS_NUMERIC_RADIX
     IS_PADCONST
     IS_PADGV
@@ -1283,7 +1351,6 @@ my @unresolved_visibility_overrides = qw(
     isPUNCT_LC_utf8
     isPUNCT_uni
     isQUANTIFIER
-    isQUOTEMETA
     is_QUOTEMETA_high
     isREGEXP
     IS_SAFE_PATHNAME
@@ -1292,6 +1359,7 @@ my @unresolved_visibility_overrides = qw(
     isSPACE_LC_utf8
     isSPACE_uni
     is_SPACE_utf8_safe_backwards
+    is_STRICT_VERSION
     is_SURROGATE_utf8
     is_SURROGATE_utf8_safe
     I_STDARG
@@ -1336,18 +1404,20 @@ my @unresolved_visibility_overrides = qw(
     is_XDIGIT_high
     isXDIGIT_LC_utf8
     isXDIGIT_uni
+    is_XPERLSPACE_cp_high
+    is_XPERLSPACE_high
     IV_MAX_P1
     JE_OLD_STACK_HWM_restore
     JE_OLD_STACK_HWM_save
     JE_OLD_STACK_HWM_zero
     JMPENV_BOOTSTRAP
     JMPENV_POP
+    JOIN
     kBINOP
     kCOP
     KEEPCOPY_PAT_MOD
     KEEPCOPY_PAT_MODS
     KELVIN_SIGN
-    KERNEL
     KEY_abs
     KEY_accept
     KEY_ADJUST
@@ -1654,6 +1724,7 @@ my @unresolved_visibility_overrides = qw(
     LATIN_SMALL_LIGATURE_ST_UTF8
     LC_COLLATE_LOCK
     LC_COLLATE_UNLOCK
+    LC_NUMERIC_LOCK
     LC_NUMERIC_UNLOCK
     LDBL_DIG
     LEAVE_SCOPE
@@ -1670,8 +1741,10 @@ my @unresolved_visibility_overrides = qw(
     LOCALE_READ_UNLOCK
     LOCALE_TERM
     LOCALE_UNLOCK
+    LOCAL_PATCH_COUNT
     LOCALTIME_LOCK
     LOCALTIME_UNLOCK
+    LOCK_DOLLARZERO_MUTEX
     LOCK_LC_NUMERIC_STANDARD
     LONGDOUBLE_BIG_ENDIAN
     LONGDOUBLE_DOUBLEDOUBLE
@@ -1709,14 +1782,15 @@ my @unresolved_visibility_overrides = qw(
     MARK_NAUGHTY_EXP
     MAXARG
     MAXARG3
-    MAX_CHARSET_NAME_LENGTH
     MAX_FOLD_FROMS
     MAX_LEGAL_CP
     MAX_MATCHES
     MAXO
+    MAXPATHLEN
     MAX_PORTABLE_UTF8_TWO_BYTE
-    MAX_PRINT_A
+    MAX_RECURSE_EVAL_NOCHANGE_DEPTH
     MAX_SAVEt
+    MAXSYSFD
     MAX_UNICODE_UTF8
     MAX_UNICODE_UTF8_BYTES
     MAX_UTF8_TWO_BYTE
@@ -1750,8 +1824,11 @@ my @unresolved_visibility_overrides = qw(
     memGE
     memGT
     memLE
+    MEM_LOG_ALLOC
     MEM_LOG_DEL_SV
+    MEM_LOG_FREE
     MEM_LOG_NEW_SV
+    MEM_LOG_REALLOC
     memLT
     MEM_SIZE
     MEM_SIZE_MAX
@@ -1791,7 +1868,11 @@ my @unresolved_visibility_overrides = qw(
     MSVC_DIAG_RESTORE_STMT
     MULTILINE_PAT_MOD
     MUST_RESTART
+    MUTEX_DESTROY
+    MUTEX_INIT
     MUTEX_INIT_NEEDS_MUTEX_ZEROED
+    MUTEX_LOCK
+    MUTEX_UNLOCK
     my_binmode
     MY_CXT_INDEX
     MY_CXT_INIT_ARG
@@ -1811,6 +1892,7 @@ my @unresolved_visibility_overrides = qw(
     nBIT_UMAX
     NBSP_NATIVE
     NBSP_UTF8
+    NDEBUG
     NEED_UTF8
     NEGATE_2IV
     NEGATE_2UV
@@ -1844,16 +1926,14 @@ my @unresolved_visibility_overrides = qw(
     NOLINE
     NONDESTRUCT_PAT_MOD
     NONDESTRUCT_PAT_MODS
-    NON_OTHER_COUNT
     NONV
-    NO_POSIX_2008_LOCALE
     NORETURN_FUNCTION_END
     NORMAL
+    NO_TAINT_SUPPORT
     NOTE3
     NOT_REACHED
+    NSIG
     ntohi
-    ntohl
-    ntohs
     Null
     Nullfp
     Nullgv
@@ -1865,6 +1945,7 @@ my @unresolved_visibility_overrides = qw(
     NV_DIG
     NV_EPSILON
     NV_IMPLICIT_BIT
+    NV_INF
     NV_LITTLE_ENDIAN
     NV_MANT_DIG
     NV_MAX
@@ -1874,6 +1955,7 @@ my @unresolved_visibility_overrides = qw(
     NV_MIN_10_EXP
     NV_MIN_EXP
     NV_MIX_ENDIAN
+    NV_NAN
     NV_NAN_BITS
     NV_NAN_IS_QUIET
     NV_NAN_IS_SIGNALING
@@ -1971,7 +2053,6 @@ my @unresolved_visibility_overrides = qw(
     OP_IS_SOCKET
     OP_IS_STAT
     OP_LVALUE_NO_CROAK
-    OP_SIBLING
     OPpALLOW_FAKE
     OPpARG1_MASK
     OPpARG2_MASK
@@ -2012,9 +2093,7 @@ my @unresolved_visibility_overrides = qw(
     OPpDEREF_HV
     OPpDEREF_SV
     OPpDONT_INIT_GV
-    OPpEARLY_CV
     OPpEMPTYAVHV_IS_HV
-    OPpENTERSUB_AMPER
     OPpENTERSUB_DB
     OPpENTERSUB_HASTARG
     OPpENTERSUB_INARGS
@@ -2120,6 +2199,7 @@ my @unresolved_visibility_overrides = qw(
     OpREFCNT_set
     OP_REFCNT_TERM
     OP_REFCNT_UNLOCK
+    OP_SIBLING
     OPTIMIZE_INFTY
     OP_TYPE_IS_COP_NN
     OP_TYPE_IS_NN
@@ -2201,6 +2281,9 @@ my @unresolved_visibility_overrides = qw(
     Pause
     PBITVAL
     PBYTE
+    PerlEnv_putenv
+    PIPE_OPEN_MODE
+    PIPESOCK_MODE
     PMf_BASE_SHIFT
     PMf_CHARSET
     PMf_CODELIST_PRIVATE
@@ -2250,16 +2333,21 @@ my @unresolved_visibility_overrides = qw(
     PP
     PP_wrapped
     PRESCAN_VERSION
-    PREV_RANGE_MATCHES_INVLIST
     PRINTF_FORMAT_NULL_OK
+    PRIVLIB_EXP
     PRIVSHIFT
     ProgLen
     pthread_addr_t
+    PTHREAD_ATFORK
     pthread_attr_init
+    PTHREAD_ATTR_SETDETACHSTATE
     pthread_condattr_default
     pthread_create
+    PTHREAD_CREATE
+    PTHREAD_CREATE_JOINABLE
     PTHREAD_GETSPECIFIC
     PTHREAD_GETSPECIFIC_INT
+    PTHREAD_INIT_SELF
     pthread_key_create
     pthread_keycreate
     pthread_mutexattr_default
@@ -2277,13 +2365,16 @@ my @unresolved_visibility_overrides = qw(
     pTHX_9
     pTHX__FORMAT
     pTHX_FORMAT
+    pTHXo
     pTHX__VALUE
     pTHX_VALUE
+    pTHXx
     PUSH_MULTICALL_FLAGS
     PUSHSTACK
     PUSHSTACKi
     PUSHSTACK_INIT_HWM
     PUSHTARG
+    PVf_QUOTEDPREFIX
     pWARN_ALL
     pWARN_NONE
     pWARN_STD
@@ -2369,6 +2460,7 @@ my @unresolved_visibility_overrides = qw(
     REENTR_MEMZERO
     REFCOUNTED_HE_EXISTS
     REFCOUNTED_HE_KEY_UTF8
+    REGCOMP_INTERNAL_H
     RegexLengthToShowInErrorMessages
     REG_FETCH_ABSOLUTE
     REGNODE_GUTS
@@ -2379,6 +2471,8 @@ my @unresolved_visibility_overrides = qw(
     REGTAIL
     REGTAIL_STUDY
     reg_warn_non_literal_string
+    RE_OPTIMIZE_CURLYX_TO_CURLYM
+    RE_OPTIMIZE_CURLYX_TO_CURLYN
     REPORT_LOCATION
     REPORT_LOCATION_ARGS
     REQUIRE_BRANCHJ
@@ -2491,6 +2585,7 @@ my @unresolved_visibility_overrides = qw(
     RMS_IFI
     RMS_ISI
     RMS_PRV
+    ROTL32
     ROTL64
     ROTL_UV
     ROTR32
@@ -2521,6 +2616,7 @@ my @unresolved_visibility_overrides = qw(
     RXf_PMf_NOCAPTURE
     RXf_PMf_SPLIT
     RXf_PMf_STD_PMMOD
+    RXf_PMf_STD_PMMOD_SHIFT
     RXf_PMf_STRICT
     RXf_TAINTED
     RXf_TAINTED_SEEN
@@ -2699,10 +2795,13 @@ my @unresolved_visibility_overrides = qw(
     SAWAMPERSAND_LEFT
     SAWAMPERSAND_MIDDLE
     SAWAMPERSAND_RIGHT
+    SBOX32_CHURN_ROUNDS
     SBOX32_MIX3
     SBOX32_MIX4
     SBOX32_STATE_BITS
     SBOX32_STATE_BYTES
+    SBOX32_STATE_WORDS
+    SBOX32_STATIC_INLINE
     SBOX32_WARN2
     SBOX32_WARN3
     SBOX32_WARN4
@@ -2722,8 +2821,10 @@ my @unresolved_visibility_overrides = qw(
     SCF_TRIE_DOING_RESTUDY
     SCF_TRIE_RESTUDY
     SCF_WHILEM_VISITED_POS
+    SCOPE_SAVES_SIGNAL_MASK
     Semctl
     semun
+    SETERRNO
     SETGRENT_R_HAS_FPTR
     SETi
     SET_MARK_OFFSET
@@ -2734,12 +2835,11 @@ my @unresolved_visibility_overrides = qw(
     SetProgLen
     SETPWENT_R_HAS_FPTR
     SET_recode_x_to_native
-    setregid
-    setreuid
     SETs
     SET_SVANY_FOR_BODYLESS_IV
     SET_SVANY_FOR_BODYLESS_NV
     SETTARG
+    SET_THR
     SET_THREAD_SELF
     SETu
     SF_BEFORE_EOL
@@ -2752,6 +2852,7 @@ my @unresolved_visibility_overrides = qw(
     share_hek_hek
     sharepvn
     SHARP_S_SKIP
+    SH_PATH
     SHUTDOWN_TERM
     SHY_NATIVE
     sI
@@ -2766,7 +2867,7 @@ my @unresolved_visibility_overrides = qw(
     Size_t_MAX
     SKIP_IF_CHAR
     SLOPPYDIVIDE
-    socketpair
+    SOCKET_OPEN_MODE
     S_PAT_MODS
     specialWARN
     SS_ACCVIO
@@ -2853,8 +2954,11 @@ my @unresolved_visibility_overrides = qw(
     SV_COW_REFCNT_MAX
     SV_COW_SHARED_HASH_KEYS
     SvDESTROYABLE
+    SV_DO_COW_SVSETSV
     SvEND_set
     SvENDx
+    SVf256
+    SVf32
     SvFAKE
     SvFAKE_off
     SvFAKE_on
@@ -3014,12 +3118,13 @@ my @unresolved_visibility_overrides = qw(
     TARGn
     TARGu
     tC
+    THR
     THREAD_CREATE_NEEDS_STACK
+    THREAD_RET_TYPE
     tI
     toCTRL
     toFOLD_LC
     toFOLD_uni
-    TO_INTERNAL_SIZE
     toLOWER_uni
     TOO_LATE_FOR
     TOO_NAUGHTY
@@ -3069,10 +3174,10 @@ my @unresolved_visibility_overrides = qw(
     U32_MIN
     U8_MAX
     U8_MIN
+    U8TO16_LE
     U8TO32_LE
     U8TO64_LE
     U_I
-    UINT
     U_L
     UNICODE_ALLOW_ANY
     UNICODE_ALLOW_SUPER
@@ -3100,6 +3205,7 @@ my @unresolved_visibility_overrides = qw(
     UNISKIP
     UNKNOWN_ERRNO_MSG
     UNLINK
+    UNLOCK_DOLLARZERO_MUTEX
     UNLOCK_LC_NUMERIC_STANDARD
     UNOP_AUX_item_sv
     unpackWARN1
@@ -3110,10 +3216,12 @@ my @unresolved_visibility_overrides = qw(
     UPG_VERSION
     uproot_SV
     U_S
+    USE_BSDPGRP
     USE_ENVIRON_ARRAY
     USE_GRENT_BUFFER
     USE_GRENT_FPTR
     USE_GRENT_PTR
+    USE_HASH_SEED
     USE_HOSTENT_BUFFER
     USE_HOSTENT_ERRNO
     USE_HOSTENT_PTR
@@ -3147,6 +3255,7 @@ my @unresolved_visibility_overrides = qw(
     USE_PWENT_FPTR
     USE_PWENT_PTR
     USE_QUERYLOCALE
+    USE_REENTRANT_API
     USER_PROP_MUTEX_INIT
     USER_PROP_MUTEX_LOCK
     USER_PROP_MUTEX_TERM
@@ -3239,8 +3348,8 @@ my @unresolved_visibility_overrides = qw(
     vWARN_dep
     VXS
     VXS_CLASS
-    VXS_RETURN_M_SV
     VXSp
+    VXS_RETURN_M_SV
     VXSXSDP
     want_vtbl_bm
     want_vtbl_fm
@@ -3280,14 +3389,18 @@ my @unresolved_visibility_overrides = qw(
     XPUSHundef
     xpv_len
     XS_DYNAMIC_FILENAME
+    XS_INTERNAL
     XTENDED_PAT_MOD
     xuv_uv
     xV_FROM_REF
+    YIELD
     YYEMPTY
+    YYSTYPE_IS_DECLARED
     YYSTYPE_IS_TRIVIAL
     ZAPHOD32_FINALIZE
     ZAPHOD32_MIX
     ZAPHOD32_SCRAMBLE32
+    ZAPHOD32_STATIC_INLINE
     ZAPHOD32_WARN2
     ZAPHOD32_WARN3
     ZAPHOD32_WARN4
@@ -3341,6 +3454,7 @@ my @unresolved_visibility_overrides = qw(
     DEBUG_h_TEST_
     DEBUG_i_TEST_
     DEBUG_J_TEST_
+    DEBUG_LOCALE_INITIALIZATION_
     DEBUG_l_TEST_
     DEBUG_L_TEST_
     DEBUG_Lv_TEST_
@@ -3446,7 +3560,7 @@ my @unresolved_visibility_overrides = qw(
     NV_BODYLESS_UNION_
     o1_
     OFFUNISKIP_helper_
-    PADNAME_BASE_
+    __PATCHLEVEL_H_INCLUDED__
     PLATFORM_SYS_INIT_
     PLATFORM_SYS_TERM_
     pTHXo_
@@ -3461,9 +3575,8 @@ my @unresolved_visibility_overrides = qw(
     shifted_octet_
     STATIC_ASSERT_STRUCT_BODY_
     STATIC_ASSERT_STRUCT_NAME_
-    SV_HEAD_
     SV_HEAD_DEBUG_
-    SV_HEAD_UNION_
+    SVf_
     toFOLD_utf8_flags_
     toLOWER_utf8_flags_
     TOO_LATE_FOR_
@@ -3517,12 +3630,23 @@ my @unresolved_visibility_overrides = qw(
 # define or redefine, and which aren't otherwise currently detectable by this
 # program's algorithms as being such.  They are not namespace pollutants
 my @system_symbols = qw(
+    environ
+    htonl
+    htons
+    isnormal
     INT32_MIN
     INT64_MIN
     LDBL_DIG
+    ntohl
+    ntohs
     O_CREAT
     O_RDWR
     O_WRONLY
+    pthread_attr_init
+    pthread_create
+    setregid
+    setreuid
+    socketpair
     S_IWGRP
     S_IWUSR
     S_IXGRP
@@ -3540,6 +3664,8 @@ my @needed_by_ext_re = qw(
 # not documented.  They become undefined for any other modules.
 my @needed_by_ext = qw(
 );
+
+# Turn all the lists above into hashes
 
 my %unresolved_visibility_overrides;
 $unresolved_visibility_overrides{$_} = 1 for @unresolved_visibility_overrides;
@@ -3559,11 +3685,188 @@ my %always_undefs;
 my %non_ext_re_undefs = %needed_by_ext_re;
 my %non_ext_undefs = %needed_by_ext;
 
-# See database of global and static function prototypes in embed.fnc
-# This is used to generate prototype headers under various configurations,
-# export symbols lists for different platforms, and macros to provide an
-# implicit interpreter context argument.
+# Create lists of headers and C files to examine
+my @header_list;
+my @c_list;
+open my $mf, "<", "MANIFEST" or die "Can't open MANIFEST: $!";
+while (defined (my $file = <$mf>)) {
+    chomp $file;;
+    $file =~ s/ \s .* //x;
+    next if $file =~ m,/,;
+    next if defined $skip_files{$file};
+
+    push @header_list, $file if $file =~ / ( \.h | \.inc ) \b /x;
+    push @c_list, $file if $file =~ / \.c \b /x;
+}
+close $mf or die "Can't close MANIFEST: $!";
+
+# One part of this program is to keep macros from being externally visible
+# that shouldn't be.  This is done by adding #undef's to embed.h for the ones
+# that should be hidden.  Documented symbols have their desired visibility
+# specified in their documentation.  Undocumented ones are presumed here to
+# need to be hidden, unless overriden by one of the lists above.
 #
+# Only macros defined in a header can be visible externally. This is done by
+# the XS code #including perl.h which in turn #includes a bunch of headers,
+# which the code just above placed in @header_list.  The reason we look at C
+# files is to find documentation that will announce the symbol's intended
+# visibility.
+#
+# But just because there is a #define for a given symbol in a header doesn't
+# mean it actually gets defined.  That definition may be in the scope of some
+# #ifdef's that cause the definition to be skipped.  Some of those #ifdefs are
+# dependent on Configure options and/or the platform being used.  We have to
+# assume for those that they indicate that the definition does happen.  But
+# we know the values for some others, and we can use those to rule in or out
+# whether or not a definition happens.  The simplist example is
+#   #ifdef PERL_CORE ... #endif
+# Any #define within the '...' won't be visible to code outside the core, so
+# doesn't need an #undef generated for it.  No harm would be done to add a
+# #undef for such symbols, except for the unnecessary noise.  And there are so
+# many of them that the noise would be considerable,  so this program
+# examines those #ifdef's, and if they indicate a symbol isn't visible outside
+# its intended target, no #undef gets added to embed.h.
+#
+# One type of such #ifdef follows the convention in perl's source code that a
+# C file, 'foo.c', will #define a symbol at the beginning named PERL_IN_FOO_C.
+# And some otherwise global symbols in header files will be protected from
+# being visible from outside foo.c by
+#   #ifdef PERL_IN_FOO_C
+#   #  define x
+#   #  define y
+#   #    ...
+#   #endif
+#
+# 'x', 'y', ... need not be #undef'ed, as they aren't visible outside the
+# C files that are permitted to see them.
+#
+# This hash contains the base constraints.  0 means the symbol is to be
+# considered undefined; 1, defined.
+my %cpp_ifdef_constraints;
+
+# The regular expression engine has complications beyond the above, mainly due
+# to the fact that it appears as both core and as an extension, via 'use re'.
+# So, for it alone, some #defines that would normally be excluded by the
+# PERL_IN_FOO_C convention are visible to the 'use re' extension.  There are
+# also several other #ifdef symbols it uses.  The list, current as of this
+# writing, is:
+my @regex_conditions = qw(
+                           PERL_IN_DQUOTE_C
+                           PERL_IN_REGCOMP_C
+                           PERL_IN_REGCOMP_DEBUG_C
+                           PERL_IN_REGCOMP_INVLIST_C
+                           PERL_IN_REGCOMP_STUDY_C
+                           PERL_IN_REGCOMP_TRIE_C
+                           PERL_IN_REGEXEC_C
+
+                           PERL_IN_REGCOMP_ANY
+                           PERL_EXT_RE_BUILD
+                           PERL_IN_REGEX_ENGINE
+                           PLUGGABLE_RE_EXTENSION
+                         );
+# None of those symbols will be defined when not in the 'use re extension' nor
+# core.
+my (%in_regex, %not_in_regex);
+$in_regex{$_}     = 1 for @regex_conditions;
+$not_in_regex{$_} = 0 for @regex_conditions;
+
+# Generate the symbols for the PERL_IN_FOO_C convention, excluding those from
+# the 'use re' we've already specially handled.  Otherwise, the convention
+# means each can be set to 0, as being outside of core contradicts all the
+# non-regex ones.
+for my $c (@c_list) {
+    my $c_prime = $c =~ s/[.]/_/r;
+    $c_prime = "PERL_IN_\U$c_prime";
+    next if defined $in_regex{$c_prime};
+    $cpp_ifdef_constraints{$c_prime} = 0;
+}
+
+# This doesn't follow the convention, as the file name is different from this
+$cpp_ifdef_constraints{PERL_IN_MRO_C} = 0;
+
+# Besides the obvious PERL_CORE, an inspection of our source revealed the
+# following symbols that won't be defined for general XS code.
+$cpp_ifdef_constraints{PERL_CORE} = 0;
+$cpp_ifdef_constraints{PERL_IN_XS_APITEST} = 0;
+$cpp_ifdef_constraints{PERL_DEBUG_READONLY_OPS} = 0;
+$cpp_ifdef_constraints{PERL_DEBUG_DUMPUNTIL} = 0;
+$cpp_ifdef_constraints{PERL_ENABLE_EXPERIMENTAL_REGEX_OPTIMISATIONS} = 0;
+$cpp_ifdef_constraints{EXPERIMENTAL_INPLACESCAN} = 0;
+
+# Appears to be obsolete; App:s2p, etc were created to handle this
+# functionality
+$cpp_ifdef_constraints{PERL_FOR_X2P} = 0;
+
+# This is used only for perl core development, and no module should ever have
+# it defined.
+$cpp_ifdef_constraints{WIN32_USE_FAKE_OLD_MINGW_LOCALES} = 0;
+
+$cpp_ifdef_constraints{PERL_EXT} = 0;
+$cpp_ifdef_constraints{PERL_EXT_RE_BUILD} = 0;
+
+# This program evaluates the conditionals surrounding every #define in every
+# examined header.  It turns out that in many cases, using the constraints in
+# %cpp_ifdef_constraints, a conditional can be reduced to a plain 0 or 1.  In
+# those cases, we know immediately if the #defined symbol is externally
+# visible.  In other cases, there are other terms in the conditionals whose
+# values we don't know; they typically depend on the platform and Configure
+# options being used.  Hence, there are circumstances where the symbol does
+# get #defined, and is externally visible, so we will add an #undef for it if
+# it shouldn't be visible.  There is no harm in undefining a symol that
+# doesn't happen to get defined in this particular build environment.
+#
+# Perl has modules that are considered extensions to the core, and are granted
+# access to functionality and symbols that are denied others.  The C
+# preprocessor symbol PERL_EXT is defined for these, and often there are
+# conditionals like
+#   #if defined(PERL_CORE) || defined(PERL_EXT)
+# in our headers.  So, in spite of PERL_CORE not being defined, the extension
+# does have access to the symbols defined within that conditional's scope.
+# The regular expression engine module is so important that it has additional
+# conditionals that are #defined just for it.  Many symbols that it needs are
+# of no use to other extensions, so shouldn't be visible to those others.
+# Below we extend the basic %cpp_ifdef_constraints to three cases:
+#   %cpp_always_externally_visible
+#           are symbols that don't depend on the module being considered an
+#           extension.  They may not actually be visible on a particular
+#           platform and build options, but theoretically there is a
+#           combination where they are visible, so we treat them as always
+#           visible.
+#   %cpp_visible_to_regex_extension
+#           are symbols that are visible to the regular expression extension
+#           (the one enabled by 'use re'), but no other extensions.  That is
+#           they are the symbols that match %cpp_always_externally_visible
+#           plus the ones visible to the re extension
+#   %%cpp_visible_to_extensions
+#           are symbols that are visible to all other extensions, but not to
+#           non-extension modules
+
+my %cpp_always_externally_visible =  (
+                                       %cpp_ifdef_constraints,
+                                       %not_in_regex,
+                                       PERL_EXT               => 0,
+                                     );
+my %cpp_visible_to_regex_extension = (
+                                       %cpp_ifdef_constraints,
+                                       %in_regex,
+                                       PERL_EXT               => 0,
+                                     );
+my %cpp_visible_to_extensions      = (
+                                       %cpp_ifdef_constraints,
+                                       %not_in_regex,
+                                       PERL_EXT               => 1,
+                                     );
+
+# Create mnemonic single-character codes for these
+my %visibility_types = (
+                          1 =>  \%cpp_always_externally_visible,
+                         '/' => \%cpp_visible_to_regex_extension,
+                         'E' => \%cpp_visible_to_extensions,
+                       );
+
+my @az = ('a'..'z');
+my $never_visible_flags_re = qr/[eX]/;
+my $discard_non_visibility_flags_re = eval "qr/[^ACeEX]/";
 
 my $error_count = 0;
 sub die_at_end ($) { # Keeps going for now, but makes sure the regen doesn't
@@ -3685,14 +3988,12 @@ sub generate_proto_h {
         my $C_required_flags = '[pIimbs]';
         die_at_end
           "$plain_func: C flag requires one of $C_required_flags flags"
-                                             if $flags =~ /C/
-                                             && ($flags !~ /$C_required_flags/
+                            if $flags =~ /C/
+                            && $flags !~ /$C_required_flags/
 
-                                                # Notwithstanding the
-                                                # above, if the name won't
-                                                # clash with a user name,
-                                                # it's ok.
-                                             && $plain_func !~ /^[Pp]erl/);
+                            # Notwithstanding the above, if the name won't
+                            # clash with a user name, it's ok.
+                            && $plain_func !~ $names_reserved_for_perl_use_re;
 
 
         my @nonnull;
@@ -3822,15 +4123,21 @@ sub generate_proto_h {
                     my $ptr_type;   # E, M, and S are the three types
                                     # corresponding respectively to EPTR,
                                     # MPTR, and SPTR
+                    my $ptr_name;   # The full name of $ptr_type
                     my $equal = ""; # set to "=" if can be equal to previous
                                     # pointer, empty if not
-                    if ($arg =~ s/ \b ( EPTRgt | EPTRge | MPTR | SPTR ) \b //x)
+                    if ($arg =~ s/ \b (  EPTRgt
+                                       | EPTRge
+                                       | EPTRtermNUL
+                                       | MPTR
+                                       | SPTR )
+                                   \b //x)
                     {
-                        my $name = $1;
-                        $ptr_type = substr($name, 0, 1);
+                        $ptr_name = $1;
+                        $ptr_type = substr($ptr_name, 0, 1);
                         $equal = "=" if $ptr_type eq 'M'
                                      or (   $ptr_type eq 'E'
-                                         && substr($name, -1, 1) eq 'e');
+                                         && $ptr_name !~ /gt/);
                     }
 
                     # A $ptr_type is a specialized 'nn'
@@ -3849,7 +4156,7 @@ sub generate_proto_h {
                     # times
                     die_at_end
                            ":$func: $arg Use only one of NN (including"
-                         . " EPTRge, EPTRgt, MPTR, SPTR), NULLOK, or NZ"
+                         . " an EPTR form, MPTR, SPTR), NULLOK, or NZ"
                                                if 0 + $nn + $nz + $nullok > 1;
 
                     push( @nonnull, $n ) if $nn;
@@ -3861,8 +4168,8 @@ sub generate_proto_h {
                     # pointer.
                     if ($args_assert_line && $arg =~ /\*/) {
                         if ($nn + $nullok == 0) {
-                            warn "$func: $arg needs one of: NN, EPTRge,"
-                               . " EPTRgt, MPTR, SPTR, or NULLOK\n";
+                            warn "$func: $arg needs one of: NN,"
+                               . " an EPTR form, MPTR, SPTR, or NULLOK";
                             ++$unflagged_pointers;
                         }
 
@@ -3921,9 +4228,10 @@ sub generate_proto_h {
 
                             # Save the data we need later
                             my %entry = (
-                                          argname => $argname,
-                                          equal   => $equal,
-                                          deref   => $derefs,
+                                          argname   => $argname,
+                                          equal     => $equal,
+                                          deref     => $derefs,
+                                          name      => $ptr_name,
                                         );
 
                             # The motivation for all this is that some string
@@ -3945,16 +4253,19 @@ sub generate_proto_h {
                             #               'equal' => '=',
                             #               'argname' => 'curpos',
                             #               'deref' => ''
+                            #               'name' => 'MPTR',
                             #               },
                             #       'E' => {
                             #               'equal' => '',
                             #               'argname' => 'strend',
                             #               'deref' => ''
+                            #               'name' => some-value,
                             #               },
                             #       'S' => {
                             #               'equal' => '',
                             #               'deref' => '',
                             #               'argname' => 'strbeg'
+                            #               'name' => 'SPTR',
                             #               }
                             #   }
                             #
@@ -4027,20 +4338,26 @@ sub generate_proto_h {
                     next if defined $string->{M} &&    $i->[0] eq 'S'
                                                     && $i->[1] eq 'E';
 
-                    my $lower = $string->{$i->[0]} or next;
-                    my $upper = $string->{$i->[1]} or next;
+                    my $lower_obj= $string->{$i->[0]} or next;
+                    my $upper_obj= $string->{$i->[1]} or next;
+                    my $lower = "$lower_obj->{deref}$lower_obj->{argname}";
+                    my $upper= "$upper_obj->{deref}$upper_obj->{argname}";
 
-                    # This reduces to either;
-                    #   assert(lower < upper);
-                    # or
-                    #   assert(lower <= upper);
-                    #
-                    # There might also be some derefences, like **lower
-                    push @asserts, "assert("
-                                        . "$lower->{deref}$lower->{argname}"
-                                        . " <$upper->{equal} "
-                                        . "$upper->{deref}$upper->{argname}"
-                                        . ")";
+                    if ($upper_obj->{name} eq 'EPTRtermNUL') {
+                            push @asserts, "assert($lower <= $upper)";
+                            push @asserts, "assert(*$upper == '\\0')";
+                    }
+                    else {
+                        my $equal = $upper_obj->{equal};
+
+                        # This reduces to either;
+                        #   assert(lower < upper);
+                        # or
+                        #   assert(lower <= upper);
+                        #
+                        # There might also be some derefences, like **lower
+                        push @asserts, "assert($lower <$equal $upper)";
+                    }
                 }
             }
 
@@ -4550,40 +4867,332 @@ sub generate_embedvar_h {
         unless $error_count;
 }
 
-sub recurse_conds {
+# Below is code to fill this hash with data about the visibility of each macro
+# that is potentially visible to XS code.  There is the visibility it is
+# supposed to have given by flags in its apidoc descriptions, and the actual
+# visibility imposed by C preprocessor conditionals around its #definition.
+# This program checks for and reconciles any disparities between them.
+my %visibility;
 
-    #  Look through the list of conditionals that HeaderParser generates,
-    #  looking for occurrences of the regex $pattern, returning true if found;
-    #  false otherwise.
+sub set_flags_visibility {
+    my ($name, $file, $raw_flags) = @_;
 
-    my $status = 0;
-    my ($pattern, @conds) = @_;
-    for my $this_cond (@conds) {
+    # Store $name's requested visibility into $visibility{$name}{flags} as
+    # determined by apidoc or embed.fnc lines.  The visibility is stored as
+    # a single character mnemonic, as follows:
+    #   0   The symbol is not supposed to be visible outside the perl core
+    #   E   The symbol is supposed to be visible to perl extensions and the
+    #       core but nowhere else
+    #   1   The symbol is supposed to be visible everywhere
 
-        # Recurse if necessary
-        if (ref $this_cond eq 'ARRAY') {
-            $status |= recurse_conds($pattern, $this_cond->@*);
-            return $status if $status;  # Early return if found
+    # Use the stored flags if new ones empty.  If those don't exist, assume
+    # visible everywhere for symbols that Perl reserves for its use, and
+    # hidden visibility for everything else.
+    my $flags = $raw_flags // $visibility{$name}{flags_raw};
+    if (! defined $flags) {
+        if ($name =~ $names_reserved_for_perl_use_re) {
+            $flags = 'A';
+
+            # But note that this is an assumption; so can avoid warning later.
+            $visibility{$name}{flags_implicit} = 1;
         }
         else {
-            $status |= $this_cond =~ $pattern;
-            return $status if $status;  # Early return if found
+            $flags = 'e';
         }
     }
 
-    return 0;
+    my $is_macro = $flags =~ /m/;
+
+    # Convert never to 0; always to 1; 'E' remains 'E'.
+    $flags =~ s/$discard_non_visibility_flags_re//g;
+    if ($flags =~ s/E//g) {
+        $flags .= 'E';          # Squeeze out multiple E's
+        $flags =~ s/[eX]//g;    # These flags are irrelevant for our purposes
+        if ($flags ne 'E') {
+            die_at_end "'E' flag for $name can't have other visibility flag"
+                     . " except [eX], not '$raw_flags'; in $file";
+            $flags = 'E';
+        }
+    }
+    elsif ($flags eq "" || $flags =~ $never_visible_flags_re) {
+        $flags = 0;
+    }
+    else {
+        $flags = 1;
+    }
+
+    # There are often cases where the same symbol has multiple entries, for
+    # example one for Win32, another for everything else; or one for threaded
+    # vs unthreaded, etc.  We want to find the most visible one.  To that end
+    # we compare the visibilities of the new and stored, and replace if the
+    # new one is more visible.
+    #
+    # If there isn't an already-stored one, set its visibility to -1, which is
+    # more restrictive than any new one, so this new one will automatically
+    # prevail.
+    my $stored_ordering = $visibility{$name}{flags_ordering} // -1;
+
+    # Compute an ordering for this flag, to more easily compare later.  This
+    # ended up being less code than writing specific comparisons.
+    my $ordering;
+
+    # Multiply to get the numeric numbers spread more widely than the
+    # non-numeric one.
+    if ($flags =~ / ^ -? \d+ $/x) {
+        $ordering = 2 * $flags;
+    }
+    elsif ($flags eq 'E') {
+        $ordering = 1;
+    }
+    else {
+        die_at_end "Flag '$flags' unrecognized";
+        $ordering = -1;
+    }
+
+    # Do nothing unless new one is more visible than old
+    return if $stored_ordering >= $ordering;
+
+    $visibility{$name}{flags} = $flags;
+    $visibility{$name}{flags_ordering} = $ordering;
+    $visibility{$name}{flags_raw} = $raw_flags;
+    $visibility{$name}{flags_file} = $file;
+    $visibility{$name}{is_macro} = $is_macro;
+    return;
 }
 
-my %visibility;
+sub get_and_set_cpp_visibility {
+    my ($name, $line) = @_;
+
+    # Store $name's actual visibility, as determined by the C preprocessor,
+    # into $visibility{$name}{cpp}, while returning the stringified cpp
+    # expression that determines the symbol's visibility, with any
+    # subexpressions whose values are known factored out.  The result is
+    #   0       the expression is never true outside the Perl core or
+    #           extensions to it
+    #   1       the expression is always true outside the Perl core or
+    #           extensions to it
+    #   string  Something like 'defined(a) && ( !defined(b) || defined(c) )'
+    #           giving the conditions for which the expression is true
+    #
+    # $line points to the HeaderLine object that contains $name.
+
+    # The stored visibility is the same as the codes used in
+    # set_flags_visibility(), plus
+    #   /   The symbol is visible in the 'use re' extension, plus the perl
+    #       core, but nowhere else
+
+    my $file = $line->{source};
+
+    # We get called for both #define and #undef lines.  Determine which
+    my $is_define = $file =~ m! embed\.fnc | regen/opcodes !x
+                 || (   defined $line->{sub_type}
+                     && $line->{sub_type} eq '#define');
+    if (! $is_define && (   ! defined $line->{sub_type}
+                         || $line->{sub_type} ne '#undef'))
+    {
+        use Data::Dumper;
+        die "Unexpected line\n" . Dumper $line
+    }
+
+    # The base cpp conditionals for every line in this file
+    my %this_file_conds;
+
+    # The goal is to evaluate the cpp conditionals down to as close to just 0
+    # or 1 as possible.  To that end, we may have specified the values to
+    # assume some conditional terms are.  If so, use those.  If not, use
+    # some of our source code conventions for header files.
+    my $this_file_override = $per_file_definitions{$file};
+    if (defined $this_file_override) {
+        while (my ($name, $value) = each $this_file_override->%*) {
+            $this_file_conds{$name} = $value;
+        }
+    }
+    elsif ($file =~ / (.*) \. (?: h | inc ) $ /x) {
+
+        # Here is a header file.  Some header files have a guard against being
+        # #include'd recursively.  It looks like
+        #   #ifndef guard
+        #   #  define guard
+        #   ... rest of file ...
+        #   #endif  /* last line of file. */
+        # (The actual guard #define can come anywhere between the #ifndef and
+        # #endif)
+        # Assuming the value of that guard to be 0 accurately removes that
+        # conditional from the equation .
+        #
+        # For file foo, in most cases, the guard is either of the form
+        # 'PERL_FOO_H' or 'PERL_FOO_H_'  (except no PERL is added if foo
+        # already has that substring caselessly).
+        #
+        # Create rules for both potential guard forms
+        my $file_base = uc $1;
+        $file_base = "PERL_$file_base" unless $file_base =~ /PERL/;
+        $file_base .= "_H";
+        $this_file_conds{$file_base} = 0;
+        $this_file_conds{"${file_base}_"} = 0;
+    }
+
+    # my %visibility_types has stored in it values to assume various
+    # conditional terms are, given the type of visibility.  We add the
+    # per-file ones computed above.  Then we see if this symbol is visible for
+    # each type.  If the visibility evaluates to 0, it means there is no
+    # combination of conditions that lead to the symbol being visible with
+    # this type.  If it evaluates to anything else, there is.  Remember it
+    # could evaluate to plain 1, or to some string like
+    #   #if defined(a) || defined(b).
+    # If the result is like that, it means that there is some combination of
+    # conditions for which the symbol is visible.
+    my $cond_as_string;
+    my $visibility_code;
+
+    # See if the symbol is visible everywhere; and if not, if it is visible to
+    # 'use 're'; and if not, if it is visible to other extensions.
+    for my $code (1, '/', 'E') {
+        my %hash = (%this_file_conds, $visibility_types{$code}->%*);
+        my $pattern = join "|", keys %hash;
+        my $regex = qr/ \b defined \( ( $pattern ) \) /x;
+        $cond_as_string = $line->reduce_conds($regex, \%hash);
+        next unless $cond_as_string;
+
+        $visibility_code = $code;
+        goto found_visibility;
+    }
+
+    # No visibilty outside core
+    $visibility_code = 0;
+
+  found_visibility:
+
+    # For the defining case, if there already has been an entry for $name,
+    # override it iff the new value is more widely visible.
+    #
+    # For the undefining case, we only undefine if we're pretty sure that it
+    # is appropriate to do so.  Any complications found mean we don't
+    # undefine.
+
+    # Use the same algorithm as in set_flags_visibility() to see if this new
+    # item has wider visibility than any stored (previously encountered) one.
+    my $ordering;
+    if ($visibility_code =~ / ^ -? \d+ $/x) {
+        $ordering = 3 * $visibility_code;
+    }
+    elsif ($visibility_code eq 'E') {
+        $ordering = 2;
+    }
+    elsif ($visibility_code eq '/') {
+        $ordering = 1;
+    }
+    else {
+        die_at_end "Internal code '$visibility_code' unrecognized";
+        $ordering = -1;
+    }
+
+    my $stored_ordering = $visibility{$name}{cpp_ordering};
+
+    # Return without updating:
+    #   1) If the old visibility is wider than the new.
+    #   2) And if it is a #define, if the old is equal to the new.  This is
+    #      because the new won't replace it.  (But an #undef of the same
+    #      visibility could override the old.)
+    return $cond_as_string if defined $stored_ordering
+                           && (   $stored_ordering > $ordering
+                               || (   $is_define
+                                   && $stored_ordering == $ordering));
+    if ($is_define == 0) {
+
+        # Here we are undefining a symbol.  If there are circumstances under
+        # which it doesn't get executed, we have to assume it doesn't, so that
+        # we consider the symbol to remain visible.  In case of uncertainty,
+        # we err on the side that the symbol remains visible.
+
+        # Do nothing if there is no symbol to undefine.
+        return $cond_as_string unless defined $visibility{$name};
+
+        # Do nothing if the symbol already isn't visible;
+        my $define_visibility_code = $visibility{$name}{cpp};
+        return $cond_as_string unless $define_visibility_code;
+
+        # Do nothing if we can't find information about the definition that
+        # would allow us to check the safety.
+        my $definer = $visibility{$name}{cpp_defining_object};
+        return $cond_as_string unless defined $definer;
+
+        # Don't undef if the symbol was created in a different file than this
+        # one.  Otherwise, it is unclear what is meant.
+        return $cond_as_string unless $definer->{source} eq $file;
+
+        # Do #undef if the #undef is unconditional or has the precise same
+        # constraints as the previous #define.  (This misses cases where
+        # things are the same but are in a different order.)
+        my $define_cond_as_string = $visibility{$name}{cpp_cond_as_string};
+        if (   $cond_as_string ne '1'
+            && $cond_as_string ne $define_cond_as_string)
+        {
+            # Here the stringified versions of the conditions for the #define
+            # and the #undef aren't the same.  That happens only if some of
+            # the values of the conditions are not known to us, and may not be
+            # knowable, as they may vary, dependent on the platform and
+            # Configuration.  What we're really after is "Does the #undef
+            # happen no matter what the #define conditions are set to?"  If
+            # the #undef's conditions include terms that aren't in the
+            # #define's, then the answer is that the #undef depends on
+            # something besides what the #define depends on, and so won't
+            # always be executed.  We could fairly easily rule that case out.
+            # But the rest is still hard.  One way, without anlayzing the
+            # expressions, would be to try every possible combination of the
+            # unresolved #define conditions and verify that whenever the
+            # #define happens, the #undef does too.  But that's a lot of work,
+            # and with very little payoff, since our existing headers don't
+            # tend to have conditions that actually would benefit from this.
+            #
+            # One case is easy, and does help with current data:  If the
+            # #undef conditions have ended up with a single value, we can
+            # simply see if that value is also in the #define conditions.
+            # Note that if the #define has extra conditions, it just means the
+            # #define happens under fewer circumstances than the #undef.
+            return $cond_as_string
+                    unless $cond_as_string =~
+                                    m/ ^ \s* (!)? (defined\(\w+\) ) \s* $ /xg;
+            my $complement = $1 // "";
+            my $term = $2;
+
+            # Not only must the term be in the #define conditions, but it must
+            # have the same type of being complemented.
+            if ($complement) {
+                return $cond_as_string
+                                  unless $define_cond_as_string =~ /\Q!$term/;
+            }
+            else {
+                return $cond_as_string
+                          unless $define_cond_as_string =~ / (?!!) \Q$term /x;
+            }
+        }
+
+        # Here, the #undef matches the #define, so the #undef happens, and the
+        # symbol is not visible.
+        $ordering = $visibility_code = 0;
+    }
+
+    $visibility{$name}{cpp} = $visibility_code;
+    $visibility{$name}{cpp_ordering} = $ordering;
+    $visibility{$name}{cpp_defining_object} = $line;
+    $visibility{$name}{cpp_cond_as_string} = $cond_as_string;
+    $visibility{$name}{is_macro} = $line->{type} eq 'content'
+                       && defined $line->{sub_type}
+                       && $line->{sub_type} =~ / ^ \# ( define | undef ) $ /x;
+    return $cond_as_string;
+}
 
 sub process_apidoc_lines {
+    my $file = shift;
 
     # Look through the input array of lines for ones that can declare the
-    # visibility of a symbol, and add those that are visible externally to
-    # that list; and those that are visible to perl extensions to that list
+    # visibility of a symbol, and save those declarations for later use.
 
     my $group_flags;
     for my $individual_line (@_) {
+
+        # Only apidoc lines do this; ignore the rest
         next unless $individual_line =~
                         m/ ^=for \s+ apidoc (\b | _defn | _item) \s* (.+) /x;
         my $type = $1;
@@ -4598,192 +5207,305 @@ sub process_apidoc_lines {
             $flags = "";
         }
 
-        # These declarations may come in groups with the first line being
-        # 'apidoc', and the remaining ones 'apidoc_item'.  The flags parameter
-        # of the 'apidoc' line applies to the rest, though those may add flags
+        # apidoc lines may come in blocks with the first line being
+        # 'apidoc', and the remaining ones 'apidoc_item or apidoc_flag'.
+        # These are interpreted as groups with the flags parameter of the
+        # 'apidoc' line applying to the rest, though those may add flags
         # individually.
         if ($type ne  "_item" ) {
             $group_flags = $flags;
         }
         elsif ($flags) {
+
+            # Non-initial line with flags of its own; add them to the group's
             $flags .= $group_flags;
         }
-        else {
+        else {  # Non-initial line without flags of its own
             $flags = $group_flags;
         }
 
-        # If no flag indicates any external visibility, we are done with this
-        # one.
-        $flags =~ s/[^ACE]//g;
-        next unless $flags;
-
-        #next if defined $needed_by_ext{$name};
-        #next if defined $needed_by_ext_re{$name};
-
-        #die_at_end "${name}'s visibility is declared more than once"
-                                                #if defined $visibility{$name};
-        $visibility{$name} = $flags;
+        set_flags_visibility($name, $file, $flags);
     }
 }
 
 sub find_undefs {
+    my $fnc = shift;    # embed.fnc data
 
-    # Find all the #defines that are visible to modules and which aren't
-    # marked as such nor whose names indicate they are reserved for Perl's
-    # use.  These are the symbols to #undef to prevent that visibility
+    # This program attempts to enforce macro visibility restrictions outside
+    # core.  This subroutine finds the symbols that need to be undefined when
+    # those restrictions aren't met.
     #
-    # First examine the passed in data from embed.fnc;
-    my $all = shift;
-    foreach my $entry ($all->@*) {
-        next unless $entry->embed;
-        my $flags = $entry->embed->{flags};
-        $flags =~ s/[^ACE]//g;
-        next unless $flags;     # No visibility
-        $visibility{$entry->embed->{name}} = $flags;
+    # A symbol can only be visible if its definition is in a #included header
+    # file.  So we only look for those definitions in header files, and
+    # embed.fnc, which is the data behind embed.h (and proto.h).  We care here
+    # only about the macros that aren't the short-names for functions.  (Those
+    # are handled by a different area of this file.)  Each function (since
+    # 0351a62, v5.37.1) is hidden from the outside on most platforms by
+    # default, unless overridden by a visibility flag.  #ifdefs can further
+    # restrict the visibility.
+
+    foreach my $entry ($fnc->@*) {
+        my $embed = $entry->embed;
+
+        # Only lines that have this are interesting to us.  Lines that don't
+        # have it are typically '#if' lines in the file.  (These are
+        # meaningful to HeaderParser which has already parsed them and used
+        # their information to create auxiliary data for the lines we do care
+        # about.)
+        next unless $embed;
+
+        # Find out what visibility constraints those conditions impose on
+        # every other line.
+        get_and_set_cpp_visibility($embed->name, $entry);
+
+        # embed.fnc lines also have visibility flags to specify the desired
+        # visibility of the symbol.
+        set_flags_visibility($embed->name, 'embed.fnc', $embed->{flags});
     }
 
-    # Then examine every top-level header.  And we also examine the top
-    #  level dot c files looking for symbols that are supposed to be visible.
-    my @header_list;
-    my @c_list;
-    open my $mf, "<", "MANIFEST" or die "Can't open MANIFEST: $!";
-    while (defined (my $file = <$mf>)) {
-        chomp $file;;
-        $file =~ s/ \s .* //x;
-        next if $file =~ m,/,;
-        next if defined $skip_files{$file};
-
-        push @header_list, $file if $file =~ / ( \.h | \.inc ) \b /x;
-        push @c_list, $file if $file =~ / \.c \b /x;
-    }
-    close $mf or die "Can't close MANIFEST: $!";
-
-
-    # A symbol can't be visible if it is guarded by #ifdef's that evaluate to
-    # false.
-    #
-    # One type of such #ifdef follows the convention in perl's source code
-    # that a C file, 'foo.c', will #define a symbol at the beginning named
-    # PERL_IN_FOO_C.  And some otherwise global symbols in header files will
-    # be protected from being visible from outside foo.c by
-    #   #ifdef PERL_IN_FOO_C
-    #   #  define x
-    #   #  define y
-    #   #    ...
-    #   #endif
-    #
-    # 'x', 'y', ... need not be #undefined, as they aren't visible outside the
-    # C files that are permitted to see them.  Below we look at every symbol
-    # that has potential global scope to see if there are #ifdef's that
-    # conditionally #define it and which evaluate to false.  We know that all
-    # the PERL_IN_FOO_C symbols will be false.  reduce_conds() looks at the
-    # totality of the #ifdefs guarding a symbol and determines if they
-    # evaluate, as a whole, to false or not.  We don't know the value of many
-    # of the conditions, but generally, the ones that guard visibility will be
-    # enough to rule out a symbol being globally visible.
-    my %constraints;
-    for my $c (@c_list) {
-        my $c_prime = $c =~ s/[.]/_/r;
-        $constraints{ "PERL_IN_\U$c_prime" } = 0;
-    }
-
-    # There are also these three symbols that guard visibility.  A symbol that
-    # is visible when all three are 0, is globally visible.
-    $constraints{PERL_CORE} = 0;
-    $constraints{PERL_EXT} = 0;
-    $constraints{PERL_EXT_RE_BUILD} = 0;
-
-    # Match any of these.  HeaderParser creates this canonical form for all
-    # conditionals.
-    my $constraints_re = join "|", keys %constraints;
-    $constraints_re = qr/ \b defined \( ( $constraints_re ) \) /x;
-
-    # There are a few cases where we redefine a system function to use the
-    # 64-bit equivalent one that has a different name.  They currenty all look
-    # like this.  These symbols would show up as #defines that shouldn't have
-    # external visibility.
-    my $has_64_pattern = qr / ( HAS | USE ) _ \w* 64 /x;
-
-    # Now look through all the header files for symbols that are visible to
-    # the outside world, and shouldn't be.
+    # Done with embed.fnc.  Now look through all the header files for their
+    # symbols.
     foreach my $hdr (@header_list) {
 
         # Parse the header
         my $lines = HeaderParser->new()->read_file($hdr)->lines();
         foreach my $line ($lines->@*) {
 
-            # We are here looking only for #defines and visibility
+            # We are here looking only for #defines, #undefs, and visibility
             # declarations
             next unless $line->{type} eq 'content';
 
-            # First, for #defines.
-            if ($line->{sub_type} eq '#define') {
-
-                # HeaderParser stripped off most everything.
-                my $name = $line->{flat};
-
-                # Just the symbol and its definition
-                $name =~ s/ ^ \s* \# \s* define \s+ //x;
-
-                # Just the symbol, no arglist nor definition
-                $name =~ s/ (?: \s | \( ) .* //x;
-
-                # These are reserved for Perl's use, so not a problem.
-                next if $name =~ / ^ PL_ /x;
-                next if $name =~ /perl/i;
-
-                next unless $line->reduce_conds($constraints_re,
-                                                \%constraints);
-
-                # Often perl has code to make sure various symbols that are
-                # always expected by the system to be defined, in fact are.
-                # These don't constitute namespace pollution.  So, if perl
-                # defines a symbol only if it already isn't defined, we add it
-                # to the list of system symbols
-                my $pattern = qr/ ! \s* defined\($name\)/x;
-                if (   recurse_conds($pattern, $line->{cond}->@*)
-                    || recurse_conds($has_64_pattern, $line->{cond}->@*))
-                {
-                    $system_symbols{$name} = 1;
-                }
-                else {
-                    $always_undefs{$name} = 1;
-                }
+            # #undef's
+            if ($line->{sub_type} eq '#undef') {
+                my $flat = $line->{flat};
+                $flat =~ / ^ \s* \# \s* undef \s+ (\w+) \b /x;
+                my $name = $1;
+                get_and_set_cpp_visibility($name, $line);
+                next;
             }
-            else {
 
-                # Otherwise check for a visibility declaration.
+            # Everything but #defines.  All we care about are visibility
+            # declarations.
+            if ($line->{sub_type} ne '#define') {
+
                 next unless $line->{sub_type} eq 'text';
 
                 # Only comments have apidoc lines.
                 next unless $line->{flat} eq "";
 
                 next unless $line->{line} =~ / ^ =for \s+ apidoc /mx;
-                process_apidoc_lines(split /\n/, $line->{line});
+                process_apidoc_lines($hdr, split /\n/, $line->{line});
+                next;
+            }
+
+            # What's left are #defines.  HeaderParser stripped off most
+            # everything.
+            my $name = $line->{flat};
+
+            # Just the symbol and its definition
+            $name =~ s/ ^ \s* \# \s* define \s+ //x;
+
+            # Just the symbol, no arglist nor definition
+            $name =~ s/ (?: \s | \( ) .* //x;
+
+            # 
+            set_flags_visibility($name, $hdr)
+                                  if $name =~ $names_reserved_for_perl_use_re;
+
+            # Calculate $name's actual visibility for later use.
+            my $stringified_conds = get_and_set_cpp_visibility($name, $line);
+
+            # Done if the visibility is entirely known.
+            next unless $stringified_conds =~ /[^01]/;
+
+            # Perl creates some symbols that mimic libc symbols.  These are
+            # visible everywhere and expected to be so.  Hence they should
+            # remain defined.  We put them on a list of system symbols to make
+            # sure this happens.
+            #
+            # For many symbols, this program can infer that it is in this
+            # class by examining the name and context.
+            #
+            # One class of symbols that are like this, are ones which have
+            # somewhat different names for a 64-bit version than a shorter
+            # one.
+            my $has_64_pattern = qr / ( HAS | USE ) _ \w* 64 /x;
+            if ($stringified_conds =~ $has_64_pattern) {
+                $system_symbols{$name} = 1;
+                next;
+            }
+
+            # We handle two other symbol classes, both in the same way.  One
+            # is where the names of things aren't standardized (or not all
+            # platforms conform).  So we have created them on platforms where
+            # they don't exist.  The code in the header looks like:
+            #   #define this symbol it it isn't already defined
+            #
+            # An example is that platforms have different names for the S_foo
+            # constants used by chmod(2) and stat(2).  There is code in perl.h
+            # to define the missing names on platforms that don't have
+            # particular ones, yielding a consistent set of definitions for
+            # all platforms.
+            #
+            # The other class is when we $define a macro to override a libc
+            # call with something else.  Perhaps it is a bug fix, or more
+            # likely to provide reentrancy invisibly.  XS code can call a base
+            # libc function, like getgrent(), and instead magically get
+            # getgrent_r() when appropriate.
+            #
+            # To be considered system symbols, they must match the following
+            # conditions (which were created by inspection of current data,
+            # and which may have to be revised from time-to-time).  Note that
+            # it thinks any name that is all lowercase is a libc call.
+            my $pattern = qr/ ! \s* defined\($name\)/x;
+            if (   (   $name !~ /[[:upper:]]/
+                    || $name =~ / ^ ( [OS] _ | SIG) [[:upper:]]+ $ /x)
+                && $stringified_conds =~ $pattern)
+            {
+                $system_symbols{$name} = 1;
+                next;
             }
         }
     }   # Done with headers
 
-    # Now look through the C and pod files
+    # Now look through the C and pod files.  Any preprocessor constraints in
+    # these affect only the containing files, so no need to look for cpp
+    # stuff.
     foreach my $pod (@c_list, @pod_list) {
         open my $pfh, "<", $pod or die "Can't open $pod: $!";
-        process_apidoc_lines(<$pfh>);
+        process_apidoc_lines($pod, <$pfh>);
         close $pfh or die "Can't close $pod: $!";
     }
 
-    # Here, have found all the externally visible macro definitions.  We will
-    # undef all of them that aren't expected to be visible and aren't
-    # otherwise needed to be visible.
+    # Here we have examined the code base and saved the results in
+    # %visibility.  There are:
+    #   1)  values for C preprocessor constraints which give the actual
+    #       visibility; and
+    #   2)  values for the visibility flag that tells us what we want the
+    #       visibility to be.
+    #
+    # Now reconcile these:
+    #   1)  Add the symbol to a list to #undef if its flag is more restrictive
+    #       than what the cpp allows, thus bringing it into compliance with
+    #       the flag.
+    #   2)  Warn if the cpp has made it have more limited visibility than the
+    #       flag says.  There is no way that it can be made compliant with the
+    #       desired visibility.
+
+    foreach my $name (keys %visibility) {
+        # Functions are dealt with elsewhere in this file by not generating a
+        # short-name macro at all for them unless wanted.
+        next unless $visibility{$name}{is_macro};
+
+        my @warnings;
+        my $flags_visibility = $visibility{$name}{flags};
+        my $cpp_visibility = $visibility{$name}{cpp};
+        if (! defined $cpp_visibility) {
+
+            # To get here we have a macro without having encountered its
+            # #define.  This can legitimately happen when that definition is
+            # in config.h, which we don't (and can't examine); or it could be
+            # the result of some flaw somewhere.  But there is no real harm
+            # done unless we are trying to restrict the external visibility.
+            if ($flags_visibility ne '1') {
+                warn "'$name' unexpectedly has no C preprocessor conditions"
+                   . " for #defining it; found in "
+                   . $visibility{$name}{flags_file};
+            }
+            $cpp_visibility = 1;    # Assume worst case
+
+            # (The reason we can't examine config.h is that it is not under
+            # source code control, and the outputs of this program are.)
+        }
+
+        if ($cpp_visibility eq '0') {
+            if (   $flags_visibility
+                && ! defined $visibility{$name}{flags_implicit})
+            {
+                push @warnings, "'$name' cannot actually be seen outside of"
+                              . " the perl core, but it is flagged as having"
+                              . " '$flags_visibility' visibility";
+            }
+
+            goto ok_but_warn_if_overridden;
+        }
+
+        if ($cpp_visibility eq '1') {
+            if (! $flags_visibility) {
+                # Supposed to be hidden, but isn't.  #undef it to hide it
+                $always_undefs{$name} = 1;
+            }
+            elsif ($flags_visibility =~ /E/) {
+                # Supposed to be hidden from non-extensions, but isn't.
+                $non_ext_undefs{$name} = 1;
+            }
+            elsif ($flags_visibility eq '1') {
+                goto ok_but_warn_if_overridden;
+            }
+            else {
+                die_at_end "Unexpected flag '$flags_visibility' for '$name'";
+            }
+
+            next;
+        }
+
+        # The remaining legal codes are  '/' and 'E'
+        if ($cpp_visibility !~ m! ^ [/E] $ !x ) {
+            die_at_end "Unexpected visibility code '$cpp_visibility' for"
+                     . " '$name'";
+            next;
+        }
+
+        # Here #ifdef's in the code severely restrict the visibility of
+        # $name, regardless of any flags.
+        warn "'$name' is needlessly in %unresolved_visibility_overrides"
+                                   if $unresolved_visibility_overrides{$name};
+        delete $always_undefs{$name};   # No need to #undef it
+
+        if (   $flags_visibility
+            && $flags_visibility !~ /E/
+            && ! defined $visibility{$name}{flags_implicit})
+        {
+            push @warnings, "'$name' cannot actually be seen outside of"
+                          . " Perl extensions (because of #ifdef's), but"
+                          . " it is flagged as having '$flags_visibility'"
+                          . " visibility";
+            goto output_warnings;
+        }
+
+        next;
+
+      ok_but_warn_if_overridden:
+        push @warnings, "'$name' is needlessly listed as needing an override "
+                                    if $unresolved_visibility_overrides{$name}
+                                    || $needed_by_ext_re{$name}
+                                    || $needed_by_ext{$name};
+
+      output_warnings:
+        for (my $i = 0; $i < @warnings; $i++) {
+            my $warning = $warnings[$i];
+            if ($i == @warnings - 1) {
+                my $definer = $visibility{$name}{cpp_defining_object};
+                if ($definer) {
+                    $warning .=  " (in $definer->{source}, line"
+                             .   " $definer->{start_line_num})"
+                }
+            }
+
+            warn $warning;
+        }
+    }   # End of loop through %visibility
+
+    # Done deciding what should be #undef'd.  But don't #undef anything found
+    # in the override hashes
     foreach my $entry (keys %system_symbols,
                             %needed_by_ext,
                             %needed_by_ext_re,
-                            %visibility,
                             %unresolved_visibility_overrides
                       )
     {
         delete $always_undefs{$entry};
     }
-
 }
 
 sub update_headers {

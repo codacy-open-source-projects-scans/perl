@@ -214,26 +214,31 @@
 :	    that this value may be equal to the corresponding SPTR or MPTR.
 :	    When this is true, it indicates the string is empty past the SPTR
 :	    or MPTR, and the called function must be prepared to handle this
-:	    case.
+:	    case by not dereferencing this parameter without first checking it
+:	    is valid.
 :   EPTRgt  is like EPTRge, but the called function need not be prepared to
 :	    handle the case of an empty string; the value of this pointer must
 :	    be strictly greater than the corresponding MPTR or SPTR.
+:   EPTRtermNUL  means that the string delimitted by it and its corresponding
+:	    SPTR must be NUL-terminated.  This parameter points to that
+:	    terminating NUL character.  That means that when the string looks
+:	    empty, it really contains a single NUL.
 :
-:   To summarize, either
+:   To summarize, one of:
 :	    SPTR <= MPTR <  EPTRgt
-:   or
 :	    SPTR <= MPTR <= EPTRge
+:	    SPTR <= MPTR <= EPTR && *EPTR == '\0'
 :   In each equation all three or any two of the constraints must be present.
 :
-:   When only two constraints are present and one of them is either EPTRge or
-:   EPTRgt, the difference between your choosing to use SPTR or MPTR for the
-:   other one becomes somewhat fuzzy; the generated assertion will be the same
-:   whichever constraint is used.  You should choose the one that makes the
-:   most sense for the semantics of the parameter.  For example, there are
-:   currently some functions with parameters named 'curpos', and no SPTR
-:   parameter exists.  The name of the parameter clearly indicates it isn't
-:   necessarily the starting position of the string, so using MPTR as the
-:   constraint makes the most sense.
+:   When only two constraints are present and one of them is an EPTR form, the
+:   difference between your choosing to use SPTR or MPTR for the other one
+:   becomes somewhat fuzzy; the generated assertion will be the same whichever
+:   constraint is used.  You should choose the one that makes the most sense
+:   for the semantics of the parameter.  For example, there are currently some
+:   functions with parameters named 'curpos', and no SPTR parameter exists.
+:   The name of the parameter clearly indicates it isn't necessarily the
+:   starting position of the string, so using MPTR as the constraint makes the
+:   most sense.
 :
 :   The parameters for the function can be in any order, except if a function
 :   has multiple different character strings, all the parameters for the first
@@ -1434,8 +1439,8 @@ Adip	|UV	|grok_hex	|NN const char *start			\
 				|NN STRLEN *len_p			\
 				|NN I32 *flags				\
 				|NULLOK NV *result
-Adp	|int	|grok_infnan	|NN const char **sp			\
-				|NN const char *send
+Adp	|int	|grok_infnan	|SPTR const char **sp			\
+				|EPTRge const char *send
 Adp	|int	|grok_number	|NN const char *pv			\
 				|STRLEN len				\
 				|NULLOK UV *valuep
@@ -2583,8 +2588,8 @@ p	|void	|output_non_portable					\
 dp	|void	|package	|NN OP *name				\
 				|NULLOK OP *version
 Adp	|void	|packlist	|NN SV *cat				\
-				|NN const char *pat			\
-				|NN const char *patend			\
+				|SPTR const char *pat			\
+				|EPTRtermNUL const char *patend 	\
 				|NN SV **beglist			\
 				|NN SV **endlist
 Adp	|PADOFFSET|pad_add_anon |NN CV *func				\
@@ -3430,10 +3435,42 @@ ARdp	|SV *	|sv_newmortal
 Cdp	|SV *	|sv_newref	|NULLOK SV * const sv
 Adp	|void	|sv_nosharing	|NULLOK SV *sv
 : Used in pp.c, pp_hot.c, sv.c
-dpx	|SV *	|sv_2num	|NN SV * const sv
+dmp	|SV *	|sv_2num	|NN SV * const sv
+Admp	|I32	|sv_numcmp	|NULLOK SV *sv1 			\
+				|NULLOK SV *sv2
+Adp	|I32	|sv_numcmp_flags|NULLOK SV *sv1 			\
+				|NULLOK SV *sv2 			\
+				|const U32 flags
 Admp	|bool	|sv_numeq	|NULLOK SV *sv1 			\
 				|NULLOK SV *sv2
 Adp	|bool	|sv_numeq_flags |NULLOK SV *sv1 			\
+				|NULLOK SV *sv2 			\
+				|const U32 flags
+dpx	|SV *	|sv_2num_flags	|NN SV * const sv			\
+				|int flags
+Admp	|bool	|sv_numge	|NULLOK SV *sv1 			\
+				|NULLOK SV *sv2
+Adp	|bool	|sv_numge_flags |NULLOK SV *sv1 			\
+				|NULLOK SV *sv2 			\
+				|const U32 flags
+Admp	|bool	|sv_numgt	|NULLOK SV *sv1 			\
+				|NULLOK SV *sv2
+Adp	|bool	|sv_numgt_flags |NULLOK SV *sv1 			\
+				|NULLOK SV *sv2 			\
+				|const U32 flags
+Admp	|bool	|sv_numle	|NULLOK SV *sv1 			\
+				|NULLOK SV *sv2
+Adp	|bool	|sv_numle_flags |NULLOK SV *sv1 			\
+				|NULLOK SV *sv2 			\
+				|const U32 flags
+Admp	|bool	|sv_numlt	|NULLOK SV *sv1 			\
+				|NULLOK SV *sv2
+Adp	|bool	|sv_numlt_flags |NULLOK SV *sv1 			\
+				|NULLOK SV *sv2 			\
+				|const U32 flags
+Admp	|bool	|sv_numne	|NULLOK SV *sv1 			\
+				|NULLOK SV *sv2
+Adp	|bool	|sv_numne_flags |NULLOK SV *sv1 			\
 				|NULLOK SV *sv2 			\
 				|const U32 flags
 Adip	|NV	|SvNV		|NN SV *sv
@@ -5027,6 +5064,7 @@ S	|void	|forget_pmop	|NN PMOP * const o
 S	|void	|gen_constant_list					\
 				|NULLOK OP *o
 S	|void	|inplace_aassign|NN OP *o
+ST	|bool	|is_dup_mode	|NN const OP *o
 RST	|bool	|is_handle_constructor					\
 				|NN const OP *o 			\
 				|I32 numargs
@@ -5519,7 +5557,7 @@ ERST	|int	|edit_distance	|NN const UV *src			\
 ES	|I32	|execute_wildcard					\
 				|NN REGEXP * const prog 		\
 				|MPTR char *stringarg			\
-				|NN char *strend			\
+				|EPTRtermNUL char *strend		\
 				|SPTR char *strbeg			\
 				|SSize_t minend 			\
 				|NN SV *screamer			\
@@ -6072,6 +6110,12 @@ S	|const char *|sv_display|NN SV * const sv			\
 				|NN char *tmpbuf			\
 				|STRLEN tmpbuf_size
 S	|bool	|sv_2iuv_common |NN SV * const sv
+Sd	|bool	|sv_numcmp_common					\
+				|NULLOK SV **sv1			\
+				|NULLOK SV **sv2			\
+				|const U32 flags			\
+				|int method				\
+				|NN SV **result
 S	|STRLEN |sv_pos_b2u_midway					\
 				|SPTR const U8 * const s		\
 				|MPTR const U8 * const target		\
@@ -6171,12 +6215,12 @@ RS	|SV *	|get_and_check_backslash_N_name_wrapper 		\
 				|SPTR const char *s			\
 				|EPTRge const char * const e
 S	|void	|incline	|SPTR const char *s			\
-				|EPTRge const char *end
+				|EPTRtermNUL const char *end
 S	|int	|intuit_method	|NN char *start 			\
 				|NULLOK SV *ioname			\
 				|NULLOK NOCHECK CV *cv
-S	|int	|intuit_more	|NN char *s				\
-				|NN char *e				\
+S	|int	|intuit_more	|SPTR char *s				\
+				|EPTRtermNUL char *e			\
 				|U8 caller_context			\
 				|NULLOK char *caller_s			\
 				|Size_t caller_length
