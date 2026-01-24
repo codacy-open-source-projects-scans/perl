@@ -38,6 +38,11 @@
 #include <math.h>
 #include <stdlib.h>
 
+/* For get_entropy() on non-Linux systems (MacOS, Android) we need sys/random.h */
+#ifdef HAS_SYSRANDOM
+#include <sys/random.h>
+#endif
+
 #ifdef __Lynx__
 /* Missing protos on LynxOS */
 int putenv(char *);
@@ -4610,18 +4615,26 @@ Perl_seed(pTHX)
 #    define PERL_RANDOM_DEVICE "/dev/urandom"
 #  endif
 #endif
-    U64 u;
+    U64 seed;
+
+#ifdef HAS_GETENTROPY
+    U8 ok = (getentropy(&seed, sizeof(seed)) == 0);
+    /* PerlIO_printf(Perl_debug_log, "Entropy: OK:%i Seed:%lu\n", ok, seed); */
+    if (ok) {
+        return seed;
+    }
+#endif
 
     int fd = PerlLIO_open_cloexec(PERL_RANDOM_DEVICE, 0);
     if (fd != -1) {
-        if (PerlLIO_read(fd, (void*)&u, sizeof u) != sizeof u) {
-            u = 0;
+        if (PerlLIO_read(fd, (void*)&seed, sizeof seed) != sizeof seed) {
+            seed = 0;
         }
 
         PerlLIO_close(fd);
 
-        if (u) {
-            return u;
+        if (seed) {
+            return seed;
         }
     }
 #endif
