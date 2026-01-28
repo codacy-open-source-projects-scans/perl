@@ -94,7 +94,7 @@ PERLVAR(I, delaymagic,	U16)		/* ($<,$>) = ... */
 
 /*
 =for apidoc_section $warning
-=for apidoc mn|U8|PL_dowarn
+=for apidoc Amn|U8|PL_dowarn
 
 The C variable that roughly corresponds to Perl's C<$^W> warning variable.
 However, C<$^W> is treated as a boolean, whereas C<PL_dowarn> is a
@@ -349,6 +349,10 @@ PERLVARI(I, dumpindent,	U16,	4)	/* number of blanks per dump
 /*
 =for apidoc_section $embedding
 =for apidoc Amn|U8|PL_exit_flags
+=for apidoc_flag PERL_EXIT_EXPECTED
+=for apidoc_flag PERL_EXIT_ABORT
+=for apidoc_flag PERL_EXIT_DESTRUCT_END
+=for apidoc_flag PERL_EXIT_WARN
 
 Contains flags controlling perl's behaviour on exit():
 
@@ -378,11 +382,6 @@ Set by the L<perlfunc/exit> operator.
 On threaded perls, each thread has an independent copy of this variable;
 each initialized at creation time with the current value of the creating
 thread's copy.
-
-=for apidoc Amnh||PERL_EXIT_EXPECTED
-=for apidoc Amnh||PERL_EXIT_ABORT
-=for apidoc Amnh||PERL_EXIT_DESTRUCT_END
-=for apidoc Amnh||PERL_EXIT_WARN
 
 =cut
 */
@@ -552,11 +551,11 @@ PERLVAR(I, DBline,	GV *)		/*  *DB::line   */
 
 /*
 =for apidoc_section $debugging
-=for apidoc mn|GV *|PL_DBsub
+=for apidoc Amn|GV *|PL_DBsub
 When Perl is run in debugging mode, with the B<-d> switch, this GV contains
 the SV which holds the name of the sub being debugged.  This is the C
 variable which corresponds to Perl's $DB::sub variable.  See
-C<L</PL_DBsingle>>.
+L<perlintern/PL_DBsingle>>.
 
 On threaded perls, each thread has an independent copy of this variable;
 each initialized at creation time with the current value of the creating
@@ -567,7 +566,7 @@ When Perl is run in debugging mode, with the B<-d> switch, this SV is a
 boolean which indicates whether subs are being single-stepped.
 Single-stepping is automatically turned on after every step.  This is the C
 variable which corresponds to Perl's $DB::single variable.  See
-C<L</PL_DBsub>>.
+L<perlapi/C<PL_DBsub>>.
 
 On threaded perls, each thread has an independent copy of this variable;
 each initialized at creation time with the current value of the creating
