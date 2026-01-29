@@ -822,6 +822,10 @@ Adp	|SV *	|amagic_deref_call					\
 p	|bool	|amagic_is_enabled					\
 				|int method
 
+CTdp	|void	|api_version_assert					\
+				|size_t interp_size			\
+				|NULLOK void *v_my_perl 		\
+				|NN const char *api_version
 ETXip	|void	|append_utf8_from_native_byte				\
 				|const U8 byte				\
 				|NN U8 **dest
@@ -5442,8 +5446,8 @@ i	|I32	|sv_i_ncmp	|NN SV * const a			\
 				|NN SV * const b
 i	|I32	|sv_i_ncmp_desc |NN SV * const a			\
 				|NN SV * const b
-i	|I32	|sv_ncmp	|NN SV * const a			\
-				|NN SV * const b
+i	|I32	|sv_ncmp	|NN SV *a				\
+				|NN SV *b
 i	|I32	|sv_ncmp_desc	|NN SV * const a			\
 				|NN SV * const b
 # if defined(USE_LOCALE_COLLATE)

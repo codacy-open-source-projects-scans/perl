@@ -653,26 +653,8 @@ struct refcounted_he {
     char                  refcounted_he_data[1];
 };
 
-/*
-=for apidoc m|SV *|refcounted_he_fetch_pvs|const struct refcounted_he *chain|"key"|U32 flags
-
-Like L</refcounted_he_fetch_pvn>, but takes a literal string
-instead of a string/length pair, and no precomputed hash.
-
-=cut
-*/
-
 #define refcounted_he_fetch_pvs(chain, key, flags) \
     Perl_refcounted_he_fetch_pvn(aTHX_ chain, STR_WITH_LEN(key), 0, flags)
-
-/*
-=for apidoc m|struct refcounted_he *|refcounted_he_new_pvs|struct refcounted_he *parent|"key"|SV *value|U32 flags
-
-Like L</refcounted_he_new_pvn>, but takes a literal string
-instead of a string/length pair, and no precomputed hash.
-
-=cut
-*/
 
 #define refcounted_he_new_pvs(parent, key, value, flags) \
     Perl_refcounted_he_new_pvn(aTHX_ parent, STR_WITH_LEN(key), 0, value, flags)

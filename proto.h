@@ -123,6 +123,11 @@ Perl_amagic_is_enabled(pTHX_ int method)
         __attribute__visibility__("hidden");
 #define PERL_ARGS_ASSERT_AMAGIC_IS_ENABLED
 
+PERL_CALLCONV void
+Perl_api_version_assert(size_t interp_size, void *v_my_perl, const char *api_version);
+#define PERL_ARGS_ASSERT_API_VERSION_ASSERT     \
+        assert(api_version)
+
 PERL_CALLCONV SSize_t
 Perl_apply(pTHX_ I32 type, SV **mark, SV **sp)
         __attribute__visibility__("hidden");
@@ -8226,7 +8231,7 @@ S_sv_i_ncmp_desc(pTHX_ SV * const a, SV * const b);
         assert(a); assert(b)
 
 PERL_STATIC_INLINE I32
-S_sv_ncmp(pTHX_ SV * const a, SV * const b);
+S_sv_ncmp(pTHX_ SV *a, SV *b);
 #   define PERL_ARGS_ASSERT_SV_NCMP             \
         assert(a); assert(b)
 
