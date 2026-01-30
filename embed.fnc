@@ -1459,7 +1459,7 @@ Cp	|UV	|grok_bin_oct_hex					\
 				|NN I32 *flags				\
 				|NULLOK NV *result			\
 				|const unsigned shift			\
-				|const U8 lookup_bit			\
+				|const U32 lookup_bit			\
 				|const char prefix
 Adip	|UV	|grok_hex	|NN const char *start			\
 				|NN STRLEN *len_p			\
@@ -2681,6 +2681,11 @@ Adpx	|OP *	|parse_barestmt |U32 flags
 Adpx	|OP *	|parse_block	|U32 flags
 Adpx	|OP *	|parse_fullexpr |U32 flags
 Adpx	|OP *	|parse_fullstmt |U32 flags
+EXdp	|char * |parse_ident_msg|SPTR const char *s			\
+				|EPTRgt const char *end 		\
+				|bool is_utf8				\
+				|NULLOK HV **failure_details		\
+				|U32 flags
 Adpx	|SV *	|parse_label	|U32 flags
 Adpx	|OP *	|parse_listexpr |U32 flags
 : Only used in scope.c
@@ -5074,7 +5079,7 @@ S	|void	|bad_type_pv	|I32 n					\
 				|NN const char *t			\
 				|NN const OP *o 			\
 				|NN const OP *kid
-S	|void	|clear_special_blocks					\
+S	|CV *	|clear_special_blocks					\
 				|NN const char * const fullname 	\
 				|NN GV * const gv			\
 				|NN CV * const cv
@@ -6275,11 +6280,13 @@ S	|char * |parse_ident	|SPTR const char *s			\
 				|SPTR char **d				\
 				|EPTRgt char * const e			\
 				|bool is_utf8				\
+				|NULLOK HV **failure_details		\
 				|U32 flags
 S	|char * |parse_ident_no_copy					\
 				|SPTR const char *s			\
 				|EPTRgt const char * const s_end	\
 				|bool is_utf8				\
+				|NULLOK HV **failure_details		\
 				|U32 flags
 S	|int	|pending_ident
 RS	|char * |scan_const	|NN char *start
@@ -6413,7 +6420,6 @@ S	|void	|warn_on_first_deprecated_use				\
 #if defined(PERL_IN_UTIL_C)
 S	|bool	|ckwarn_common	|U32 w
 S	|SV *	|mess_alloc
-Ti	|U32	|ptr_hash	|PTRV u
 S	|SV *	|with_queued_errors					\
 				|NN SV *ex
 So	|void	|xs_version_bootcheck					\
@@ -6506,7 +6512,7 @@ Cipx	|void	|cx_pushtry	|NN PERL_CONTEXT *cx			\
 				|NULLOK OP *retop
 Cipx	|void	|cx_pushwhen	|NN PERL_CONTEXT *cx
 Cipx	|void	|cx_topblock	|NN PERL_CONTEXT *cx
-Cipx	|U8	|gimme_V
+Cip	|U8	|gimme_V
 #endif /* !defined(PERL_NO_INLINE_FUNCTIONS) */
 #if defined(PERL_RC_STACK)
 EXopx	|OP *	|pp_wrap	|NN Perl_ppaddr_t real_pp_fn		\

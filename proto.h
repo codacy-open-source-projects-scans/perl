@@ -1257,7 +1257,7 @@ Perl_grok_atoUV(const char *pv, UV *valptr, const char **endptr);
         assert(pv); assert(valptr)
 
 PERL_CALLCONV UV
-Perl_grok_bin_oct_hex(pTHX_ const char * const start, STRLEN *len_p, I32 *flags, NV *result, const unsigned shift, const U8 lookup_bit, const char prefix);
+Perl_grok_bin_oct_hex(pTHX_ const char * const start, STRLEN *len_p, I32 *flags, NV *result, const unsigned shift, const U32 lookup_bit, const char prefix);
 #define PERL_ARGS_ASSERT_GROK_BIN_OCT_HEX       \
         assert(start); assert(len_p); assert(flags)
 
@@ -3483,6 +3483,9 @@ Perl_parse_fullexpr(pTHX_ U32 flags);
 PERL_CALLCONV OP *
 Perl_parse_fullstmt(pTHX_ U32 flags);
 #define PERL_ARGS_ASSERT_PARSE_FULLSTMT
+
+#define PERL_ARGS_ASSERT_PARSE_IDENT_MSG        \
+        assert(s); assert(end); assert(s < end)
 
 PERL_CALLCONV SV *
 Perl_parse_label(pTHX_ U32 flags);
@@ -6130,6 +6133,8 @@ Perl_new_warnings_bitfield(pTHX_ char *buffer, const char * const bits, STRLEN s
         __attribute__warn_unused_result__;
 PERL_CALLCONV void
 Perl_op_clear(pTHX_ OP *o);
+PERL_CALLCONV char *
+Perl_parse_ident_msg(pTHX_ const char *s, const char *end, bool is_utf8, HV **failure_details, U32 flags);
 PERL_CALLCONV void
 Perl_qerror(pTHX_ SV *err);
 PERL_CALLCONV SV *
@@ -7509,7 +7514,7 @@ S_bad_type_pv(pTHX_ I32 n, const char *t, const OP *o, const OP *kid);
 # define PERL_ARGS_ASSERT_BAD_TYPE_PV           \
         assert(t); assert(o); assert(kid)
 
-STATIC void
+STATIC CV *
 S_clear_special_blocks(pTHX_ const char * const fullname, GV * const gv, CV * const cv);
 # define PERL_ARGS_ASSERT_CLEAR_SPECIAL_BLOCKS  \
         assert(fullname); assert(gv); assert(cv); \
@@ -9491,13 +9496,13 @@ S_new_constant(pTHX_ const char *s, STRLEN len, const char *key, STRLEN keylen, 
         assert(key); assert(sv)
 
 STATIC char *
-S_parse_ident(pTHX_ const char *s, const char * const s_end, char **d, char * const e, bool is_utf8, U32 flags);
+S_parse_ident(pTHX_ const char *s, const char * const s_end, char **d, char * const e, bool is_utf8, HV **failure_details, U32 flags);
 # define PERL_ARGS_ASSERT_PARSE_IDENT           \
         assert(s); assert(s_end); assert(d); assert(*d); assert(e); \
         assert(s <= s_end); assert(*d < e)
 
 STATIC char *
-S_parse_ident_no_copy(pTHX_ const char *s, const char * const s_end, bool is_utf8, U32 flags);
+S_parse_ident_no_copy(pTHX_ const char *s, const char * const s_end, bool is_utf8, HV **failure_details, U32 flags);
 # define PERL_ARGS_ASSERT_PARSE_IDENT_NO_COPY   \
         assert(s); assert(s_end); assert(s < s_end)
 
@@ -9743,12 +9748,6 @@ STATIC void
 S_mem_log_common(enum mem_log_type mlt, const UV n, const UV typesize, const char *type_name, const SV *sv, Malloc_t oldalloc, Malloc_t newalloc, const char *filename, const int linenumber, const char *funcname);
 #   define PERL_ARGS_ASSERT_MEM_LOG_COMMON      \
         assert(type_name); assert(filename); assert(funcname)
-
-# endif
-# if !defined(PERL_NO_INLINE_FUNCTIONS)
-PERL_STATIC_INLINE U32
-S_ptr_hash(PTRV u);
-#   define PERL_ARGS_ASSERT_PTR_HASH
 
 # endif
 # if defined(PERL_USES_PL_PIDSTATUS)

@@ -3415,7 +3415,6 @@ my @unresolved_visibility_overrides = qw(
     CC_IS_IN_SOME_FOLD_
     CC_LOWER_
     CC_MAGICAL_
-    CC_mask_
     CC_mask_A_
     CC_MNEMONIC_CNTRL_
     CC_NON_FINAL_FOLD_
@@ -3649,6 +3648,8 @@ my @system_symbols = qw(
 # This is a list of symbols that are needed by the ext/re module, and are not
 # documented.  They become undefined for any other modules.
 my @needed_by_ext_re = qw(
+    PARSE_IDENT_ERROR_POSITION
+    PARSE_IDENT_ERROR_TEXT
 );
 
 # This is a list of symbols that are needed by various ext/ modules, and are

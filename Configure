@@ -1113,6 +1113,7 @@ installprefix=''
 installprefixexp=''
 installstyle=''
 installusrbinperl=''
+intmaxsize=''
 intsize=''
 longsize=''
 shortsize=''
@@ -5789,12 +5790,14 @@ case "$intsize" in
 #ifdef I_STDLIB
 #include <stdlib.h>
 #endif
+#include <stdint.h>
 #include <stdio.h>
 int main()
 {
 	printf("intsize=%d;\n", (int)sizeof(int));
 	printf("longsize=%d;\n", (int)sizeof(long));
 	printf("shortsize=%d;\n", (int)sizeof(short));
+	printf("intmaxsize=%d;\n", (int)sizeof(intmax_t));
 	exit(0);
 }
 EOCP
@@ -5804,6 +5807,7 @@ EOCP
 		echo "Your integers are $intsize bytes long."
 		echo "Your long integers are $longsize bytes long."
 		echo "Your short integers are $shortsize bytes long."
+		echo "Your longest integers are $intmaxsize bytes long."
 	else
 		$cat >&4 <<EOM
 !
@@ -5824,6 +5828,10 @@ EOM
 		rp="What is the size of a short integer (in bytes)?"
 		. ./myread
 		shortsize="$ans"
+		dflt=$longsize
+		rp="What is the size of a intmax_t integer (in bytes)?"
+		. ./myread
+		intmaxsize="$ans"
 	fi
 	;;
 esac
@@ -17494,14 +17502,16 @@ $rm_try
     esac
 esac
 
-: Check the syntax of LC_ALL when categories are set to different locales
-echo " "
-$echo "Checking the syntax of LC_ALL when categories are set to different locales..." >&4
+case "$perl_lc_all_separator$perl_lc_all_category_positions_init" in
+  "")
+    : Check the syntax of LC_ALL when categories are set to different locales
+    echo " "
+    $echo "Checking the syntax of LC_ALL when categories are set to different locales..." >&4
 
-case $d_setlocale in
-    $define)
-$rm -f try try.*
-$cat >try.c <<'EOF'
+    case $d_setlocale in
+      $define)
+        $rm -f try try.*
+        $cat >try.c <<'EOF'
 #include <limits.h>
 #include <locale.h>
 #include <stdlib.h>
@@ -17831,45 +17841,62 @@ main (const int argc, const char ** argv)
 
 #endif
 EOF
-set try
-if eval $compile_ok; then
-    output=`$run ./try 2>/dev/null`
-    separator=`echo "$output" | $sed 1q`
-    case $separator in
-	"\"=;\"")
-          d_perl_lc_all_uses_name_value_pairs="$define"
-          d_perl_lc_all_separator="$undef"
-            perl_lc_all_separator=
-	  d_perl_lc_all_category_positions_init="$undef"
-	    perl_lc_all_category_positions_init=
-	    ;;
-	"") d_perl_lc_all_uses_name_value_pairs="$undef"
-            d_perl_lc_all_separator="$undef"
-              perl_lc_all_separator=
-	    d_perl_lc_all_category_positions_init="$undef"
-	      perl_lc_all_category_positions_init=
-	    ;;
-        *)  d_perl_lc_all_uses_name_value_pairs="$undef"
-            d_perl_lc_all_separator="$define"
-              perl_lc_all_separator="$separator"
-	    d_perl_lc_all_category_positions_init="$define"
-	      perl_lc_all_category_positions_init=`echo "$output" | sed -n 2p`
-	    ;;
-    esac
-else
-    $echo "Failed to compile lc_all probe" >&4
-fi
-$rm -f try try.*
-;;
-*)        d_perl_lc_all_separator="$undef"
-            perl_lc_all_separator=
-	  d_perl_lc_all_category_positions_init="$undef"
-	    perl_lc_all_category_positions_init=
+        set try
+        if eval $compile_ok; then
+            output=`$run ./try 2>/dev/null`
+            separator=`echo "$output" | $sed 1q`
+            case $separator in
+                "\"=;\"")
+                  d_perl_lc_all_uses_name_value_pairs="$define"
+                  d_perl_lc_all_separator="$undef"
+                    perl_lc_all_separator=
+                  d_perl_lc_all_category_positions_init="$undef"
+                    perl_lc_all_category_positions_init=
+                    ;;
+                "") d_perl_lc_all_uses_name_value_pairs="$undef"
+                    d_perl_lc_all_separator="$undef"
+                      perl_lc_all_separator=
+                    d_perl_lc_all_category_positions_init="$undef"
+                      perl_lc_all_category_positions_init=
+                    ;;
+                *)  d_perl_lc_all_uses_name_value_pairs="$undef"
+                    d_perl_lc_all_separator="$define"
+                      perl_lc_all_separator="$separator"
+                    d_perl_lc_all_category_positions_init="$define"
+                      perl_lc_all_category_positions_init=`echo "$output" | sed -n 2p`
+                    ;;
+            esac
+        else
+            $echo "Failed to compile lc_all probe" >&4
+        fi
+        $rm -f try try.*
+        ;;
+    *)        d_perl_lc_all_separator="$undef"
+                perl_lc_all_separator=
+              d_perl_lc_all_category_positions_init="$undef"
+                perl_lc_all_category_positions_init=
 
-          # No setlocale(), but using this default allows our code to compile
-          # and run without having to have a bunch more #ifdef's
-          d_perl_lc_all_uses_name_value_pairs="$define"
-;;
+              # No setlocale(), but using this default allows our code to
+              # compile and run without having to have a bunch more #ifdef's
+              d_perl_lc_all_uses_name_value_pairs="$define"
+    ;;
+    esac    # case on $d_setlocale
+  ;;
+
+  *)    # Has an lc_all definition passed-in
+     case "$perl_lc_all_separator" in
+	\"*\") ;;     # Good, enclosed in "..."
+        *) echo "Adding enclosing double quotes to perl_lc_all_separator" >&4
+           case "$perl_lc_all_separator" in
+	      \"*) perl_lc_all_separator="$perl_lc_all_separator\"" ;;
+	      *\") perl_lc_all_separator="\"$perl_lc_all_separator" ;;
+	      *)     perl_lc_all_separator="\"$perl_lc_all_separator\"" ;;
+            esac
+     esac
+     d_perl_lc_all_separator="$define"
+     d_perl_lc_all_category_positions_init="$define"
+     d_perl_lc_all_uses_name_value_pairs="$undef"
+     ;;
 esac
 
 : see if pipe2 exists
@@ -24274,7 +24301,7 @@ $rm_try
 set i_stdckdint
 eval $setvar
 
-: see if stdint is available
+: stdint.h should be available, but this makes sure it gets in config.h
 set stdint.h i_stdint
 eval $inhdr
 
@@ -25765,6 +25792,7 @@ installvendorlib='$installvendorlib'
 installvendorman1dir='$installvendorman1dir'
 installvendorman3dir='$installvendorman3dir'
 installvendorscript='$installvendorscript'
+intmaxsize='$intmaxsize'
 intsize='$intsize'
 issymlink='$issymlink'
 ivdformat='$ivdformat'

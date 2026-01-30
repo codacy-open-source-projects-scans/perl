@@ -2942,7 +2942,7 @@ Perl_get_and_check_backslash_N_name(pTHX_ const char* s,
     /* Here, it isn't Perl's charname handler.  We can't rely on a
      * user-supplied handler to validate the input name.  For non-ut8 input,
      * look to see that the first character is legal.  Then loop through the
-     * rest checking that each is a continuation */
+     * rest checking that each is a charname continuation */
 
     /* This code makes the reasonable assumption that the only Latin1-range
      * characters that begin a character name alias are alphabetic, otherwise
@@ -4097,9 +4097,11 @@ S_scan_const(pTHX_ char *start)
                 }
                 else     /* Here is \N{NAME} but not \N{U+...}. */
                      if (! (res = get_and_check_backslash_N_name_wrapper(s, e)))
-                {   /* Failed.  We should die eventually, but for now use a NUL
-                       to keep parsing */
-                    *d++ = '\0';
+                {   /* Failed.  We used to keep parsing, but error conditions here
+                     * can sometimes result in scope problems, which later manifest
+                     * as the incorrect pad being operated upon. (See GH#16930.)
+                     * Safest to just abort now. */
+                    yyquit();
                 }
                 else {  /* Successfully evaluated the name */
                     STRLEN len;
@@ -5519,7 +5521,7 @@ yyl_sigvar(pTHX_ char *s)
             /* read var name, including sigil, into PL_tokenbuf */
             PL_tokenbuf[0] = sigil;
             s = parse_ident(s, PL_bufend, &dest, C_ARRAY_END(PL_tokenbuf),
-                            cBOOL(UTF), 0);
+                            cBOOL(UTF), NULL, 0);
             assert(PL_tokenbuf[1]); /* we have a variable name */
         }
         else {
@@ -10416,12 +10418,10 @@ S_checkcomma(pTHX_ const char *s, const char *name, const char *what)
         s++;
     while (s < PL_bufend && isSPACE(*s))
         s++;
-    Size_t advance;
-    if ((advance = isIDFIRST_lazy_if_safe(s, PL_bufend, UTF))) {
+
+    if ((isIDFIRST_lazy_if_safe(s, PL_bufend, UTF))) {
         const char * const w = s;
-        s += advance;
-        while ((advance = isWORDCHAR_lazy_if_safe(s, PL_bufend, UTF)))
-            s += advance;
+        s = parse_ident_no_copy(s, PL_bufend, cBOOL(UTF), NULL, IDFIRST_ONLY);
         while (s < PL_bufend && isSPACE(*s))
             s++;
         if (*s == ',') {
@@ -10567,7 +10567,7 @@ S_new_constant(pTHX_ const char *s, STRLEN len, const char *key, STRLEN keylen,
 STATIC char *
 S_parse_ident(pTHX_ const char *s, const char * const s_end,
                     char **d, char * const e,
-                    bool is_utf8, U32 flags)
+                    bool is_utf8, HV** failure_details, U32 flags)
 {
     PERL_ARGS_ASSERT_PARSE_IDENT;
 
@@ -10612,6 +10612,8 @@ S_parse_ident(pTHX_ const char *s, const char * const s_end,
      *     copied
      *  2) 'stop_at_first_non_digit' is in effect and the identifier name has
      *     leading zeros
+     *  3) The identifier contains a character that is illegal in names.
+     *     (These are rare, fewer than 200 in all of Unicode.)
      *
      * When 'allow_package' is non-zero, the function parses a full package
      * variable path.  Each iteration of the loop below picks up one segment
@@ -10628,6 +10630,26 @@ S_parse_ident(pTHX_ const char *s, const char * const s_end,
      * parsed a portion of an identifier.  Therefore it should be able to
      * accept the first character being an IDCont, and not necessarily an
      * IDFIRST.  The 'IDCONT_first_OK' flag is used to indicate this */
+
+    /* When a normally fatal error occurs, and the 'failure_details' parameter
+     * is set, the function, instead of dieing, returns what would be the
+     * croak message and the position in the source string where it was
+     * encountered.  This variable holds the message text internally. */
+    const char * error;
+
+    /* This causes the CHECK_ONLY flag to also be set. */
+    if (failure_details) {
+        flags |= CHECK_ONLY;
+    }
+
+    /* However, the error position this function knows about is in the
+     * destination, normalized, string and a caller looking to mark where an
+     * error occurred, will want to use the source to report it. This variable
+     * is changed whenever a length change occurs, so that upon return, we can
+     * convert to the source position. */
+    SSize_t position_offset = 0;
+    const char * const s0 = s;  /* First byte, for any error message */
+    const char * d0 = *d;
 
     while (s < s_end) {
 
@@ -10648,12 +10670,38 @@ S_parse_ident(pTHX_ const char *s, const char * const s_end,
             /* Find the end of the identifier by accumulating characters until
              * find a non-identifier character */
             while (s < s_end) {
+
+                /* Fail if the character is one of those few that look like
+                 * they could be in a name, but are forbidden because of
+                 * Section 5 of Unicode UAX #31 "Unicode Identifiers and
+                 * Syntax". */
+                advance = is_WORD_BUT_NONCONT_safe(s, s_end, is_utf8);
+                if (advance) {
+                    UV cp = valid_utf8_to_uv((U8 *) s, NULL);
+                    const char *error_pos = s + advance;
+
+                    /* Display the whole name */
+                    do {
+                        s += advance;
+                    }
+                    while ((advance = isWORDCHAR_lazy_if_safe(s, s_end,
+                                                              is_utf8)));
+                    error = form("\\x{%04" UVXf "} is a \\w char that isn't"
+                                 " valid in a name; marked by <-- HERE"
+                                 " after %" UTF8f "<-- HERE %" UTF8f,
+                                 cp,
+                                 UTF8fARG(is_utf8, error_pos - s0, s0),
+                                 UTF8fARG(is_utf8, s - error_pos, error_pos));
+                    goto found_error;
+                }
+                else {
                     advance = isIDCONT_lazy_if_safe((const U8*) s,
                                                     (const U8*) s_end,
                                                     is_utf8);
                     if (advance == 0) { /* Not an identifier character */
                         break;
                     }
+                }
 
                 s += advance;
             }
@@ -10684,10 +10732,8 @@ S_parse_ident(pTHX_ const char *s, const char * const s_end,
 
             /* Leading zeros are not permitted */
             if (is_zero && *d - digit_start > 1) {
-                if (check_only) {
-                    return NULL;
-                }
-                croak(ident_var_zero_multi_digit);
+                error = ident_var_zero_multi_digit;
+                goto found_error;
             }
 
             /* This option only applies to the first component in a
@@ -10743,20 +10789,36 @@ S_parse_ident(pTHX_ const char *s, const char * const s_end,
 
     /* Cast away const, because many of our callers don't have it; this
      * function declares it as const so as to indicate that it doesn't change
-     * it, and it can be called using a const parameter */
+     * it, and that it can be called using a const parameter */
     return (char *) s;
 
   too_long:
+    error = ident_too_long;
+        /* FALLTHROUGH */
+
+  found_error:
+    if (failure_details) {
+
+        SV * msg_sv = newSVpv(error, 0);
+        SV * position_sv = newSVuv(*d - d0 - position_offset);
+        HV * details = (HV *) newSV_type_mortal(SVt_PVHV);
+
+        (void) hv_stores(details, PARSE_IDENT_ERROR_TEXT, msg_sv);
+        (void) hv_stores(details, PARSE_IDENT_ERROR_POSITION,  position_sv);
+
+        *failure_details = details;
+    }
+
     if (check_only) {
         return NULL;
     }
 
-    croak("%s", ident_too_long);
+    croak("%" UTF8f, UTF8fARG(is_utf8, strlen(error), error));
 }
 
 PERL_STATIC_INLINE char *
 S_parse_ident_no_copy(pTHX_ const char *s, const char * const s_end,
-                      bool is_utf8, U32 flags)
+                      bool is_utf8, HV ** failure_details, U32 flags)
 {
     PERL_ARGS_ASSERT_PARSE_IDENT_NO_COPY;
 
@@ -10767,7 +10829,38 @@ S_parse_ident_no_copy(pTHX_ const char *s, const char * const s_end,
     char scratch[ PERL_IDENTIFIER_LENGTH ];
     char * dest = scratch;
 
-    return parse_ident(s, s_end, &dest, C_ARRAY_END(scratch), is_utf8, flags);
+    return parse_ident(s, s_end, &dest, C_ARRAY_END(scratch), is_utf8,
+                       failure_details, flags);
+}
+
+/*
+=for apidoc parse_ident_msg
+
+Parse the string pointed to by '*s' (whose upper bound is 's_end') looking for
+a normal identifier whose first character matches \p{XID_Start} followed by any
+number of characters which match \p{XID_Continue}.
+
+It returns a pointer to the first character in 's' beyond the next such
+identifier, or NULL if a serious error was found in the parsed string.
+Currently the only such serious error is that the identifier is too long for
+the perl interpreter to handle (the maximum is guaranteed to be at least 255
+characters).
+
+If 'error_detail' is not NULL, when a serious error is found, it creates a
+mortal hash containing details of the error, as follows:
+
+=cut
+*/
+
+char *
+Perl_parse_ident_msg(pTHX_ const char *s, const char *end,
+                           bool is_utf8, HV ** error_detail, U32 flags)
+{
+    PERL_ARGS_ASSERT_PARSE_IDENT_MSG;
+    assert(flags == 0);     /* Reserved for future use */
+
+    return parse_ident_no_copy(s, end, is_utf8, error_detail,
+                               (IDFIRST_ONLY | flags));
 }
 
 char *
@@ -10779,7 +10872,7 @@ Perl_scan_word(pTHX_ char *s, char *dest, STRLEN destlen, int allow_package, STR
     char * const e = d + destlen - 3;  /* two-character token, ending NUL */
     bool is_utf8 = cBOOL(UTF);
 
-    s = parse_ident(s, PL_bufend, &d, e, is_utf8,
+    s = parse_ident(s, PL_bufend, &d, e, is_utf8, NULL,
                     (CHECK_DOLLAR | ((allow_package) ? ALLOW_PACKAGE : 0)));
     *slp = d - dest;
     return s;
@@ -10832,7 +10925,7 @@ S_scan_ident(pTHX_ char *s, char *dest, char *dest_end, U32 flags)
         s = skipspace(s);
 
     /* See if it is a "normal" identifier */
-    s = parse_ident(s, PL_bufend, &d, e, is_utf8,
+    s = parse_ident(s, PL_bufend, &d, e, is_utf8, NULL,
                     (ALLOW_PACKAGE | STOP_AT_FIRST_NON_DIGIT | check_only));
     if (s == NULL) {
         return NULL;
@@ -10918,7 +11011,7 @@ S_scan_ident(pTHX_ char *s, char *dest, char *dest_end, U32 flags)
      * ${10}, ${1547}, etc.  Handle those the same way we handle $1, etc */
     if (isDIGIT(*d)) {
         assert(bracket != NO_BRACE);
-        s = parse_ident(s - 1, PL_bufend, &d, e, is_utf8,
+        s = parse_ident(s - 1, PL_bufend, &d, e, is_utf8, NULL,
                         STOP_AT_FIRST_NON_DIGIT | check_only);
         if (s == NULL) {
             return NULL;
@@ -10978,7 +11071,7 @@ S_scan_ident(pTHX_ char *s, char *dest, char *dest_end, U32 flags)
                  * are jumping into the middle; so tell that to parse_ident.
                  * */
                 d += advance;
-                s = parse_ident(s, PL_bufend, &d, e, is_utf8,
+                s = parse_ident(s, PL_bufend, &d, e, is_utf8, NULL,
                                 (  ALLOW_PACKAGE
                                  | CHECK_DOLLAR
                                  | IDCONT_first_OK
@@ -10995,6 +11088,7 @@ S_scan_ident(pTHX_ char *s, char *dest, char *dest_end, U32 flags)
                 d++;
                 s = parse_ident(s, PL_bufend, &d, e,
                                 false,  /* Don't allow UTF-8 */
+                                NULL,
                                 IDCONT_first_OK);
             }
 
@@ -11954,14 +12048,7 @@ S_scan_inputsymbol(pTHX_ char *start)
     if (*d == '$' && d[1]) d++;
 
     /* allow <Pkg'VALUE> or <Pkg::VALUE> */
-    Size_t advance;
-    while (   (advance = isWORDCHAR_lazy_if_safe(d, e, UTF))
-           || (advance = (   *d == ':'
-                          || (   *d == '\''
-                              && FEATURE_APOS_AS_NAME_SEP_IS_ENABLED))))
-    {
-        d += advance;
-    }
+    d = parse_ident_no_copy(d, e, cBOOL(UTF), NULL, ALLOW_PACKAGE);
 
     /* If we've tried to read what we allow filehandles to look like, and
        there's still text left, then it must be a glob() and not a getline.
@@ -14449,15 +14536,29 @@ Perl_parse_subsignature(pTHX_ U32 flags)
 }
 
 /*
-=for apidoc valid_identifier_pve
+=for apidoc      valid_identifier_pvn
+=for apidoc_item valid_identifier_pve
+=for apidoc_item valid_identifier_sv
 
-Returns true if the string given by C<s> until C<end> would be considered
-valid as a Perl identifier.  That is, it must begin with a character matching
-C<isIDFIRST>, followed by characters all matching C<isIDCONT>.  An empty
-string (i.e. when C<end> is C<s>) will return false.
+These each return true if the string given by their parameters would be
+considered valid as a Perl identifier.  That is, for non-UTF-8 strings, it must
+begin with a character matching C<L/<isIDFIRST>>, followed by characters all
+matching C<L</isIDCONT>>.  For UTF-8 strings, the characters must match
+C<L</isIDFIRST_utf8>> and C<L</isIDCONT_utf8>>, respectively.
 
-If C<flags> contains the C<SVf_UTF8> bit, then the string is presumed to be
-encoded in UTF-8, and suitable Unicode character test functions will be used.
+An empty string will return false.
+
+They differ only in how the string is specified.
+
+In C<valid_identifier_sv>, the string is extracted from C<sv> using
+C<L</SvPV_const>>, without performing "get" magic.  The string is considered to be encoded in UTF-8 if and only if C<sv> is marked as being UTF-8.
+
+In the other two functions, the first byte of the string is pointed to by
+C<s>.  In C<valid_identifier_pvn> its length is given by C<len>.
+In C<valid_identifier_pve> the final byte of the string is the one before
+C<e>.  If C<flags> contains the C<SVf_UTF8> bit, then the string is presumed
+to be encoded in UTF-8, and suitable Unicode character test functions will be
+used.
 
 =cut
 */
@@ -14471,22 +14572,8 @@ Perl_valid_identifier_pve(pTHX_ const char *s, const char *end, U32 flags)
         return false;
 
     return end == parse_ident_no_copy(s, end, cBOOL(flags & SVf_UTF8),
-                                      IDFIRST_ONLY);
+                                      NULL, IDFIRST_ONLY);
 }
-
-/*
-=for apidoc valid_identifier_pvn
-
-Returns true if the string given by C<s> whose length is C<len> would be
-considered valid as a Perl identifier.  That is, it must begin with a
-character matching C<isIDFIRST>, followed by characters all matching
-C<isIDCONT>.  An empty string (i.e. when C<len> is zero) will return false.
-
-If C<flags> contains the C<SVf_UTF8> bit, then the string is presumed to be
-encoded in UTF-8, and suitable Unicode character test functions will be used.
-
-=cut
-*/
 
 bool
 Perl_valid_identifier_pvn(pTHX_ const char *s, STRLEN len, U32 flags)
@@ -14495,18 +14582,6 @@ Perl_valid_identifier_pvn(pTHX_ const char *s, STRLEN len, U32 flags)
 
     return valid_identifier_pve(s, s + len, flags);
 }
-
-/*
-=for apidoc valid_identifier_sv
-
-Returns true if the given SV contains a non-empty string whose characters
-match accoding to C<valid_identifier_pvn>.  Returns false if given NULL, an
-undefined SV, or a SV that does not contain a non-empty string.
-
-Does not invoke C<get> magic on the SV beforehand.
-
-=cut
-*/
 
 bool
 Perl_valid_identifier_sv(pTHX_ SV *sv)

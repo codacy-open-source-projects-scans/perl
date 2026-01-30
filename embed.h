@@ -26,6 +26,7 @@
 #if defined(PERL_DO_UNDEFS)
 # if !defined(PERL_CORE)
 #   undef CC_UNDERSCORE_
+#   undef is_WORD_BUT_NONCONT_safe
 #   undef isFOO_or_UNDERSCORE_
 #   undef sv_2num
 #   undef SvRVx
@@ -36,6 +37,10 @@
 #     undef invlist_union_
 #     undef utf16_to_utf8
 #     undef utf16_to_utf8_reversed
+#   endif
+#   if !defined(PERL_EXT_RE_BUILD)
+#     undef PARSE_IDENT_ERROR_POSITION
+#     undef PARSE_IDENT_ERROR_TEXT
 #   endif
 # endif /* !defined(PERL_CORE) */
 #else /* if !defined(PERL_DO_UNDEFS) */
@@ -1709,8 +1714,8 @@
 #     define is_existing_identifier(a,b,c,d)    S_is_existing_identifier(aTHX_ a,b,c,d)
 #     define lop(a,b,c,d)                       S_lop(aTHX_ a,b,c,d)
 #     define missingterm(a,b)                   S_missingterm(aTHX_ a,b)
-#     define parse_ident(a,b,c,d,e,f)           S_parse_ident(aTHX_ a,b,c,d,e,f)
-#     define parse_ident_no_copy(a,b,c,d)       S_parse_ident_no_copy(aTHX_ a,b,c,d)
+#     define parse_ident(a,b,c,d,e,f,g)         S_parse_ident(aTHX_ a,b,c,d,e,f,g)
+#     define parse_ident_no_copy(a,b,c,d,e)     S_parse_ident_no_copy(aTHX_ a,b,c,d,e)
 #     define pending_ident()                    S_pending_ident(aTHX)
 #     define scan_const(a)                      S_scan_const(aTHX_ a)
 #     define scan_formline(a)                   S_scan_formline(aTHX_ a)
@@ -1763,7 +1768,6 @@
 #   if defined(PERL_IN_UTIL_C)
 #     define ckwarn_common(a)                   S_ckwarn_common(aTHX_ a)
 #     define mess_alloc()                       S_mess_alloc(aTHX)
-#     define ptr_hash                           S_ptr_hash
 #     define with_queued_errors(a)              S_with_queued_errors(aTHX_ a)
 #     if defined(PERL_MEM_LOG) && !defined(PERL_MEM_LOG_NOIMPL)
 #       define mem_log_common                   S_mem_log_common
@@ -1880,6 +1884,7 @@
 #   define multiconcat_stringify(a)             Perl_multiconcat_stringify(aTHX_ a)
 #   define multideref_stringify(a,b)            Perl_multideref_stringify(aTHX_ a,b)
 #   define op_clear(a)                          Perl_op_clear(aTHX_ a)
+#   define parse_ident_msg(a,b,c,d,e)           Perl_parse_ident_msg(aTHX_ a,b,c,d,e)
 #   define qerror(a)                            Perl_qerror(aTHX_ a)
 #   define reg_named_buff(a,b,c,d)              Perl_reg_named_buff(aTHX_ a,b,c,d)
 #   define reg_named_buff_iter(a,b,c)           Perl_reg_named_buff_iter(aTHX_ a,b,c)
