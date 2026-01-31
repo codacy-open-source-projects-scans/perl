@@ -3819,7 +3819,7 @@ PERL_CALLCONV I32
 Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, char *strend, char *strbeg, SSize_t minend, SV *sv, void *data, U32 flags);
 #define PERL_ARGS_ASSERT_REGEXEC_FLAGS          \
         assert(rx); assert(stringarg); assert(strend); assert(strbeg); \
-        assert(sv); assert(strbeg <= stringarg)
+        assert(sv); assert(strbeg <= stringarg); assert(stringarg <= strend)
 
 PERL_CALLCONV void
 Perl_regfree_internal(pTHX_ REGEXP * const rx);
@@ -5369,7 +5369,8 @@ Perl_uiv_2buf(char * const buf, const IV iv, UV uv, const int is_uv, char ** con
 PERL_CALLCONV SSize_t
 Perl_unpackstring(pTHX_ const char *pat, const char *patend, const char *s, const char *strend, U32 flags);
 #define PERL_ARGS_ASSERT_UNPACKSTRING           \
-        assert(pat); assert(patend); assert(s); assert(strend)
+        assert(pat); assert(patend); assert(s); assert(strend); \
+        assert(pat <= patend); assert(s <= strend)
 
 PERL_CALLCONV void
 Perl_unshare_hek(pTHX_ HEK *hek);
@@ -8164,7 +8165,7 @@ STATIC SSize_t
 S_unpack_rec(pTHX_ struct tempsym *symptr, const char *s, const char *strbeg, const char *strend, const char **new_s);
 # define PERL_ARGS_ASSERT_UNPACK_REC            \
         assert(symptr); assert(s); assert(strbeg); assert(strend); \
-        assert(strbeg <= s)
+        assert(strbeg <= s); assert(s <= strend)
 
 #endif /* defined(PERL_IN_PP_PACK_C) */
 #if defined(PERL_IN_PP_SORT_C)
