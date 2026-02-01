@@ -252,8 +252,6 @@ Now a synonym for C<L</dTHXa>>.
 #  define dTHX_DEBUGGING dNOOP
 #endif
 
-#define STATIC static
-
 #ifndef PERL_CORE
 /* Do not use these macros. They were part of PERL_OBJECT, which was an
  * implementation of multiplicity using C++ objects. They have been left
@@ -268,6 +266,7 @@ Now a no-op.
 
 =cut
  */
+#  define STATIC static
 #  define CPERLscope(x) x
 #  define CPERLarg void
 #  define CPERLarg_
@@ -4477,11 +4476,11 @@ typedef        struct crypt_data {     /* straight from /usr/include/crypt.h */
 #    define PERL_CALLCONV_NO_RET PERL_CALLCONV
 #endif
 
-/* PERL_STATIC_NO_RET is supposed to be equivalent to STATIC on builds that
+/* PERL_STATIC_NO_RET is supposed to be equivalent to static on builds that
    dont have a noreturn as a declaration specifier
 */
 #ifndef PERL_STATIC_NO_RET
-#  define PERL_STATIC_NO_RET STATIC
+#  define PERL_STATIC_NO_RET static
 #endif
 
 /* PERL_STATIC_INLINE_NO_RET is supposed to be equivalent to PERL_STATIC_INLINE

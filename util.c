@@ -1371,7 +1371,7 @@ Perl_savesharedpvn(pTHX_ const char *const pv, const STRLEN len)
 
 /* the SV for Perl_form() and mess() is not kept in an arena */
 
-STATIC SV *
+static SV *
 S_mess_alloc(pTHX)
 {
     SV *sv;
@@ -1693,7 +1693,7 @@ Perl_write_to_stderr(pTHX_ SV* msv)
 
 /* Common code used in dieing and warning */
 
-STATIC SV *
+static SV *
 S_with_queued_errors(pTHX_ SV *ex)
 {
     PERL_ARGS_ASSERT_WITH_QUEUED_ERRORS;
@@ -3155,7 +3155,7 @@ Perl_wait4pid(pTHX_ Pid_t pid, int *statusp, int flags)
 #endif /* !DOSISH || OS2 || WIN32 */
 
 #ifdef PERL_USES_PL_PIDSTATUS
-void
+static void
 S_pidgone(pTHX_ Pid_t pid, int status)
 {
     SV *sv;
@@ -4551,7 +4551,7 @@ Perl_parse_unicode_opts(pTHX_ const char **popt)
  * introduced in 2015: https://gee.cs.oswego.edu/dl/papers/oopsla14.pdf
  * Examples: https://rosettacode.org/wiki/Pseudo-random_numbers/Splitmix64
  */
-U64
+static U64
 splitmix64(U64 *state)
 {
     U64 z = (*state += 0x9e3779b97f4a7c15);
@@ -5577,7 +5577,7 @@ cross platform way to prevent a SEGV.
 }
 
 
-STATIC void
+static void
 S_xs_version_bootcheck(pTHX_ SSize_t items, SSize_t ax, const char *xs_p,
                           STRLEN xs_len)
 {
@@ -5902,12 +5902,12 @@ Perl_get_re_arg(pTHX_ SV *sv) {
 #define FREEBSD_DRAND48_MULT_2   (0x0005)
 #define FREEBSD_DRAND48_ADD      (0x000b)
 
-const unsigned short rand48_mult_[3] = {
-                FREEBSD_DRAND48_MULT_0,
-                FREEBSD_DRAND48_MULT_1,
-                FREEBSD_DRAND48_MULT_2
+static const unsigned short rand48_mult_[3] = {
+    FREEBSD_DRAND48_MULT_0,
+    FREEBSD_DRAND48_MULT_1,
+    FREEBSD_DRAND48_MULT_2
 };
-const unsigned short rand48_add_ = FREEBSD_DRAND48_ADD;
+static const unsigned short rand48_add_ = FREEBSD_DRAND48_ADD;
 
 #endif
 
