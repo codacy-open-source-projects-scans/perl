@@ -236,6 +236,11 @@ Perl_output_non_portable(pTHX_ const U8 base)
     ck_warner(packWARN(WARN_PORTABLE), "%s non-portable", which);
 }
 
+/* An acceptable underscore must not be trailing, which also implies there
+ * must be a legal digit after it */
+#define underscore_valid(s, e, lookup_bit)                                  \
+                            (s < e - 1 && Perl_isCC_by_bit(s[1], lookup_bit))
+
 UV
 Perl_grok_bin_oct_hex(pTHX_ const char * const start,
                         STRLEN *len_p,
@@ -243,7 +248,7 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
                         NV *result,
                         const unsigned shift, /* 1 for binary; 3 for octal;
                                                  4 for hex */
-                        const U32 class_bit,
+                        const U32 lookup_bit,
                         const char prefix
                      )
 
@@ -267,7 +272,14 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
      *      ...
      */
 
-    const I32 input_flags = *flags;
+#if UVSIZE > 4
+    I32 input_flags = *flags;
+#else
+    /* Only overflow can be non-portable on this platform, and that turns off
+     * this flag unconditionally */
+    I32 input_flags = *flags | PERL_SCAN_SILENT_NON_PORTABLE;
+#endif
+
     /* Clear output flags; unlikely to find a problem that sets them */
     *flags = 0;
 
@@ -296,7 +308,8 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
     }
 
     const char * const s0 = s;  /* Where the significant digits start */
-    UV value = 0;               /* Running total */
+    UV accumulated = 0;               /* Running total */
+    const PERL_UINT_FAST8_T base = 1 << shift;  /* 2, 8, or 16 */
 
     /* Unroll the loop so that numbers with 8 or fewer digits can be handled
      * with the minimum amount of work.  Anything higher would require extra
@@ -305,189 +318,161 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
   redo_switch:
     switch (e - s) {
       default:
-          if (UNLIKELY(! Perl_isCC_by_bit(*s, class_bit)))  break;
-          value = (value << shift) | XDIGIT_VALUE(*s);
-          s++;
-          /* FALLTHROUGH */
+
+        /* Leading zeros are common enough to deserve a special case when
+         * there are more digits than we handle in the switch.  Strip them
+         * off, and try again */
+        if (UNLIKELY(*s == '0')) {
+            do {
+                s++;
+            } while (s < e && *s == '0');
+            goto redo_switch;
+        }
+
+        if (UNLIKELY(! Perl_isCC_by_bit(*s, lookup_bit)))  break;
+        accumulated = XDIGIT_VALUE(*s);
+        s++;
+        goto loop;
+
+      case 8:
+        if (UNLIKELY(! Perl_isCC_by_bit(*s, lookup_bit)))  break;
+        accumulated = XDIGIT_VALUE(*s);
+        s++;
+        /* FALLTHROUGH */
       case 7:
-          if (UNLIKELY(! Perl_isCC_by_bit(*s, class_bit)))  break;
-          value = (value << shift) | XDIGIT_VALUE(*s);
-          s++;
-          /* FALLTHROUGH */
+        if (UNLIKELY(! Perl_isCC_by_bit(*s, lookup_bit)))  break;
+        accumulated = (accumulated << shift) | XDIGIT_VALUE(*s);
+        s++;
+        /* FALLTHROUGH */
       case 6:
-          if (UNLIKELY(! Perl_isCC_by_bit(*s, class_bit)))  break;
-          value = (value << shift) | XDIGIT_VALUE(*s);
-          s++;
-          /* FALLTHROUGH */
+        if (UNLIKELY(! Perl_isCC_by_bit(*s, lookup_bit)))  break;
+        accumulated = (accumulated << shift) | XDIGIT_VALUE(*s);
+        s++;
+        /* FALLTHROUGH */
       case 5:
-          if (UNLIKELY(! Perl_isCC_by_bit(*s, class_bit)))  break;
-          value = (value << shift) | XDIGIT_VALUE(*s);
-          s++;
-          /* FALLTHROUGH */
+        if (UNLIKELY(! Perl_isCC_by_bit(*s, lookup_bit)))  break;
+        accumulated = (accumulated << shift) | XDIGIT_VALUE(*s);
+        s++;
+        /* FALLTHROUGH */
       case 4:
-          if (UNLIKELY(! Perl_isCC_by_bit(*s, class_bit)))  break;
-          value = (value << shift) | XDIGIT_VALUE(*s);
-          s++;
-          /* FALLTHROUGH */
+        if (UNLIKELY(! Perl_isCC_by_bit(*s, lookup_bit)))  break;
+        accumulated = (accumulated << shift) | XDIGIT_VALUE(*s);
+        s++;
+        /* FALLTHROUGH */
       case 3:
-          if (UNLIKELY(! Perl_isCC_by_bit(*s, class_bit)))  break;
-          value = (value << shift) | XDIGIT_VALUE(*s);
-          s++;
-          /* FALLTHROUGH */
+        if (UNLIKELY(! Perl_isCC_by_bit(*s, lookup_bit)))  break;
+        accumulated = (accumulated << shift) | XDIGIT_VALUE(*s);
+        s++;
+        /* FALLTHROUGH */
       case 2:
-          if (UNLIKELY(! Perl_isCC_by_bit(*s, class_bit)))  break;
-          value = (value << shift) | XDIGIT_VALUE(*s);
-          s++;
-          /* FALLTHROUGH */
+        if (UNLIKELY(! Perl_isCC_by_bit(*s, lookup_bit)))  break;
+        accumulated = (accumulated << shift) | XDIGIT_VALUE(*s);
+        s++;
+        /* FALLTHROUGH */
       case 1:
-          if (UNLIKELY(! Perl_isCC_by_bit(*s, class_bit)))  break;
-          value = (value << shift) | XDIGIT_VALUE(*s);
-          s++;
-          /* FALLTHROUGH */
+        if (UNLIKELY(! Perl_isCC_by_bit(*s, lookup_bit)))  break;
+        accumulated = (accumulated << shift) | XDIGIT_VALUE(*s);
+        s++;
+        /* FALLTHROUGH */
       case 0:
-          if (LIKELY(s >= e)) {
-              return value;
-          }
-
-          /* If we get here, and the accumulated value is still 0, it is
-           * because there are more leading zeros than the cases of this
-           * switch(),  These are common enough with these kinds of
-           * binary-style numbers that it is worth this extra conditional to
-           * continue absorbing them via the switch. */
-          if (value == 0) {
-              goto redo_switch;
-          }
-
-          break;
+        return accumulated;
     }   /* End of switch on the first so-many characters */
 
-    /* The loop below accumulates the integral running total of the result,
-     * digit by digit.  If this total overflows, it is added to an NV
-     * approximation, and the loop starts over, looking at the next batch of
-     * digits, until they overflow, and so on.
+    /* To get here, there was an unexpected character in the input (including
+     * an underscore, which is optionally acceptable). */
+    if (*s != '_' || ! allow_underscores) {
+        goto done_parse;
+    }
+
+    /* An acceptable initial underscore has to have the right flag */
+    if (s == s0 && (input_flags & PERL_SCAN_ALLOW_MEDIAL_UNDERSCORES_ONLY)) {
+        goto done_parse;
+    }
+
+    if (! underscore_valid(s, e, lookup_bit)) {
+        goto done_parse;
+    }
+
+    /* check_underscore() succeeds only if the next char is a legal digit */
+    s++;
+
+    /* If we haven't seen any non-zero digits yet, we can jump back in to the
+     * switch() without fear of exceeding the portability limits */
+    if (UNLIKELY(accumulated == 0)) {
+        goto redo_switch;
+    }
+
+    /* Here s points to a legal digit.  We can save some operations by
+     * accumulating it now, and positioning the loop to start on the next
+     * character (whose value is unknown here). */
+    accumulated = (accumulated << shift) | XDIGIT_VALUE(*s);
+    s++;
+
+  loop: ;
+
+    /* Here, 'accumulated' contains the running total so far in the input,
+     * and 's' points to the next character.
      *
-     * In overflows, this keeps track of how much to multiply the overflowed NV
-     * by as we continue to parse the remaining digits */
-    NV factor = 0.0;
-
-    bool overflowed = FALSE;
-    NV value_nv = 0;
-    const PERL_UINT_FAST8_T base = 1 << shift;  /* 2, 8, or 16 */
-
-    /* As long as the running total is less than this, the next digit will
+     * The loop below accumulates the integral running total of the result,
+     * digit by digit.
+     *
+     * As long as the running total is less than this, the next digit will
      * fit. */
-    UV max_div = UV_MAX >> shift;
+    UV max_div;
+    max_div = UV_MAX >> shift;
+    U32 valid_digit_or_underscore_bits;
+    valid_digit_or_underscore_bits = (lookup_bit|CC_mask_(CC_UNDERSCORE_));
 
     /* Loop through the characters */
-    for (; s < e; s++) {
-        if (Perl_isCC_by_bit(*s, class_bit)) {
-            /* Write it in this wonky order with a goto to attempt to get the
-               compiler to make the common case integer-only loop pretty tight.
-               With gcc seems to be much straighter code than old scan_hex.
-               (khw suspects that adding a LIKELY() just above would do the
-               same thing) */
-          redo: ;
-            /* If there is room for this digit, accumulate it and repeat */
-            if (LIKELY(value <= max_div)) {
-                /* Note XDIGIT_VALUE() is branchless, works on binary and
-                 * octal as well, so can be used here, without noticeably
-                 * slowing those down (it does have unnecessary shifts, ANDSs,
-                 * and additions for those) */
-                value = (value << shift) | XDIGIT_VALUE(*s);
-                factor *= base;
-                continue;
-            }
-
-            /* Bah. We are about to overflow.  Instead, add the unoverflowed
-             * value to an NV that contains an approximation to the correct
-             * value.  Each time through the loop we have increased 'factor' so
-             * that it gives how much the current approximation needs to
-             * effectively be shifted to make room for this new value */
-            value_nv *= factor;
-            value_nv += (NV) value;
-
-            /* Then we keep accumulating digits, until all are parsed.  We
-             * start over using the current input value as the initial digit.
-             * This will be added to 'value_nv' eventually, either when all
-             * digits are gone, or we have overflowed this fresh start.  This
-             * method uses the fewest floating point multiplications possible,
-             * losing the least precision. */
-            value = XDIGIT_VALUE(*s);
-            factor = base;
-            overflowed = TRUE;
-            continue;
-        } /* End of handling legal digit */
+    while (s < e && Perl_isCC_by_bit(*s, valid_digit_or_underscore_bits)) {
 
         /* Handle non-trailing underscores when those are accepted */
-        if (   UNLIKELY(*s == '_')
-            && s < e - 1
-            && allow_underscores
-            && Perl_isCC_by_bit(s[1], class_bit)
-            && (   LIKELY(s > s0)
-                   /* Including initial underscores if those are accepted */
-                || UNLIKELY(! (  input_flags
-                               & PERL_SCAN_ALLOW_MEDIAL_UNDERSCORES_ONLY))))
-        {
-            ++s;
+        if (UNLIKELY(*s == '_')) {
+            if (   ! allow_underscores
+                || ! underscore_valid(s, e, lookup_bit))
+            {
+                break;
+            }
 
-            /* To get here with the value so-far being 0 means we've only had
-             * leading zeros, then an underscore.  We can continue with the
-             * branchless switch() instead of this loop */
-            if (UNLIKELY(value == 0)) {
-                goto redo_switch;
-            }
-            else {
-                goto redo;
-            }
+            /* check_underscore() succeeds only if the next char is a legal
+             * digit */
+            ++s;
         }
 
-        /* We get here when done with the parse, or it got interrupted by a
-         * non-digit or a digit that is outside the bounds of the base, like a
-         * digit 2 in a binary number.  In either case, we are done with the
-         * loop */
-        break;
+        /* If would overflow, handle elsewhere */
+        if (UNLIKELY(accumulated > max_div)) {
+            goto overflowed;
+        }
+
+        /* Otherwise, there is room for this digit; accumulate it and repeat
+         *
+         * Note XDIGIT_VALUE() is branchless, works on binary and octal as
+         * well, so can be used here, without noticeably slowing those down
+         * (it does have unnecessary shifts, ANDSs, and additions for those)
+         * */
+        accumulated = (accumulated << shift) | XDIGIT_VALUE(*s);
+        s++;
     }   /* End of parsing loop */
 
-    bool do_non_portable_output = false;
+  done_parse:
 
-    if (UNLIKELY(overflowed)) {
-
-        /* Calculate the final overflow approximation */
-        value_nv *= factor;
-        value_nv += (NV) value;
-
-        *flags |= PERL_SCAN_GREATER_THAN_UV_MAX
-               |  PERL_SCAN_SILENT_NON_PORTABLE;
-
-        if (result)
-            *result = value_nv;
-
-        if (input_flags & PERL_SCAN_SILENT_OVERFLOW) {
-            *flags |= PERL_SCAN_SILENT_OVERFLOW;
-        }
-        else if (ckWARN_d(WARN_OVERFLOW)) {
-            warner(packWARN(WARN_OVERFLOW),
-                    "Integer overflow in %s number",
-                    (base == 16) ? "hexadecimal"
-                                : (base == 2)
-                                    ? "binary"
-                                    : "octal");
-        }
-
-        value = UV_MAX;
-        do_non_portable_output = true;
+#if UVSIZE > 4
+    if (UNLIKELY(accumulated <= 0xffffffff)) {
+        /* Fits in 32 bits; no warning necessary */
+        input_flags |= PERL_SCAN_SILENT_NON_PORTABLE;
     }
     else {
-#if UVSIZE > 4
-        if (UNLIKELY(value > 0xffffffff)) {
-            if (! (input_flags & PERL_SCAN_SILENT_NON_PORTABLE)) {
-                do_non_portable_output = true;
-            }
-            *flags |= PERL_SCAN_SILENT_NON_PORTABLE;
-        }
-#endif
-    }
+        /* Doesn't fit; return that to caller */
+        *flags |= PERL_SCAN_SILENT_NON_PORTABLE;
 
+        /* If caller doesn't want warning raised, turn it off */
+        if (! (input_flags & PERL_SCAN_SILENT_NON_PORTABLE)) {
+            input_flags &= ~PERL_SCAN_SILENT_NON_PORTABLE;
+        }
+    }
+#endif
+
+  finish:
     if (s < e && *s) {  /* *s is to keep a terminating NUL from warning */
         if (   ! (input_flags & PERL_SCAN_SILENT_ILLDIGIT)
             &&    ckWARN(WARN_DIGIT))
@@ -517,13 +502,115 @@ Perl_grok_bin_oct_hex(pTHX_ const char * const start,
         }
     }
 
-    if (UNLIKELY(do_non_portable_output)) {
+    if (UNLIKELY(! (input_flags & PERL_SCAN_SILENT_NON_PORTABLE))) {
         output_non_portable(base);
     }
 
     /* s here points to e or to the first illegal character */
     *len_p = s - start;
-    return value;
+    return accumulated;
+
+  overflowed: ;
+
+    /* Bah. We are about to overflow.  Instead compute an approximation to the
+     * correct value.
+     *
+     * It turns out that there is less precision loss if we start at the low
+     * order digits of the string and build up the number from there.  This is
+     * because if we overflow multiple times, the low order digits will be so
+     * small in comparison to the larger ones that they are completely
+     * disregarded.  But going the other way allows them to contribute
+     * whatever bits they have to offer.
+     *
+     * So, find the end of the string */
+    const char * s1 = s;    /* Save our place */
+    s++;
+    while (s < e && Perl_isCC_by_bit(*s, valid_digit_or_underscore_bits)) {
+        if (   UNLIKELY(*s == '_')
+            && (   ! allow_underscores
+                || ! underscore_valid(s, e, lookup_bit)))
+        {
+            break;
+        }
+
+        s++;
+    }
+
+    /* Here we got to the end of the string; either we encountered an illegal
+     * character, which ends it, or got to the final position in it.  's'
+     * points to the position just after the final legal character.
+     *
+     * Accumulate the value starting at the lowest order digit and going
+     * backwards */
+    const char * t = s - 1;
+    NV accumulated_nv = 0;
+    NV accumulated_factor = 1;
+
+    UV this_batch_accumulated = 0;
+    UV this_batch_factor = 1;
+
+    /* To minimize precision loss, we do integer arithmetic on batches that
+     * don't overflow.  When one does, the final integer that didn't overflow
+     * is factored in to the running total, and a new batch is started */
+    while (t >= s1) {
+
+        /* Any underscores were already determined to be valid */
+        if (UNLIKELY(*t == '_')) {
+            t--;
+            continue;
+        }
+
+        /* If will fit, accumulate it and repeat.  Each digit has to be
+         * multiplied by the position it occupies, like 1, 8, 8-squared,
+         * 8-cubed, etc */
+        if (   LIKELY(this_batch_accumulated <= max_div)
+            && LIKELY(this_batch_factor <= max_div))
+        {
+            U8 this_digit_value = XDIGIT_VALUE(*t);
+            this_batch_accumulated += this_digit_value * this_batch_factor;
+            this_batch_factor <<= shift;
+            t--;
+            continue;
+        }
+
+        /* Bah. We are about to overflow again.  Instead, accumulate this
+         * batch into the running total for all low order batches, and start a
+         * new batch. */
+        accumulated_nv += this_batch_accumulated * accumulated_factor;
+        accumulated_factor *= this_batch_factor;
+
+        this_batch_accumulated = 0;
+        this_batch_factor = 1;
+    }
+
+    /* Here have accumulated everything.  Combine the low order bits with the
+     * high order that we have saved in 'accumulated'.  Those must be shifted
+     * left to account for the low order ones */
+    accumulated_nv += this_batch_accumulated * accumulated_factor;
+    accumulated_factor *= this_batch_factor;
+    accumulated_nv += accumulated * accumulated_factor;
+
+    *flags |= PERL_SCAN_GREATER_THAN_UV_MAX
+           |  PERL_SCAN_SILENT_NON_PORTABLE;
+
+    if (result)
+        *result = accumulated_nv;
+
+    if (input_flags & PERL_SCAN_SILENT_OVERFLOW) {
+        *flags |= PERL_SCAN_SILENT_OVERFLOW;
+    }
+    else if (ckWARN_d(WARN_OVERFLOW)) {
+        warner(packWARN(WARN_OVERFLOW),
+                "Integer overflow in %s number",
+                (base == 16) ? "hexadecimal"
+                            : (base == 2)
+                                ? "binary"
+                                : "octal");
+    }
+
+    accumulated = UV_MAX;
+    input_flags &= ~PERL_SCAN_SILENT_NON_PORTABLE;
+    goto finish;
 }
 
 /*
