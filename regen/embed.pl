@@ -160,7 +160,9 @@ my %per_file_definitions = (
 # The list does not include symbols that we have documented as being reserved
 # for perl's use, namely those that match the pattern just above.
 # There are two parts of the list; the second part contains the symbols which
-# have a trailing underscore; the first part those without.
+# have a trailing underscore indicating the intent for this symbol to not be
+# directly usable by XS code.  The first part are those symbols without a
+# trailing underscore.
 #
 # For all modules that aren't deliberately using particular names, all the
 # other symbols on it are namespace pollutants.
@@ -3608,7 +3610,6 @@ my @needed_by_ext_re = qw(
     PARSE_IDENT_ERROR_POSITION
     PARSE_IDENT_ERROR_TEXT
     RExC_parse_advance
-    RXf_PMf_SHIFT_COMPILETIME_
     WARN_HELPER_
 );
 
@@ -3618,8 +3619,6 @@ my @needed_by_ext = qw(
     OPpPARAM_IF_FALSE
     OPpPARAM_IF_UNDEF
     OPpSELF_IN_PAD
-    RXf_PMf_CHARSET_SHIFT_
-    RXf_PMf_SHIFT_NEXT_
 );
 
 # This is a list of symbols that are needed to be visible everywhere and are
@@ -3633,13 +3632,21 @@ my @needed_by_ext = qw(
 #
 # Typically these are symbols that are behind-the-scenes helpers whose use is
 # obvious from inspection of the things they help.
+#
+# The list has two parts, separated by a blank line.  The names in the second
+# part have a trailing underscore, indicating the intent for this symbol to
+# not be directly usable by XS code
 my @undocumented_always_visible = qw(
+    MAX_UNICODE_UTF8_BYTES
+
     EXTEND_NEEDS_GROW_
     EXTEND_SAFE_N_
-    MAX_UNICODE_UTF8_BYTES
     MEM_WRAP_NEEDS_RUNTIME_CHECK_
     MEM_WRAP_WILL_WRAP_
     NV_BODYLESS_UNION_
+    RXf_PMf_CHARSET_SHIFT_
+    RXf_PMf_SHIFT_COMPILETIME_
+    RXf_PMf_SHIFT_NEXT_
     shifted_octet_
     STATIC_ASSERT_STRUCT_BODY_
     STATIC_ASSERT_STRUCT_NAME_
