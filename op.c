@@ -2101,8 +2101,9 @@ Perl_scalar(pTHX_ OP *o)
 
             kid = cLISTOPo->op_first;
             kid = OpSIBLING(kid); /* get past pushmark */
-            assert(OpSIBLING(kid));
-            name = op_varname(OpSIBLING(kid));
+            OP *sibling = OpSIBLING(kid);
+            assert(sibling);
+            name = op_varname(sibling);
             if (!name) /* XS module fiddling with the op tree */
                 break;
             warn_elem_scalar_context(kid, name, o->op_type == OP_KVHSLICE, false);
@@ -8071,11 +8072,13 @@ Perl_pmruntime(pTHX_ OP *o, OP *expr, OP *repl, UV flags, I32 floor)
             konst = TRUE;
         }
         else konst = FALSE;
-        if (konst
-            && !(repl_has_vars
-                 && (!PM_GETRE(pm)
-                     || !RX_PRELEN(PM_GETRE(pm))
-                     || RX_EXTFLAGS(PM_GETRE(pm)) & RXf_EVAL_SEEN)))
+
+        REGEXP * re;
+        if (     konst
+            && ! (   repl_has_vars
+                  &&   (  ! (re = PM_GETRE(pm))
+                         || ! RX_PRELEN(re)
+                         || (RX_EXTFLAGS(re) & RXf_EVAL_SEEN))))
         {
             pm->op_pmflags |= PMf_CONST;	/* const for long enough */
             op_prepend_elem(o->op_type, scalar(repl), o);

@@ -4023,6 +4023,7 @@ sub generate_proto_h {
         my $can_ignore = $flags !~ /[RP]/ && !$is_malloc;
         my $extensions_only = ( $flags =~ /E/ );
         my @asserts;
+        my @attrs;
         my $func;
 
         if (! $can_ignore && $retval eq 'void') {
@@ -4207,8 +4208,14 @@ sub generate_proto_h {
                     my $argname = $1;
 
                     if (defined $argname && (! $has_mflag || $binarycompat)) {
-                        if ($nn||$nz) {
+                        if ($nn || $nz) {
                             push @asserts, "assert($argname)";
+                            if ($nn) {
+                                my $string_n = $n;
+                                $string_n = "pTHX_$string_n" if $has_context;
+                                push @attrs,
+                                     "Perl_attribute_nonnull_($string_n)";
+                            }
                         }
 
                         if (   ! $nocheck
@@ -4386,7 +4393,6 @@ sub generate_proto_h {
 
         push @asserts, @$assertions if $assertions;
 
-        my @attrs;
         if ( $flags =~ /r/ ) {
             push @attrs, "__attribute__noreturn__";
         }
@@ -4448,11 +4454,14 @@ sub generate_proto_h {
             die_at_end "$plain_func: Function with '...' arguments must have"
                      . " f or F flag";
         }
+
+        unshift @attrs, "Perl_attribute_nonnull_aTHX_" if $has_context;
+
         if ( @attrs ) {
-            $ret .= "\n";
-            $ret .= join( "\n", map { (" " x 8) . $_ } @attrs );
+            $ret .= "\n"
+                 .  join( "\n", map { (" " x 8) . $_ } @attrs);
         }
-        $ret .= ";";
+        $ret .= ';';
         $ret = "/* $ret */" if $has_mflag;
 
         # Hide the prototype from non-authorized code.  This acts kind of like
@@ -4460,7 +4469,7 @@ sub generate_proto_h {
         # used.
         $ret = "#${ind}if defined(PERL_CORE) || defined(PERL_EXT)\n"
              . $ret
-             . " \n#${ind}endif"
+             . "\n#${ind}endif"
           if $extensions_only;
 
         # We don't hide the ARGS_ASSERT macro; having that defined does no
@@ -4507,14 +4516,27 @@ sub generate_proto_h {
     my $clean= normalize_group_content($proto_buffer);
 
     my $fh = open_print_header("proto.h");
+
     print $fh <<~"EOF";
-    START_EXTERN_C
-    $clean
-    #ifdef PERL_CORE
-    #  include "pp_proto.h"
-    #endif
-    END_EXTERN_C
-    EOF
+        #ifdef DEBUGGING    /* See GH #23641 */
+        #  define Perl_attribute_nonnull_(which)
+        #else
+        #  define Perl_attribute_nonnull_(which)  __attribute__nonnull__(which)
+        #endif
+
+        #if defined(MULTIPLICITY)
+        #  define Perl_attribute_nonnull_aTHX_ __attribute__nonnull__(1)
+        #else
+        #  define Perl_attribute_nonnull_aTHX_
+        #endif
+
+        START_EXTERN_C
+        $clean
+        #ifdef PERL_CORE
+        #  include "pp_proto.h"
+        #endif
+        END_EXTERN_C
+        EOF
 
     read_only_bottom_close_and_rename($fh) if ! $error_count;
 }
