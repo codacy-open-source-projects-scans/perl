@@ -218,8 +218,8 @@ our %Modules = (
     },
 
     'Compress::Raw::Bzip2' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.214.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Sat Oct 25 11:33:29 2025',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.217.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Feb 11 11:30:25 2026',
         'FILES'        => q[cpan/Compress-Raw-Bzip2],
         'EXCLUDED'     => [
             qr{^t/Test/},
@@ -231,8 +231,8 @@ our %Modules = (
     },
 
     'Compress::Raw::Zlib' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.214.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Sat Oct 25 11:20:02 2025',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.218.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Feb 11 11:27:39 2026',
         'FILES'    => q[cpan/Compress-Raw-Zlib],
         'EXCLUDED' => [
             qr{^examples/},
@@ -245,8 +245,8 @@ our %Modules = (
     },
 
     'Config::Perl::V' => {
-        'DISTRIBUTION' => 'HMBRAND/Config-Perl-V-0.38.tgz',
-        'SYNCINFO'     => 'jkeenan on Fri Jan 17 14:43:53 2025',
+        'DISTRIBUTION' => 'HMBRAND/Config-Perl-V-0.39.tgz',
+        'SYNCINFO'     => 'jkeenan on Wed Feb 11 08:21:24 2026',
         'FILES'        => q[cpan/Config-Perl-V],
         'EXCLUDED'     => [qw(
 		examples/show-v.pl
@@ -311,7 +311,8 @@ our %Modules = (
     # Note: When updating CPAN-Meta the META.* files will need to be regenerated
     # perl -Icpan/CPAN-Meta/lib Porting/makemeta
     'CPAN::Meta' => {
-        'DISTRIBUTION' => 'DAGOLDEN/CPAN-Meta-2.150010.tar.gz',
+        'DISTRIBUTION' => 'DAGOLDEN/CPAN-Meta-2.150012.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Feb 11 08:43:06 2026',
         'FILES'        => q[cpan/CPAN-Meta],
         'EXCLUDED'     => [
             qw[t/00-report-prereqs.t
@@ -350,8 +351,8 @@ our %Modules = (
     },
 
     'DB_File' => {
-        'DISTRIBUTION' => 'PMQS/DB_File-1.859.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Tue Sep  5 20:46:44 2023',
+        'DISTRIBUTION' => 'PMQS/DB_File-1.860.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Feb 11 13:27:52 2026',
         'FILES'        => q[cpan/DB_File],
         'EXCLUDED'     => [
             qr{^patches/},
@@ -669,8 +670,8 @@ our %Modules = (
     },
 
     'IO-Compress' => {
-        'DISTRIBUTION' => 'PMQS/IO-Compress-2.214.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Sat Oct 25 11:58:55 2025',
+        'DISTRIBUTION' => 'PMQS/IO-Compress-2.217.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Feb 11 11:42:12 2026',
         'MAIN_MODULE'  => 'IO::Compress::Base',
         'FILES'        => q[cpan/IO-Compress],
         'EXCLUDED'     => [
