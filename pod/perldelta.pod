@@ -355,6 +355,12 @@ then run it on the target machine, and then pass the values it outputs
 to F<Configure> on the other machine.  F<Porting/Glossary> has examples.
 [GH #22992]
 
+=item *
+
+The C<PERL_CREATE_GVSV> configuration macro has been removed. It was almost
+undocumented and it has been disabled by default since Perl 5.10.0. Its purpose
+was to force all GVs to initialize their SV slot on creation. [GH #24177]
+
 =back
 
 =head1 Testing
@@ -500,6 +506,13 @@ C<OOK> only applies to string buffers (when C<SvROK> is false).
 This change shouldn't affect any C<XS> module code that is using the test
 macros correctly, though might cause confusion to code that attempts to analyse
 C<SvFLAGS> bits directly outside of the helper macros.
+
+=item *
+
+An upper limit has been applied to the multiplier operand of the
+repetition operator. Constant folding will not be attempted if the
+operand is a numerical constant above C<PERL_FOLD_REPEAT_LIMIT>.
+See [GH #20586] and [GH #23561] for background.
 
 =back
 
