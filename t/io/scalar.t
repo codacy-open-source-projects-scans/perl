@@ -12,7 +12,7 @@ use strict;
 use Fcntl qw(SEEK_SET SEEK_CUR SEEK_END); # Not 0, 1, 2 everywhere.
 use Errno qw(EACCES);
 
-plan(133);
+plan(135);
 
 my $fh;
 my $var = "aaa\n";
@@ -558,4 +558,20 @@ SKIP:
     substr($str, 3) = '';
     print $fh "d";
     is($str, "yccd", "truncate string while appending");
+}
+
+{
+    open my $fh, '>', \my $str or die $!;
+    # Needs a sufficiently long string to trigger string expansion (sv_grow).
+    print $fh "abcdefghijklmnopqrstuvwxyz";
+    print $fh $str;
+    is($str, "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz",
+       "write a string to itself");
+}
+
+{ # GH #24199
+    open my $fh, '>', \my $content or die $!;
+    print {$fh} "o";
+    print {$fh} $content for 1..20; # This used to crash with SEGV
+    is(length($content), 2 ** 20, "write a string to itself [GH #24199]");
 }
