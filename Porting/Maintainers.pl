@@ -311,8 +311,8 @@ our %Modules = (
     # Note: When updating CPAN-Meta the META.* files will need to be regenerated
     # perl -Icpan/CPAN-Meta/lib Porting/makemeta
     'CPAN::Meta' => {
-        'DISTRIBUTION' => 'DAGOLDEN/CPAN-Meta-2.150012.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Wed Feb 11 08:43:06 2026',
+        'DISTRIBUTION' => 'RJBS/CPAN-Meta-2.150013.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Sun Feb 22 18:34:41 2026',
         'FILES'        => q[cpan/CPAN-Meta],
         'EXCLUDED'     => [
             qw[t/00-report-prereqs.t
@@ -324,7 +324,8 @@ our %Modules = (
     },
 
     'CPAN::Meta::Requirements' => {
-        'DISTRIBUTION' => 'RJBS/CPAN-Meta-Requirements-2.143.tar.gz',
+        'DISTRIBUTION' => 'RJBS/CPAN-Meta-Requirements-2.145.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Sun Feb 22 18:56:47 2026',
         'FILES'        => q[cpan/CPAN-Meta-Requirements],
         'EXCLUDED'     => [
             qw(t/00-report-prereqs.t),
