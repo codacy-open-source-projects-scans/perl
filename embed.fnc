@@ -1461,19 +1461,18 @@ ATdp	|bool	|grok_atoUV	|NN const char *pv			\
 Adip	|UV	|grok_bin	|NN const char *start			\
 				|NN STRLEN *len_p			\
 				|NN I32 *flags				\
-				|NULLOK NV *result
-Cp	|UV	|grok_bin_oct_hex					\
-				|NN const char * const start		\
+				|NULLOK NV *approximation
+Cp	|UV	|grok_bin_hex	|NN const char * const start		\
 				|NN STRLEN *len_p			\
 				|NN I32 *flags				\
-				|NULLOK NV *result			\
-				|const unsigned shift			\
+				|NULLOK NV *approximation		\
+				|uint_fast8_t base			\
 				|const U32 lookup_bit			\
 				|const char prefix
 Adip	|UV	|grok_hex	|NN const char *start			\
 				|NN STRLEN *len_p			\
 				|NN I32 *flags				\
-				|NULLOK NV *result
+				|NULLOK NV *approximation
 Adp	|int	|grok_infnan	|SPTR const char **sp			\
 				|EPTRge const char *send
 Adp	|int	|grok_number	|NN const char *pv			\
@@ -1490,7 +1489,15 @@ ARdp	|bool	|grok_numeric_radix					\
 Adip	|UV	|grok_oct	|NN const char *start			\
 				|NN STRLEN *len_p			\
 				|NN I32 *flags				\
-				|NULLOK NV *result
+				|NULLOK NV *approximation
+Cdp	|UV	|grok_uint_by_base					\
+				|NN const char * const start		\
+				|NN STRLEN *len_p			\
+				|NN I32 *flags				\
+				|NULLOK NV *approximation		\
+				|uint_fast8_t base			\
+				|const U32 lookup_bit			\
+				|uint_fast8_t offset
 Adp	|GV *	|gv_add_by_type |NULLOK GV *gv				\
 				|svtype type
 Adp	|int	|Gv_AMupdate	|NN HV *stash				\
@@ -5735,14 +5742,23 @@ ES	|regnode_offset|regpnode|NN RExC_state_t *pRExC_state		\
 				|NN SV *arg
 ES	|SV *	|reg_scan_name	|NN RExC_state_t *pRExC_state		\
 				|U32 flags
-ETi	|char * |reg_skipcomment|NN RExC_state_t *pRExC_state		\
-				|NN char *p
+Ei	|void	|reg_skipcomment|NN RExC_state_t *pRExC_state		\
+				|SPTR const char *p_start		\
+				|MPTR char **p				\
+				|EPTRge char *p_end			\
+				|bool check_for_R_bracket
 ERS	|bool	|regtail	|NN RExC_state_t *pRExC_state		\
 				|const regnode_offset p 		\
 				|const regnode_offset val		\
 				|const U32 depth
 ES	|void	|set_regex_pv	|NN RExC_state_t *pRExC_state		\
 				|NN REGEXP *Rx
+ES	|void	|skip_bracketed_white_space				\
+				|NN RExC_state_t *pRExC_state		\
+				|U8 do_skip				\
+				|SPTR const char *p_start		\
+				|MPTR char **p				\
+				|EPTRge char *stop_p
 ES	|void	|skip_to_be_ignored_text				\
 				|NN RExC_state_t *pRExC_state		\
 				|NN char **p				\

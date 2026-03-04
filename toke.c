@@ -11543,6 +11543,11 @@ S_scan_pat(pTHX_ char *start, I32 type)
                   "Use of /c modifier is meaningless without /g" );
     }
 
+    if (x_mod_count > 1 && FEATURE_ENHANCED_XX_IS_ENABLED) {
+        Perl_ck_warner_d(aTHX_ packWARN(WARN_EXPERIMENTAL__ENHANCED_XX), 
+                         "enhanced_xx is experimental");
+    }
+
     PL_lex_op = (OP*)pm;
     pl_yylval.ival = OP_MATCH;
     return s;
@@ -11599,6 +11604,11 @@ S_scan_subst(pTHX_ char *start)
 
     if ((pm->op_pmflags & PMf_CONTINUE)) {
         ck_warner(packWARN(WARN_REGEXP), "Use of /c modifier is meaningless in s///" );
+    }
+
+    if (x_mod_count > 1 && FEATURE_ENHANCED_XX_IS_ENABLED) {
+        Perl_ck_warner_d(aTHX_ packWARN(WARN_EXPERIMENTAL__ENHANCED_XX),
+                         "enhanced_xx is experimental");
     }
 
     if (es) {
@@ -12373,6 +12383,7 @@ S_scan_inputsymbol(pTHX_ char *start)
    On success, the SV with the resulting string is put into lex_stuff or,
    if that is already non-NULL, into lex_repl. The second case occurs only
    when parsing the RHS of the special constructs s/// and tr/// (y///).
+
    For convenience, the terminating delimiter character is stuffed into
    SvIVX of the SV.
 */

@@ -144,6 +144,7 @@ EXTERN_C const struct regexp_engine wild_reg_engine;
 #include "invlist_inline.h"
 #include "unicode_constants.h"
 #include "regcomp_internal.h"
+#include "feature.h"
 
 /* =========================================================
  * BEGIN edit_distance stuff.
@@ -6250,7 +6251,7 @@ S_regatom(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth)
         assert((RExC_flags & RXf_PMf_EXTENDED) == 0);
         /*
         if (RExC_flags & RXf_PMf_EXTENDED) {
-            RExC_parse_set( reg_skipcomment( pRExC_state, RExC_parse ) );
+            RExC_parse_set( reg_skipcomment( pRExC_state, &RExC_parse ) );
             if (RExC_parse < RExC_end)
                 goto tryagain;
         }
@@ -9469,15 +9470,47 @@ S_add_multi_match(pTHX_ AV* multi_char_matches, SV* multi_string, const STRLEN c
  *
  * There is a line below that uses the same white space criteria but is outside
  * this macro.  Both here and there must use the same definition */
-#define SKIP_BRACKETED_WHITE_SPACE(do_skip, p, stop_p)                  \
-    STMT_START {                                                        \
-        if (do_skip) {                                                  \
-            while (p < stop_p && isBLANK_A(UCHARAT(p)))                 \
-            {                                                           \
-                p++;                                                    \
-            }                                                           \
-        }                                                               \
-    } STMT_END
+
+static void
+S_skip_bracketed_white_space(pTHX_ RExC_state_t *pRExC_state,
+                                   U8 do_skip,
+                                   const char * p_start,
+                                   char ** p,
+                                   char * stop_p)
+{
+    PERL_ARGS_ASSERT_SKIP_BRACKETED_WHITE_SPACE;
+
+    if (! do_skip) {
+        return;
+    }
+
+    if (! FEATURE_ENHANCED_XX_IS_ENABLED) {
+        while (*p < stop_p && isBLANK_A(UCHARAT(*p))) {
+            (*p)++;
+        }
+    }
+    else {
+
+        /* With this feature, vertical space is allowed (isSPACE_A() vs the
+         * isBLANK_A() above, and we have to take into account the possibility
+         * of comments, and vertical space */
+        while (*p < stop_p) {
+            if (**p == '#') {
+                reg_skipcomment(pRExC_state,
+                                p_start,
+                                p,
+                                stop_p,
+                                "]");
+            }
+
+            if (! isSPACE_A((**p))) {
+                break;
+            }
+
+            (*p)++;
+        }
+    }
+}
 
 static regnode_offset
 S_regclass(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth,
@@ -9647,7 +9680,8 @@ S_regclass(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth,
     initial_listsv_len = SvCUR(listsv);
     SvTEMP_off(listsv); /* Grr, TEMPs and mortals are conflated.  */
 
-    SKIP_BRACKETED_WHITE_SPACE(skip_white, RExC_parse, RExC_end);
+    skip_bracketed_white_space(pRExC_state, skip_white, orig_parse,
+                               &RExC_parse, RExC_end);
 
     assert(RExC_parse <= RExC_end);
 
@@ -9656,7 +9690,8 @@ S_regclass(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth,
         invert = true;
         allow_mutiple_chars = false;
         MARK_NAUGHTY(1);
-        SKIP_BRACKETED_WHITE_SPACE(skip_white, RExC_parse, RExC_end);
+        skip_bracketed_white_space(pRExC_state, skip_white, orig_parse,
+                                   &RExC_parse, RExC_end);
     }
 
     /* Check that they didn't say [:posix:] instead of [[:posix:]] */
@@ -9703,7 +9738,8 @@ S_regclass(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth,
             output_posix_warnings(pRExC_state, posix_warnings);
         }
 
-        SKIP_BRACKETED_WHITE_SPACE(skip_white, RExC_parse, RExC_end);
+        skip_bracketed_white_space(pRExC_state, skip_white, orig_parse,
+                                   &RExC_parse, RExC_end);
 
         if  (RExC_parse >= stop_ptr) {
             break;
@@ -10235,13 +10271,18 @@ S_regclass(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth,
                 vFAIL("Literal vertical space in [] is illegal except"
                       " under /x");
             }
-            else if (RExC_flags & RXf_PMf_EXTENDED_MORE) {
+            else if (   RExC_flags & RXf_PMf_EXTENDED_MORE
+                     && ! FEATURE_ENHANCED_XX_IS_ENABLED)
+            {
                 ckWARNdep(RExC_parse, WARN_DEPRECATED,
                           "Use of literal vertical space in [] is"
                           " deprecated under /xx");
             }
         }
-        else if (value == '#' && RExC_flags & RXf_PMf_EXTENDED_MORE) {
+        else if (   value == '#'
+                 && RExC_flags & RXf_PMf_EXTENDED_MORE
+                 && ! FEATURE_ENHANCED_XX_IS_ENABLED)
+        {
             ckWARNdep(RExC_parse, WARN_DEPRECATED,
                       "Use of unescaped '#' in [] is deprecated under /xx");
         }
@@ -10403,7 +10444,8 @@ S_regclass(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth,
             }
         } /* end of namedclass \blah */
 
-        SKIP_BRACKETED_WHITE_SPACE(skip_white, RExC_parse, RExC_end);
+        skip_bracketed_white_space(pRExC_state, skip_white, orig_parse,
+                                   &RExC_parse, RExC_end);
 
         /* If 'range' is set, 'value' is the ending of a range--check its
          * validity.  (If value isn't a single code point in the case of a
@@ -10446,7 +10488,9 @@ S_regclass(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth,
                 char* next_char_ptr = RExC_parse + 1;
 
                 /* Get the next real char after the '-' */
-                SKIP_BRACKETED_WHITE_SPACE(skip_white, next_char_ptr, RExC_end);
+                skip_bracketed_white_space(pRExC_state, skip_white,
+                                           orig_parse, &next_char_ptr,
+                                           RExC_end);
 
                 /* If the '-' is at the end of the class (just before the ']',
                  * it is a literal minus; otherwise it is a range */
@@ -12708,34 +12752,136 @@ Perl_get_re_gclass_aux_data(pTHX_ const regexp *prog, const regnode* node, bool 
 
 /* reg_skipcomment()
 
-   Absorbs an /x style # comment from the input stream,
-   returning a pointer to the first character beyond the comment, or if the
-   comment terminates the pattern without anything following it, this returns
-   one past the final character of the pattern (in other words, RExC_end) and
-   sets the REG_RUN_ON_COMMENT_SEEN flag.
+   Absorbs an /x style '#" comment from the input stream, advancing the stream
+   to the first character beyond the comment.
+
+   If 'check_for_R_bracket' is true, it is being called while parsing a
+   bracketed character class, and checks that no unescaped, unquoted ']' is in
+   the comment, warning if one is found there.
+
+   Otherwise, it handles the case of the comment terminating the pattern
+   without anything following it.  If so, it sets the parse to RExC_end (which
+   should be one byte following the final byte of the pattern) and also sets
+   the REG_RUN_ON_COMMENT_SEEN flag.
 
    Note it's the callers responsibility to ensure that we are
    actually in /x mode
 
 */
 
-PERL_STATIC_INLINE char*
-S_reg_skipcomment(RExC_state_t *pRExC_state, char* p)
+PERL_STATIC_INLINE void
+S_reg_skipcomment(pTHX_ RExC_state_t *pRExC_state,
+                        const char *p_start,
+                        char ** p,
+                        char *p_end,
+                        bool check_for_R_bracket)
 {
     PERL_ARGS_ASSERT_REG_SKIPCOMMENT;
+    assert(**p == '#');
 
-    assert(*p == '#');
+    /* Some people like to string multiple '#'s together to mark a comment */
+    char * p0 = *p;
+    do {
+        (*p)++;
+    } while (**p == '#');
 
-    while (p < RExC_end) {
-        if (*(++p) == '\n') {
-            return p+1;
+    bool warned = false;
+
+    /* With this feature, it's suspicious if a comment:
+     *  1) isn't surrounded by horizontal white space; or
+     *  2) isn't the final character on the line; or
+     *  3) isn't multiple '#'s in a row
+     **/
+    if (FEATURE_ENHANCED_XX_IS_ENABLED && *p == p0 + 1) {
+        if (   (*p < p_end && **p != '\n' && ! isBLANK(**p))
+            || (*p > p_start + 1 && ! isBLANK(*(*p - 2))))
+        {
+            vWARN(*p, "Did you mean this to be a comment?\nIf so, to"
+                      " silence this message add blanks like so: \""
+                      " # \"\n");
+            warned = true;
         }
+    }
+
+    bool quoted = false;
+    size_t backslash_count = 0;
+
+    /* Absorb the text up to and including the next \n */
+    while (*p < p_end) {
+        if (**p == '\n') {
+            (*p)++;
+            return;
+        }
+
+        /* Without this feature, all characters get absorbed.  With it, some
+         * characters need special attention, unless we've already raised a
+         * warning */
+        if ( ! FEATURE_ENHANCED_XX_IS_ENABLED
+            || warned
+            || ! strchr("\\'\"#]", **p))
+        {
+            (*p)++;
+
+            backslash_count = 0;
+            quoted = false;
+            continue;
+        }
+
+        /* Keep track of how many sequential backslashes we've found */
+        if (**p == '\\') {
+            backslash_count++;
+            quoted = false;
+            (*p)++;
+            continue;
+        }
+
+        /* Note that the current character is a quote */
+        if (**p == '"' || **p == '\'') {
+            quoted = isEVEN(backslash_count);
+            backslash_count = 0;
+            (*p)++;
+            continue;
+        }
+
+        /* If the previous character was a quote, or there were an odd number
+         * of backslashes just before this character, this character is
+         * considered to be escaped */
+        bool isnt_a_problem = isODD(backslash_count) || quoted;
+
+        /* Here it isn't a backslash nor a quote, so reset for next iteration.
+         * */
+        backslash_count = 0;
+        quoted = false;
+
+        /* Done with this character if not a problem */
+        if (isnt_a_problem) {
+            (*p)++;
+            continue;
+        }
+
+        /* When a problematic second '#' is encountered, warn.  But a final
+         * '#' on the line isn't considered problematic */
+        if (**p == '#' && (*p < p_end - 1 || *p_end == '\0')) {
+            vWARN(*p + 1, "Did you mean to have a second '#' in your comment?"
+                          "\nIf so, escape with '\\' or quote with \" or \'"
+                          " to silence this message\n");
+            warned = true;
+        }
+        else if (check_for_R_bracket && **p == ']') {
+            vWARN(*p + 1, "Did you mean to have a ']' in your comment?"
+                          "\nIf so, escape with '\\' or quote with \" or \'"
+                          " to silence this message\n");
+            warned = true;
+        }
+
+        (*p)++;
     }
 
     /* we ran off the end of the pattern without ending the comment, so we have
      * to add an \n when wrapping */
-    RExC_seen |= REG_RUN_ON_COMMENT_SEEN;
-    return p;
+    if (! check_for_R_bracket) {
+        RExC_seen |= REG_RUN_ON_COMMENT_SEEN;
+    }
 }
 
 static void
@@ -12778,7 +12924,11 @@ S_skip_to_be_ignored_text(pTHX_ RExC_state_t *pRExC_state,
                     (*p) += len;
                 }
                 else if (*(*p) == '#') {
-                    (*p) = reg_skipcomment(pRExC_state, (*p));
+                    reg_skipcomment(pRExC_state,
+                                    (const char *) RExC_start,
+                                    p,
+                                    RExC_end,
+                                    false);
                 }
                 else {
                     break;

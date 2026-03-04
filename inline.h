@@ -633,7 +633,7 @@ a simple C<*PL_stack_sp-->.
 PERL_STATIC_INLINE SV*
 Perl_rpp_pop_1_norc(pTHX)
 {
-    PERL_ARGS_ASSERT_RPP_POP_1_NORC
+    PERL_ARGS_ASSERT_RPP_POP_1_NORC;
 
     SV *sv = *PL_stack_sp--;
 
@@ -3753,7 +3753,7 @@ S_uv_mul_overflow (UV auv, UV buv, UV *const result)
  * numbers */
 #define PERL_SCAN_ALLOW_UNDERSCORES   0x01
 
-#define PERL_SCAN_DISALLOW_PREFIX     0x02 /* grok_??? reject 0x in hex etc */
+#define PERL_SCAN_DISALLOW_PREFIX     0x02 /* grok_??? reject 0x in bin/hex */
 
 /* grok_??? input: ignored; output: found overflow */
 #define PERL_SCAN_GREATER_THAN_UV_MAX 0x04
@@ -3781,6 +3781,8 @@ S_uv_mul_overflow (UV auv, UV buv, UV *const result)
 
 /* grok_??? accept a stand-alone underscore between digits only in numbers */
 #  define PERL_SCAN_ALLOW_MEDIAL_UNDERSCORES_ONLY   0x100
+
+#  define PERL_SCAN_DISCARD_INSTEAD_OF_OVERFLOW     0x200
 #endif
 
 /*
@@ -3797,16 +3799,16 @@ number is binary in C<grok_bin>, octal in C<grok_oct>, and hexadecimal in
 C<grok_hex>.
 
 On entry C<start> and C<*len_p> give the string to scan, C<*flags> gives
-conversion flags, and C<result> should be C<NULL> or a pointer to an NV.  The
-scan stops at the end of the string, or at just before the first invalid
+conversion flags, and C<approximation> should be C<NULL> or a pointer to an NV.
+The scan stops at the end of the string, or at just before the first invalid
 character.  Unless C<PERL_SCAN_SILENT_ILLDIGIT> is set in C<*flags>,
 encountering an invalid character (except NUL) will also trigger a warning.  On
 return C<*len_p> is set to the length of the scanned string, and C<*flags>
 gives output flags.
 
-If the value is S<E<lt>= C<UV_MAX>>, it is returned as a UV, the output flags are
-clear, and nothing is written to C<*result>.  If the value is S<E<gt>
-C<UV_MAX>>:
+If the value is S<E<lt>= C<UV_MAX>>, it is returned as a UV, the output flags
+are clear, and nothing is written to C<*approximation>.  If the value is
+S<E<gt> C<UV_MAX>>:
 
 =over
 
@@ -3820,8 +3822,8 @@ C<PERL_SCAN_GREATER_THAN_UV_MAX> is set in C<*flags>.
 
 =item *
 
-If C<result> is not null, an approximation of the correct value is written
-into C<*result> (which is an NV).
+If C<approximation> is not null, an approximation of the correct value is
+written into C<*approximation> (which is an NV).
 
 =back
 
@@ -3856,31 +3858,34 @@ numbers that are still valid on this platform.
  */
 
 PERL_STATIC_INLINE UV
-Perl_grok_bin(pTHX_ const char *start, STRLEN *len_p, I32 *flags, NV *result)
+Perl_grok_bin(pTHX_ const char *start, STRLEN *len_p, I32 *flags,
+              NV *approximation)
 {
     PERL_ARGS_ASSERT_GROK_BIN;
 
-    return grok_bin_oct_hex(start, len_p, flags, result,
-                            1, CC_mask_(CC_BINDIGIT_), 'b');
+    return grok_bin_hex(start, len_p, flags, approximation, 2,
+                        CC_mask_(CC_BINDIGIT_), 'b');
 }
 
 PERL_STATIC_INLINE UV
-Perl_grok_hex(pTHX_ const char *start, STRLEN *len_p, I32 *flags, NV *result)
+Perl_grok_hex(pTHX_ const char *start, STRLEN *len_p, I32 *flags,
+              NV *approximation)
 {
     PERL_ARGS_ASSERT_GROK_HEX;
 
-    return grok_bin_oct_hex(start, len_p, flags, result,
-                            4, CC_mask_(CC_XDIGIT_), 'x');
+    return grok_bin_hex(start, len_p, flags, approximation, 16,
+                        CC_mask_(CC_XDIGIT_), 'x');
 }
 
 PERL_STATIC_INLINE UV
-Perl_grok_oct(pTHX_ const char *start, STRLEN *len_p, I32 *flags, NV *result)
+Perl_grok_oct(pTHX_ const char *start, STRLEN *len_p, I32 *flags,
+              NV *approximation)
 {
     PERL_ARGS_ASSERT_GROK_OCT;
 
     *flags |= PERL_SCAN_DISALLOW_PREFIX;
-    return grok_bin_oct_hex(start, len_p, flags, result,
-                            3, CC_mask_(CC_OCTDIGIT_), '\0');
+    return grok_uint_by_base(start, len_p, flags, approximation, 8,
+                             CC_mask_(CC_OCTDIGIT_), 0);
 }
 
 /* ------------------ pp.c, regcomp.c, toke.c, universal.c ------------ */
@@ -4317,43 +4322,35 @@ Perl_cx_poploop(pTHX_ PERL_CONTEXT *cx)
         MAGIC *mg = SvMAGIC(itervar);
         assert(mg);
         assert(mg->mg_type == PERL_MAGIC_lvref);
-        if (!mg->mg_obj) {
-            // LV ref around a lexical, mg_len gives its pad index
-            SV **padslot = &PAD_SVl(mg->mg_len);
-            SV *oldsv = *padslot;
-            *padslot = origval;
-            SvREFCNT_dec(oldsv);
+        assert(mg->mg_obj);
+        // LV ref around a package lexical, mg_obj gives its GV
+        GV *gv = (GV *)mg->mg_obj;
+        SV *oldsv = NULL;
+        switch(mg->mg_private & OPpLVREF_TYPE) {
+            case OPpLVREF_SV:
+                oldsv = GvSVn(gv);
+                GvSVn(gv) = origval;
+                break;
+
+            case OPpLVREF_AV:
+                oldsv = (SV *)GvAV(gv);
+                GvAV(gv) = (AV *)origval;
+                break;
+
+            case OPpLVREF_HV:
+                oldsv = (SV *)GvHV(gv);
+                GvHV(gv) = (HV *)origval;
+                break;
+
+            case OPpLVREF_CV:
+                oldsv = (SV *)GvCV(gv);
+                GvCV_set(gv, (CV *)origval);
+                break;
+
+            default:
+                NOT_REACHED;
         }
-        else {
-            // LV ref around a package lexical, mg_obj gives its GV
-            GV *gv = (GV *)mg->mg_obj;
-            SV *oldsv = NULL;
-            switch(mg->mg_private & OPpLVREF_TYPE) {
-                case OPpLVREF_SV:
-                    oldsv = GvSVn(gv);
-                    GvSVn(gv) = origval;
-                    break;
-
-                case OPpLVREF_AV:
-                    oldsv = (SV *)GvAV(gv);
-                    GvAV(gv) = (AV *)origval;
-                    break;
-
-                case OPpLVREF_HV:
-                    oldsv = (SV *)GvHV(gv);
-                    GvHV(gv) = (HV *)origval;
-                    break;
-
-                case OPpLVREF_CV:
-                    oldsv = (SV *)GvCV(gv);
-                    GvCV_set(gv, (CV *)origval);
-                    break;
-
-                default:
-                    NOT_REACHED;
-            }
-            SvREFCNT_dec(oldsv);
-        }
+        SvREFCNT_dec(oldsv);
     }
     if (cx->cx_type & (CXp_FOR_GV|CXp_FOR_LVREF))
         SvREFCNT_dec(cx->blk_loop.itervar_u.svp);

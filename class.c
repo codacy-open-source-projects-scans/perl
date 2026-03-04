@@ -82,13 +82,17 @@ PP(pp_initfield)
                 SV **svp = PL_stack_base + POPMARK + 1;
                 STRLEN count = PL_stack_sp - svp + 1;
 
-                av = newAV_alloc_x(count);
+                if (count != 0) {
+                    av = newAV_alloc_x(count);
 
-                while(svp <= PL_stack_sp) {
-                    av_push_simple(av, newSVsv(*svp));
-                    svp++;
+                    while(svp <= PL_stack_sp) {
+                        av_push_simple(av, newSVsv(*svp));
+                        svp++;
+                    }
+                    rpp_popfree_to(PL_stack_sp - count);
                 }
-                rpp_popfree_to(PL_stack_sp - count);
+                else
+                    av = newAV();
             }
             else
                 av = newAV();
@@ -318,11 +322,13 @@ PP(pp_methstart)
              *   See also https://github.com/Perl/perl5/issues/22278
              */
             if(fieldp[fieldix]) {
-              /* TODO: There isn't a convenient SAVE macro for doing both these
-               * steps in one go. Add one. */
-              SAVESPTR(PAD_SVl(padix));
-              SV *sv = PAD_SVl(padix) = SvREFCNT_inc(fieldp[fieldix]);
-              save_freesv(sv);
+                /* TODO: There isn't a convenient SAVE macro for doing
+                 * both these steps in one go. Add one.
+                 */
+                SV ** const padentry = &(PAD_SVl(padix));
+                SAVESPTR(*padentry);
+                *padentry = SvREFCNT_inc(fieldp[fieldix]);
+                save_clearsv(padentry);
             }
         }
     }

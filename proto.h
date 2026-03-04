@@ -1651,12 +1651,12 @@ Perl_grok_atoUV(const char *pv, UV *valptr, const char **endptr)
         assert(pv); assert(valptr)
 
 PERL_CALLCONV UV
-Perl_grok_bin_oct_hex(pTHX_ const char * const start, STRLEN *len_p, I32 *flags, NV *result, const unsigned shift, const U32 lookup_bit, const char prefix)
+Perl_grok_bin_hex(pTHX_ const char * const start, STRLEN *len_p, I32 *flags, NV *approximation, uint_fast8_t base, const U32 lookup_bit, const char prefix)
         Perl_attribute_nonnull_aTHX_
         Perl_attribute_nonnull_(pTHX_1)
         Perl_attribute_nonnull_(pTHX_2)
         Perl_attribute_nonnull_(pTHX_3);
-#define PERL_ARGS_ASSERT_GROK_BIN_OCT_HEX       \
+#define PERL_ARGS_ASSERT_GROK_BIN_HEX           \
         assert(start); assert(len_p); assert(flags)
 
 PERL_CALLCONV int
@@ -1689,6 +1689,15 @@ Perl_grok_numeric_radix(pTHX_ const char **sp, const char *send)
         __attribute__warn_unused_result__;
 #define PERL_ARGS_ASSERT_GROK_NUMERIC_RADIX     \
         assert(sp); assert(*sp); assert(send); assert(*sp <= send)
+
+PERL_CALLCONV UV
+Perl_grok_uint_by_base(pTHX_ const char * const start, STRLEN *len_p, I32 *flags, NV *approximation, uint_fast8_t base, const U32 lookup_bit, uint_fast8_t offset)
+        Perl_attribute_nonnull_aTHX_
+        Perl_attribute_nonnull_(pTHX_1)
+        Perl_attribute_nonnull_(pTHX_2)
+        Perl_attribute_nonnull_(pTHX_3);
+#define PERL_ARGS_ASSERT_GROK_UINT_BY_BASE      \
+        assert(start); assert(len_p); assert(flags)
 
 PERL_CALLCONV GV *
 Perl_gv_add_by_type(pTHX_ GV *gv, svtype type)
@@ -11087,6 +11096,10 @@ S_re_croak(pTHX_ bool utf8, const char *pat, ...)
 # define PERL_ARGS_ASSERT_SET_REGEX_PV          \
         assert(pRExC_state); assert(Rx)
 
+# define PERL_ARGS_ASSERT_SKIP_BRACKETED_WHITE_SPACE \
+        assert(pRExC_state); assert(p_start); assert(p); assert(*p); \
+        assert(stop_p); assert(p_start <= *p); assert(*p <= stop_p)
+
 # define PERL_ARGS_ASSERT_SKIP_TO_BE_IGNORED_TEXT \
         assert(pRExC_state); assert(p)
 
@@ -11286,6 +11299,13 @@ S_set_regex_pv(pTHX_ RExC_state_t *pRExC_state, REGEXP *Rx)
         Perl_attribute_nonnull_(pTHX_1)
         Perl_attribute_nonnull_(pTHX_2);
 static void
+S_skip_bracketed_white_space(pTHX_ RExC_state_t *pRExC_state, U8 do_skip, const char *p_start, char **p, char *stop_p)
+        Perl_attribute_nonnull_aTHX_
+        Perl_attribute_nonnull_(pTHX_1)
+        Perl_attribute_nonnull_(pTHX_3)
+        Perl_attribute_nonnull_(pTHX_4)
+        Perl_attribute_nonnull_(pTHX_5);
+static void
 S_skip_to_be_ignored_text(pTHX_ RExC_state_t *pRExC_state, char **p, const bool force_to_xmod)
         Perl_attribute_nonnull_aTHX_
         Perl_attribute_nonnull_(pTHX_1)
@@ -11322,18 +11342,22 @@ S_dump_regex_sets_structures(pTHX_ RExC_state_t *pRExC_state, AV *stack, const I
         assert(s1); assert(s2)
 
 #   define PERL_ARGS_ASSERT_REG_SKIPCOMMENT     \
-        assert(pRExC_state); assert(p)
+        assert(pRExC_state); assert(p_start); assert(p); assert(*p); \
+        assert(p_end); assert(p_start <= *p); assert(*p <= p_end)
 
 #   if defined(PERL_CORE) || defined(PERL_EXT)
 PERL_STATIC_INLINE Size_t
 S_find_first_differing_byte_pos(const U8 *s1, const U8 *s2, const Size_t max)
         Perl_attribute_nonnull_(1)
         Perl_attribute_nonnull_(2);
-PERL_STATIC_INLINE char *
-S_reg_skipcomment(RExC_state_t *pRExC_state, char *p)
-        Perl_attribute_nonnull_(1)
-        Perl_attribute_nonnull_(2);
-#   endif
+PERL_STATIC_INLINE void
+S_reg_skipcomment(pTHX_ RExC_state_t *pRExC_state, const char *p_start, char **p, char *p_end, bool check_for_R_bracket)
+        Perl_attribute_nonnull_aTHX_
+        Perl_attribute_nonnull_(pTHX_1)
+        Perl_attribute_nonnull_(pTHX_2)
+        Perl_attribute_nonnull_(pTHX_3)
+        Perl_attribute_nonnull_(pTHX_4);
+#   endif /* defined(PERL_CORE) || defined(PERL_EXT) */
 # endif /* !defined(PERL_NO_INLINE_FUNCTIONS) */
 #endif /* defined(PERL_IN_REGCOMP_C) */
 #if defined(PERL_IN_REGCOMP_C) || defined(PERL_IN_REGCOMP_INVLIST_C)
@@ -13159,7 +13183,7 @@ Perl_get_vtbl(pTHX_ int vtbl_id)
 # define PERL_ARGS_ASSERT_GET_VTBL
 
 PERL_STATIC_INLINE UV
-Perl_grok_bin(pTHX_ const char *start, STRLEN *len_p, I32 *flags, NV *result)
+Perl_grok_bin(pTHX_ const char *start, STRLEN *len_p, I32 *flags, NV *approximation)
         Perl_attribute_nonnull_aTHX_
         Perl_attribute_nonnull_(pTHX_1)
         Perl_attribute_nonnull_(pTHX_2)
@@ -13168,7 +13192,7 @@ Perl_grok_bin(pTHX_ const char *start, STRLEN *len_p, I32 *flags, NV *result)
         assert(start); assert(len_p); assert(flags)
 
 PERL_STATIC_INLINE UV
-Perl_grok_hex(pTHX_ const char *start, STRLEN *len_p, I32 *flags, NV *result)
+Perl_grok_hex(pTHX_ const char *start, STRLEN *len_p, I32 *flags, NV *approximation)
         Perl_attribute_nonnull_aTHX_
         Perl_attribute_nonnull_(pTHX_1)
         Perl_attribute_nonnull_(pTHX_2)
@@ -13177,7 +13201,7 @@ Perl_grok_hex(pTHX_ const char *start, STRLEN *len_p, I32 *flags, NV *result)
         assert(start); assert(len_p); assert(flags)
 
 PERL_STATIC_INLINE UV
-Perl_grok_oct(pTHX_ const char *start, STRLEN *len_p, I32 *flags, NV *result)
+Perl_grok_oct(pTHX_ const char *start, STRLEN *len_p, I32 *flags, NV *approximation)
         Perl_attribute_nonnull_aTHX_
         Perl_attribute_nonnull_(pTHX_1)
         Perl_attribute_nonnull_(pTHX_2)
