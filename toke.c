@@ -4555,6 +4555,10 @@ S_intuit_more(pTHX_ char *s, char *e,
     if (PL_lex_brackets)
         return TRUE;
 
+    if (e <= s) {
+        return false;
+    }
+
     /* If begins with '->' ... */
     if (s[0] == '-' && s[1] == '>') {
 
@@ -4651,14 +4655,6 @@ S_intuit_more(pTHX_ char *s, char *e,
         }
     }
 
-    /* Find matching ']'.  khw: Actually it finds the next ']' and assumes it
-     * matches the '['.  In order to account for the possibility of the ']'
-     * being inside the scope of \Q or preceded by an even number of
-     * backslashes, this should be rewritten */
-    const char * const send = (char *) memchr(s, ']', e - s);
-    if (! send)		/* has to be an expression */
-        return TRUE;
-
     /* Below here, the heuristics start.  One idea from alh is, given 'use
      * 5.43.x', that for all digits, that if we have to resort to heuristics,
      * we instead raise an error with an explanation of how to make it
@@ -4672,8 +4668,10 @@ S_intuit_more(pTHX_ char *s, char *e,
      * it's exactly two digits long, it would would be very unlikely for
      * someone to use octal to spell a number from 1-7, so would be a
      * character class */
-    if (isDIGIT(s[0]) && send - s <= 2 && (send - s == 1 || (isDIGIT(s[1])))) {
-        return TRUE;
+    if (isDIGIT(s[0]) && (   (e - s >= 2 &&                  s[1] == ']')
+                          || (e - s >= 3 && isDIGIT(s[1]) && s[2] == ']')))
+    {
+        return true;
     }
 
     /* this is terrifying, and it mostly works.  See GH #16478.
@@ -4713,12 +4711,26 @@ S_intuit_more(pTHX_ char *s, char *e,
      * \xC2 or \xC3.  The heuristics below will count those as repeated bytes,
      * and thus lean more towards this being a character class than when not
      * in UTF-8. */
-    bool first_time = true;
-    for (; s < send; s++, first_time = false) {
+    const char * start = s;
+    while (s < e) {
 
         U8 prev_un_char = un_char;
         un_char = (U8) s[0];
         switch (s[0]) {
+
+          case ']':     /* Terminates the construct */
+
+            /* khw: This has the bug that it could be inside a \Q, so
+             * shouldn't actually terminate the construct.
+             *
+             * People on #irc have suggested things that I think boil
+             * down to: under 'use 5.43.x', output a warning like existing
+             * warnings for similar situations "Ambiguous use of [], resolved
+             * as ..."  Perhaps suppress the message if all (or maybe almost
+             * all) the evidence points to the same outcome.  This would
+             * involve two weight variables */
+            return (weight < 0);
+
           case '@':
           case '&':
           case '$':
@@ -4983,9 +4995,22 @@ S_intuit_more(pTHX_ char *s, char *e,
                 break;
             }
 
-            if (memCHRs("wds]", s[1])) {
+            if (s[1] == ']') {
+                /* The intent of the code was to do this:
+                 *      weight += 100;  // ] strongly charclass
+                 * But, due to a bug in setting up the loop terminating
+                 * condition, a ']' would never occur.  That bug was fixed so
+                 * late in the development cycle that we didn't want to
+                 * possibly break anything, so this is commented out to retain
+                 * previous (unintended) behavior */
+                seen[(U8) '\\']++;
+                s++;
+                break;
+            }
+
+            if (memCHRs("wds", s[1])) {
                 weight += 100;  /* \w \d \s => strongly charclass */
-                /* khw: \] can't happen, as any ']' is beyond our search.
+                /* khw:
                  * Should \W \D \S have the same weights as \w \d \s or should
                  * all or some be in the abcfnrtvx below?  Why not \h etc as
                  * well? \v is below, adding 40; \h should add at least that
@@ -5029,7 +5054,7 @@ S_intuit_more(pTHX_ char *s, char *e,
 
             if (isDIGIT(s[1])) {
                 weight += 40;   /* \123 => charclass */
-                while (s[1] && isDIGIT(s[1]))
+                while (s < e - 1 && isDIGIT(s[1]))
                     s++;
             }
 
@@ -5059,7 +5084,7 @@ S_intuit_more(pTHX_ char *s, char *e,
             /* If it is something like 'a-' or '0-', it is more likely to be a
              * character class. '!' is the first ASCII graphic, so '!-' would
              * be the start of a range of graphics. */
-            if (! first_time && memCHRs("aA01! ", prev_un_char))
+            if (s > start && memCHRs("aA01! ", prev_un_char))
                 weight += 30;
 
             /* If it is something like '-Z' or '-7' (for octal) or '-9' it is
@@ -5067,19 +5092,19 @@ S_intuit_more(pTHX_ char *s, char *e,
              * graphic, so '-~' would be the end of a range of graphics.
              *
              * khw: Having [-z] really doesn't imply what the comments above
-             * indicate, so this should only be tested when '!  first_time' */
+             * indicate, so this should only be tested when s > start */
             if (memCHRs("zZ79~", s[1]))
                 weight += 30;
 
             /* If it is something like -1 or -$foo, it is more likely to be
              * a subscript.  */
-            if (first_time && (isDIGIT(s[1]) || s[1] == '$')) {
+            if (s == start && (isDIGIT(s[1]) || s[1] == '$')) {
                 weight -= 5;	/* cope with negative subscript */
             }
             break;
 
           default:
-            if (  (first_time || (  ! isWORDCHAR(prev_un_char)
+            if (  (s == start || (  ! isWORDCHAR(prev_un_char)
                                   &&  prev_un_char != '$'
                                   &&  prev_un_char != '@'
                                   &&  prev_un_char != '&'))
@@ -5107,12 +5132,12 @@ S_intuit_more(pTHX_ char *s, char *e,
                  * bugs have surfaced since indicates this whole thing doesn't
                  * get applied very much */
                 char *d = s;
-                while (isALPHA(s[0]))
+                while (s < e - 1 && isALPHA(s[1]))
                     s++;
 
                 /* If those alphas spell a keyword, it's almost certainly not a
                  * character class */
-                if (keyword(d, s - d, 0))
+                if (keyword(d, s + 1 - d, 0))
                     weight -= 150;
 
                 /* khw: Barewords could also be subroutine calls, and these
@@ -5125,7 +5150,7 @@ S_intuit_more(pTHX_ char *s, char *e,
 
             /* Consecutive chars like [...12...] and [...ab...] are presumed
              * more likely to be character classes */
-            if (    ! first_time
+            if (    s > start
                 && (   NATIVE_TO_LATIN1(un_char)
                     == NATIVE_TO_LATIN1(prev_un_char) + 1))
             {
@@ -5158,16 +5183,10 @@ S_intuit_more(pTHX_ char *s, char *e,
          * repeated characters.  There may be others, like I have mentioned
          * quotes and paired delimiters  */
         seen[un_char]++;
+        s++;
     }   /* End of loop through each character of the construct */
 
-    /* khw: People on #irc have suggested things that I think boil down to:
-     * under 'use 5.43.x', output a warning like existing warnings for
-     * similar situations "Ambiguous use of [], resolved as ..."  Perhaps
-     * suppress the message if all (or maybe almost all) the evidence points
-     * to the same outcome.  This would involve two weight variables */
-    if (weight >= 0)	/* probably a character class */
-        return FALSE;
-
+    /* No terminating ']', has to be an expression */
     return TRUE;
 }
 
