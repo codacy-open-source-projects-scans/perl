@@ -218,29 +218,34 @@ our %Modules = (
     },
 
     'Compress::Raw::Bzip2' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.217.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Wed Feb 11 11:30:25 2026',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.218.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Mar 11 22:43:18 2026',
         'FILES'        => q[cpan/Compress-Raw-Bzip2],
         'EXCLUDED'     => [
             qr{^t/Test/},
             qr{^t/meta},
-            'bzip2-src/bzip2-const.patch',
-            'bzip2-src/bzip2-cpp.patch',
-            'bzip2-src/bzip2-unsigned.patch',
+            qw(
+               bzip2-src/bzip2-const.patch
+               bzip2-src/bzip2-cpp.patch
+               bzip2-src/bzip2-unsigned.patch
+               SECURITY.md
+            ),
         ],
     },
 
     'Compress::Raw::Zlib' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.221.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Fri Feb 27 10:16:27 2026',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.222.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Mar 11 21:59:54 2026',
         'FILES'    => q[cpan/Compress-Raw-Zlib],
         'EXCLUDED' => [
             qr{^examples/},
             qr{^t/Test/},
             qr{^t/meta},
-            qw( t/000prereq.t
+            qw(
+                t/000prereq.t
                 t/99pod.t
-                ),
+                SECURITY.md
+            ),
         ],
     },
 
@@ -249,9 +254,9 @@ our %Modules = (
         'SYNCINFO'     => 'jkeenan on Wed Feb 11 08:21:24 2026',
         'FILES'        => q[cpan/Config-Perl-V],
         'EXCLUDED'     => [qw(
-		examples/show-v.pl
-		SECURITY.md
-		)],
+            examples/show-v.pl
+            SECURITY.md
+        )],
     },
 
     'constant' => {
@@ -496,8 +501,8 @@ our %Modules = (
     },
 
     'ExtUtils::MakeMaker' => {
-        'DISTRIBUTION' => 'BINGOS/ExtUtils-MakeMaker-7.76.tar.gz',
-        'SYNCINFO'     => 'yorton on Sun Mar 26 16:20:23 2023',
+        'DISTRIBUTION' => 'BINGOS/ExtUtils-MakeMaker-7.78.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Thu Mar 12 07:27:54 2026',
         'FILES'        => q[cpan/ExtUtils-MakeMaker],
         'EXCLUDED'     => [
             qr{^t/lib/Test/},
@@ -671,18 +676,21 @@ our %Modules = (
     },
 
     'IO-Compress' => {
-        'DISTRIBUTION' => 'PMQS/IO-Compress-2.217.tar.gz',
-        'SYNCINFO'     => 'jkeenan on Wed Feb 11 11:42:12 2026',
+        'DISTRIBUTION' => 'PMQS/IO-Compress-2.219.tar.gz',
+        'SYNCINFO'     => 'jkeenan on Wed Mar 11 22:56:57 2026',
         'MAIN_MODULE'  => 'IO::Compress::Base',
         'FILES'        => q[cpan/IO-Compress],
         'EXCLUDED'     => [
             qr{^examples/},
             qr{^t/Test/},
             qr{^t/999meta-},
-            't/000prereq.t',
-            't/010examples-bzip2.t',
-            't/010examples-zlib.t',
-            't/cz-05examples.t',
+            qw(
+                t/000prereq.t
+                t/010examples-bzip2.t
+                t/010examples-zlib.t
+                t/cz-05examples.t
+                SECURITY.md
+            )
         ],
     },
 
