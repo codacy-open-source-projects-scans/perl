@@ -670,13 +670,13 @@ OP *
 Perl_tied_method(pTHX_ SV *methname, SV **mark, SV *const sv,
                  const MAGIC *const mg, const U32 flags, U32 argc, ...)
 {
+    PERL_ARGS_ASSERT_TIED_METHOD;
+
     I32 ret_args;
     SSize_t extend_size;
 #ifdef PERL_RC_STACK
     bool was_rc = rpp_stack_is_rc();
 #endif
-
-    PERL_ARGS_ASSERT_TIED_METHOD;
 
     /* Ensure that our flag bits do not overlap.  */
     STATIC_ASSERT_STMT((TIED_METHOD_MORTALIZE_NOT_NEEDED & G_WANT) == 0);
@@ -1544,9 +1544,9 @@ See C<L</setdefout>>.
 void
 Perl_setdefout(pTHX_ GV *gv)
 {
-    GV *oldgv = PL_defoutgv;
-
     PERL_ARGS_ASSERT_SETDEFOUT;
+
+    GV *oldgv = PL_defoutgv;
 
     SvREFCNT_inc_simple_void_NN(gv);
     PL_defoutgv = gv;
@@ -1635,10 +1635,10 @@ PP_wrapped(pp_getc, MAXARG, 0)
 static OP *
 S_doform(pTHX_ CV *cv, GV *gv, OP *retop)
 {
+    PERL_ARGS_ASSERT_DOFORM;
+
     PERL_CONTEXT *cx;
     const U8 gimme = GIMME_V;
-
-    PERL_ARGS_ASSERT_DOFORM;
 
     if (CvCLONE(cv))
         cv = MUTABLE_CV(sv_2mortal(MUTABLE_SV(cv_clone(cv))));
@@ -3303,7 +3303,8 @@ PP_wrapped(pp_stat, !(PL_op->op_flags & OPf_REF), 0)
 */
 
 static OP *
-S_ft_return_false(pTHX_ SV *ret) {
+S_ft_return_false(pTHX_ SV *ret)
+{
     OP *next = NORMAL;
 
     if (PL_op->op_flags & OPf_REF) {
@@ -3321,7 +3322,8 @@ S_ft_return_false(pTHX_ SV *ret) {
 }
 
 PERL_STATIC_INLINE OP *
-S_ft_return_true(pTHX_ SV *ret) {
+S_ft_return_true(pTHX_ SV *ret)
+{
     if (PL_op->op_flags & OPf_REF) {
         rpp_xpush_1((PL_op->op_private & OPpFT_STACKING)
                     ? (SV*)cGVOP_gv : ret);
@@ -3346,7 +3348,8 @@ S_ft_return_true(pTHX_ SV *ret) {
     } STMT_END
 
 static OP *
-S_try_amagic_ftest(pTHX_ char chr) {
+S_try_amagic_ftest(pTHX_ char chr)
+{
     SV *const arg = *PL_stack_sp;
 
     assert(chr != '?');
@@ -4094,14 +4097,14 @@ PP_wrapped(pp_readlink, 1, 0)
 static int
 S_dooneliner(pTHX_ const char *cmd, const char *filename)
 {
+    PERL_ARGS_ASSERT_DOONELINER;
+
     char * const save_filename = filename;
     char *cmdline;
     char *s;
     PerlIO *myfp;
     int anum = 1;
     Size_t size = strlen(cmd) + (strlen(filename) * 2) + 10;
-
-    PERL_ARGS_ASSERT_DOONELINER;
 
     Newx(cmdline, size, char);
     my_strlcpy(cmdline, cmd, size);
@@ -4271,7 +4274,10 @@ PP_wrapped(pp_open_dir, 2, 0)
 }
 
 static void
-S_warn_not_dirhandle(pTHX_ GV *gv) {
+S_warn_not_dirhandle(pTHX_ GV *gv)
+{
+    PERL_ARGS_ASSERT_WARN_NOT_DIRHANDLE;
+
     IO *io = GvIOn(gv);
 
     if (IoIFP(io)) {
@@ -4289,6 +4295,7 @@ S_warn_not_dirhandle(pTHX_ GV *gv) {
 
 PP_wrapped(pp_readdir, 1, 0)
 {
+
 #if !defined(Direntry_t) || !defined(HAS_READDIR)
     DIE(aTHX_ PL_no_dir_func, "readdir");
 #else
@@ -5221,6 +5228,8 @@ PP_wrapped(pp_semctl, 0, 1)
 static SV *
 S_space_join_names_mortal(pTHX_ char *const *array)
 {
+    PERL_ARGS_ASSERT_SPACE_JOIN_NAMES_MORTAL;
+
     SV *target;
 
     if (array && *array) {

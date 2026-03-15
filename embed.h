@@ -40,6 +40,7 @@
 #   undef SvRVx
 #   undef UNI_DISPLAY_TR_
 #   if !defined(PERL_EXT)
+#     undef expected_size
 #     undef GV_CACHE_ONLY
 #     undef invlist_intersection_
 #     undef invlist_subtract_
@@ -1896,6 +1897,7 @@
 #   define cv_ckproto_len_flags(a,b,c,d,e)      Perl_cv_ckproto_len_flags(aTHX_ a,b,c,d,e)
 #   define delimcpy_no_escape                   Perl_delimcpy_no_escape
 #   define do_uniprop_match                     Perl_do_uniprop_match
+#   define Perl_expected_size                   expected_size
 #   define get_and_check_backslash_N_name(a,b,c,d) Perl_get_and_check_backslash_N_name(aTHX_ a,b,c,d)
 #   define get_deprecated_property_msg          Perl_get_deprecated_property_msg
 #   define get_prop_definition(a)               Perl_get_prop_definition(aTHX_ a)
@@ -2195,22 +2197,22 @@
 #   define check_regnode_after(a,b)             Perl_check_regnode_after(aTHX_ a,b)
 #   define regnext(a)                           Perl_regnext(aTHX_ a)
 #   define regnode_after(a,b)                   Perl_regnode_after(aTHX_ a,b)
-#   if defined(DEBUGGING) && ( defined(PERL_CORE) || defined(PERL_EXT) )
-#     define debug_peep(a,b,c,d,e)              Perl_debug_peep(aTHX_ a,b,c,d,e)
-#     define debug_show_study_flags(a,b,c)      Perl_debug_show_study_flags(aTHX_ a,b,c)
-#     define debug_studydata(a,b,c,d,e,f,g)     Perl_debug_studydata(aTHX_ a,b,c,d,e,f,g)
-#     define dumpuntil(a,b,c,d,e,f,g,h)         Perl_dumpuntil(aTHX_ a,b,c,d,e,f,g,h)
-#     define re_indentf(a,...)                  Perl_re_indentf(aTHX_ a,__VA_ARGS__)
-#     define re_printf(...)                     Perl_re_printf(aTHX_ __VA_ARGS__)
+#   if defined(PERL_CORE) || defined(PERL_EXT)
 #     define regprop(a,b,c,d,e)                 Perl_regprop(aTHX_ a,b,c,d,e)
-#   endif
-#   if defined(PERL_EXT_RE_BUILD)
-#     if defined(PERL_CORE) || defined(PERL_EXT)
-#       define get_re_gclass_aux_data(a,b,c,d,e,f) Perl_get_re_gclass_aux_data(aTHX_ a,b,c,d,e,f)
+#     if defined(DEBUGGING)
+#       define debug_peep(a,b,c,d,e)            Perl_debug_peep(aTHX_ a,b,c,d,e)
+#       define debug_show_study_flags(a,b,c)    Perl_debug_show_study_flags(aTHX_ a,b,c)
+#       define debug_studydata(a,b,c,d,e,f,g)   Perl_debug_studydata(aTHX_ a,b,c,d,e,f,g)
+#       define dumpuntil(a,b,c,d,e,f,g,h)       Perl_dumpuntil(aTHX_ a,b,c,d,e,f,g,h)
+#       define re_indentf(a,...)                Perl_re_indentf(aTHX_ a,__VA_ARGS__)
+#       define re_printf(...)                   Perl_re_printf(aTHX_ __VA_ARGS__)
 #     endif
-#   elif defined(PERL_CORE) || defined(PERL_EXT)
-#     define get_regclass_aux_data(a,b,c,d,e,f) Perl_get_regclass_aux_data(aTHX_ a,b,c,d,e,f)
-#   endif
+#     if defined(PERL_EXT_RE_BUILD)
+#       define get_re_gclass_aux_data(a,b,c,d,e,f) Perl_get_re_gclass_aux_data(aTHX_ a,b,c,d,e,f)
+#     else
+#       define get_regclass_aux_data(a,b,c,d,e,f) Perl_get_regclass_aux_data(aTHX_ a,b,c,d,e,f)
+#     endif
+#   endif /* defined(PERL_CORE) || defined(PERL_EXT) */
 # endif /* defined(PERL_IN_REGEX_ENGINE) */
 # if defined(PERL_MEM_LOG)
 #   define mem_log_alloc                        Perl_mem_log_alloc

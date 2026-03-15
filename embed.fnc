@@ -180,12 +180,10 @@
 :   the same as GCC and Clang's '__attribute__nonnull__' generated for them for
 :   compilers that we know understand it.
 :
-:   Currently, it is optional to include an empty ARGS_ASSERT macro in your
-:   functions.  But a porting test enforces that a non-empty one does get
-:   included.  The call should be at the top of your function so that the
-:   sanity checks have passed before anything tries to use an argument.  When
-:   writing a new function, add the macro even if not required, and you'll
-:   never have to go back and add one later when more checks do get added.
+:   A porting test enforces that an ARGS_ASSERT macro has been included in all
+:   new functions added to this file.  Each call should be at the top of your
+:   function so that the sanity checks have passed before anything tries to use
+:   an argument.
 :
 :   (Much of the perl core was written assuming the ARGS_ASSERT macro needed to
 :   be placed after any declarations because of the C89 Standard.  That is no
@@ -1357,7 +1355,7 @@ AOdp	|SV *	|eval_pv	|NN const char *p			\
 				|I32 croak_on_error
 AOdp	|SSize_t|eval_sv	|NN SV *sv				\
 				|I32 flags
-EMTpx	|Size_t |expected_size	|UV size
+ETmpx	|Size_t |expected_size	|UV size
 ATdmp	|bool	|extended_utf8_to_uv					\
 				|SPTR const U8 * const s		\
 				|EPTRge const U8 * const e		\
@@ -1391,14 +1389,14 @@ p	|char * |find_script	|NN const char *scriptname			\
 				|bool dosearch					\
 				|NULLOK const char * const * const search_ext	\
 				|I32 flags
-Adip	|I32	|foldEQ 	|NN const char *a			\
-				|NN const char *b			\
+Adip	|I32	|foldEQ 	|NN const char *s1			\
+				|NN const char *s2			\
 				|I32 len
-Cip	|I32	|foldEQ_latin1	|NN const char *a			\
-				|NN const char *b			\
+Cip	|I32	|foldEQ_latin1	|NN const char *s1			\
+				|NN const char *s2			\
 				|I32 len
-Adip	|I32	|foldEQ_locale	|NN const char *a			\
-				|NN const char *b			\
+Adip	|I32	|foldEQ_locale	|NN const char *s1			\
+				|NN const char *s2			\
 				|I32 len
 Admp	|I32	|foldEQ_utf8	|NN const char *s1			\
 				|NULLOK char **pe1			\
@@ -1608,7 +1606,7 @@ Adp	|GV *	|gv_fetchpv	|NN const char *nambeg			\
 				|const svtype sv_type
 
 Adp	|GV *	|gv_fetchpvn_flags					\
-				|NN const char *name			\
+				|NN const char *nambeg			\
 				|STRLEN len				\
 				|I32 flags				\
 				|const svtype sv_type
@@ -2926,28 +2924,28 @@ EXp	|SV *	|reg_named_buff |NN REGEXP * const rx			\
 				|NULLOK SV * const value		\
 				|const U32 flags
 Cp	|SV *	|reg_named_buff_all					\
-				|NN REGEXP * const rx			\
+				|NN REGEXP * const r			\
 				|const U32 flags
 Cp	|bool	|reg_named_buff_exists					\
-				|NN REGEXP * const rx			\
+				|NN REGEXP * const r			\
 				|NN SV * const key			\
 				|const U32 flags
 Cp	|SV *	|reg_named_buff_fetch					\
-				|NN REGEXP * const rx			\
+				|NN REGEXP * const r			\
 				|NN SV * const namesv			\
 				|const U32 flags
 Cp	|SV *	|reg_named_buff_firstkey				\
-				|NN REGEXP * const rx			\
+				|NN REGEXP * const r			\
 				|const U32 flags
 EXp	|SV *	|reg_named_buff_iter					\
 				|NN REGEXP * const rx			\
 				|NULLOK const SV * const lastkey	\
 				|const U32 flags
 Cp	|SV *	|reg_named_buff_nextkey 				\
-				|NN REGEXP * const rx			\
+				|NN REGEXP * const r			\
 				|const U32 flags
 Cp	|SV *	|reg_named_buff_scalar					\
-				|NN REGEXP * const rx			\
+				|NN REGEXP * const r			\
 				|const U32 flags
 : FIXME - is anything in re using this now?
 EXp	|void	|reg_numbered_buff_fetch				\
@@ -2963,7 +2961,7 @@ EXp	|void	|reg_numbered_buff_fetch_flags				\
 				|U32 flags
 : FIXME - is anything in re using this now?
 EXp	|I32	|reg_numbered_buff_length				\
-				|NN REGEXP * const rx			\
+				|NN REGEXP * const r			\
 				|NN const SV * const sv 		\
 				|const I32 paren
 : FIXME - is anything in re using this now?
@@ -3207,7 +3205,7 @@ p	|OP *	|sawparens	|NULLOK OP *o
 : Used in perly.y
 p	|OP *	|scalar 	|NULLOK OP *o
 : Used in pp_ctl.c
-p	|OP *	|scalarvoid	|NN OP *o
+p	|OP *	|scalarvoid	|NN OP *arg
 Adp	|NV	|scan_bin	|NN const char *start			\
 				|STRLEN len				\
 				|NN STRLEN *retlen
@@ -5976,8 +5974,8 @@ ERST	|U8 *	|find_span_end_mask					\
 				|const U8 span_byte			\
 				|const U8 mask
 Ei	|I32	|foldEQ_latin1_s2_folded				\
-				|NN const char *a			\
-				|NN const char *b			\
+				|NN const char *s1			\
+				|NN const char *s2			\
 				|I32 len
 ERS	|bool	|isFOO_lc	|const U8 classnum			\
 				|const U8 character
@@ -6073,6 +6071,11 @@ CRip	|bool	|check_regnode_after					\
 CRip	|regnode *|regnext	|NULLOK const regnode *p
 CRip	|regnode *|regnode_after|NULLOK const regnode *p		\
 				|bool varies
+Ep	|void	|regprop	|NULLOK const regexp *prog		\
+				|NN SV *sv				\
+				|NN const regnode *o			\
+				|NULLOK const regmatch_info *reginfo	\
+				|NULLOK const RExC_state_t *pRExC_state
 # if defined(DEBUGGING)
 Ep	|void	|debug_peep	|NN const char *str			\
 				|NN const RExC_state_t *pRExC_state	\
@@ -6099,11 +6102,6 @@ Ep	|const regnode *|dumpuntil					\
 				|NN SV *sv				\
 				|I32 indent				\
 				|U32 depth
-Ep	|void	|regprop	|NULLOK const regexp *prog		\
-				|NN SV *sv				\
-				|NN const regnode *o			\
-				|NULLOK const regmatch_info *reginfo	\
-				|NULLOK const RExC_state_t *pRExC_state
 EFp	|int	|re_indentf	|NN const char *fmt			\
 				|U32 depth				\
 				|...
@@ -6205,7 +6203,7 @@ S	|STRLEN |sv_pos_u2b_cached					\
 ST	|STRLEN |sv_pos_u2b_forwards					\
 				|SPTR const U8 * const start		\
 				|EPTRgt const U8 * const send		\
-				|NN STRLEN * const uoffset		\
+				|NN STRLEN * const uoffset_p		\
 				|NN bool * const at_end 		\
 				|NN bool *canonical_position
 ST	|STRLEN |sv_pos_u2b_midway					\
@@ -6661,7 +6659,7 @@ Adp	|void	|re_dup_guts	|NN const REGEXP *sstr			\
 				|NN REGEXP *dstr			\
 				|NN CLONE_PARAMS *param
 Cp	|void * |regdupe_internal					\
-				|NN REGEXP * const r			\
+				|NN REGEXP * const rx			\
 				|NN CLONE_PARAMS *param
 Cp	|void	|rvpv_dup	|NN SV * const dsv			\
 				|NN const SV * const ssv		\

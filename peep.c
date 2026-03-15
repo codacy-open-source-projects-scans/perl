@@ -1070,9 +1070,9 @@ S_warn_implicit_snail_cvsig(pTHX_ OP *o)
 static void
 S_optimize_op(pTHX_ OP* o)
 {
-    OP *top_op = o;
-
     PERL_ARGS_ASSERT_OPTIMIZE_OP;
+
+    OP *top_op = o;
 
     while (1) {
         OP * next_kid = NULL;
@@ -1214,10 +1214,11 @@ For now it's static, but it may be exposed to the API in the future.
 */
 
 static OP*
-S_traverse_op_tree(pTHX_ OP *top, OP *o) {
-    OP *sib;
-
+S_traverse_op_tree(pTHX_ OP *top, OP *o)
+{
     PERL_ARGS_ASSERT_TRAVERSE_OP_TREE;
+
+    OP *sib;
 
     if ((o->op_flags & OPf_KIDS) && cUNOPo->op_first) {
         return cUNOPo->op_first;
@@ -1242,8 +1243,9 @@ S_traverse_op_tree(pTHX_ OP *top, OP *o) {
 static void
 S_finalize_op(pTHX_ OP* o)
 {
-    OP * const top = o;
     PERL_ARGS_ASSERT_FINALIZE_OP;
+
+    OP * const top = o;
 
     do {
         assert(o->op_type != OP_FREED);
@@ -2706,6 +2708,8 @@ S_check_for_bool_cxt(OP*o, bool safe_and, U8 bool_flag, U8 maybe_flag)
 void
 Perl_rpeep(pTHX_ OP *o)
 {
+    PERL_ARGS_ASSERT_RPEEP;
+
     OP* oldop = NULL;
     OP* oldoldop = NULL;
     OP** defer_queue[MAX_DEFERRED] = { NULL }; /* small queue of deferred branches */
@@ -4425,6 +4429,8 @@ Perl_rpeep(pTHX_ OP *o)
 void
 Perl_peep(pTHX_ OP *o)
 {
+    PERL_ARGS_ASSERT_PEEP;
+
     CALL_RPEEP(o);
 }
 

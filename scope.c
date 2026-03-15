@@ -30,10 +30,10 @@
 SV**
 Perl_stack_grow(pTHX_ SV **sp, SV **p, SSize_t n)
 {
+    PERL_ARGS_ASSERT_STACK_GROW;
+
     SSize_t extra;
     SSize_t current = (p - PL_stack_base);
-
-    PERL_ARGS_ASSERT_STACK_GROW;
 
     if (UNLIKELY(n < 0))
         croak(
@@ -73,6 +73,8 @@ Perl_stack_grow(pTHX_ SV **sp, SV **p, SSize_t n)
 PERL_SI *
 Perl_new_stackinfo(pTHX_ I32 stitems, I32 cxitems)
 {
+    PERL_ARGS_ASSERT_NEW_STACKINFO;
+
     return new_stackinfo_flags(stitems, cxitems, 0);
 }
 
@@ -83,6 +85,8 @@ Perl_new_stackinfo(pTHX_ I32 stitems, I32 cxitems)
 PERL_SI *
 Perl_new_stackinfo_flags(pTHX_ I32 stitems, I32 cxitems, UV flags)
 {
+    PERL_ARGS_ASSERT_NEW_STACKINFO_FLAGS;
+
     PERL_SI *si;
     Newx(si, 1, PERL_SI);
     si->si_stack = newAV();
@@ -110,6 +114,8 @@ Perl_new_stackinfo_flags(pTHX_ I32 stitems, I32 cxitems, UV flags)
 I32
 Perl_cxinc(pTHX)
 {
+    PERL_ARGS_ASSERT_CXINC;
+
     const IV old_max = cxstack_max;
     const IV new_max = GROW(cxstack_max);
     Renew(cxstack, new_max + 1, PERL_CONTEXT);
@@ -132,6 +138,8 @@ Implements L<perlapi/C<ENTER>>
 void
 Perl_push_scope(pTHX)
 {
+    PERL_ARGS_ASSERT_PUSH_SCOPE;
+
     if (UNLIKELY(PL_scopestack_ix == PL_scopestack_max)) {
         const IV new_max = GROW(PL_scopestack_max);
         Renew(PL_scopestack, new_max, I32);
@@ -159,6 +167,8 @@ Implements L<perlapi/C<LEAVE>>
 void
 Perl_pop_scope(pTHX)
 {
+    PERL_ARGS_ASSERT_POP_SCOPE;
+
     const I32 oldsave = PL_scopestack[--PL_scopestack_ix];
     LEAVE_SCOPE(oldsave);
 }
@@ -166,6 +176,8 @@ Perl_pop_scope(pTHX)
 Stack_off_t *
 Perl_markstack_grow(pTHX)
 {
+    PERL_ARGS_ASSERT_MARKSTACK_GROW;
+
     const I32 oldmax = PL_markstack_max - PL_markstack;
     const I32 newmax = GROW(oldmax);
 
@@ -181,6 +193,8 @@ Perl_markstack_grow(pTHX)
 void
 Perl_savestack_grow(pTHX)
 {
+    PERL_ARGS_ASSERT_SAVESTACK_GROW;
+
     const I32 by = PL_savestack_max - PL_savestack_ix;
     Perl_savestack_grow_cnt(aTHX_ by);
 }
@@ -188,6 +202,8 @@ Perl_savestack_grow(pTHX)
 void
 Perl_savestack_grow_cnt(pTHX_ I32 need)
 {
+    PERL_ARGS_ASSERT_SAVESTACK_GROW_CNT;
+
     /* NOTE: PL_savestack_max and PL_savestack_ix are I32.
      *
      * This makes sense when you consider that having I32_MAX items on
@@ -244,6 +260,8 @@ Perl_savestack_grow_cnt(pTHX_ I32 need)
 SSize_t
 Perl_tmps_grow_p(pTHX_ SSize_t ix)
 {
+    PERL_ARGS_ASSERT_TMPS_GROW_P;
+
     SSize_t extend_to = ix;
 #ifndef STRESS_REALLOC
     SSize_t grow_size = PL_tmps_max < 512 ? 128 : PL_tmps_max / 2;
@@ -262,6 +280,8 @@ Perl_tmps_grow_p(pTHX_ SSize_t ix)
 void
 Perl_free_tmps(pTHX)
 {
+    PERL_ARGS_ASSERT_FREE_TMPS;
+
     /* XXX should tmps_floor live in cxstack? */
     const SSize_t myfloor = PL_tmps_floor;
     while (PL_tmps_ix > myfloor) {      /* clean up after last statement */
@@ -300,10 +320,10 @@ S<C<'local $x = $y'>>), and that will handle the magic.
 static SV *
 S_save_scalar_at(pTHX_ SV **sptr, const U32 flags)
 {
+    PERL_ARGS_ASSERT_SAVE_SCALAR_AT;
+
     SV * osv;
     SV *sv;
-
-    PERL_ARGS_ASSERT_SAVE_SCALAR_AT;
 
     osv = *sptr;
     if (flags & SAVEf_KEEPOLDELEM)
@@ -320,6 +340,8 @@ S_save_scalar_at(pTHX_ SV **sptr, const U32 flags)
 void
 Perl_save_pushptrptr(pTHX_ void *const ptr1, void *const ptr2, const int type)
 {
+    PERL_ARGS_ASSERT_SAVE_PUSHPTRPTR;
+
     dSS_ADD;
     SS_ADD_PTR(ptr1);
     SS_ADD_PTR(ptr2);
@@ -330,9 +352,9 @@ Perl_save_pushptrptr(pTHX_ void *const ptr1, void *const ptr2, const int type)
 SV *
 Perl_save_scalar(pTHX_ GV *gv)
 {
-    SV ** const sptr = &GvSVn(gv);
-
     PERL_ARGS_ASSERT_SAVE_SCALAR;
+
+    SV ** const sptr = &GvSVn(gv);
 
     if (UNLIKELY(SvGMAGICAL(*sptr))) {
         PL_localizing = 1;
@@ -377,7 +399,8 @@ or be prematurely freed.
 =cut
  */
 void
-Perl_save_rcpv(pTHX_ char **prcpv) {
+Perl_save_rcpv(pTHX_ char **prcpv)
+{
     PERL_ARGS_ASSERT_SAVE_RCPV;
     save_pushptrptr(prcpv, rcpv_copy(*prcpv), SAVEt_RCPV);
 }
@@ -393,7 +416,8 @@ on the argument when the current pseudo block is finished.
 =cut
  */
 void
-Perl_save_freercpv(pTHX_ char *rcpv) {
+Perl_save_freercpv(pTHX_ char *rcpv)
+{
     PERL_ARGS_ASSERT_SAVE_FREERCPV;
     save_pushptr(rcpv, SAVEt_FREERCPV);
 }
@@ -456,9 +480,9 @@ Set the SvFLAGS specified by mask to the values in val
 void
 Perl_save_set_svflags(pTHX_ SV* sv, U32 mask, U32 val)
 {
-    dSS_ADD;
-
     PERL_ARGS_ASSERT_SAVE_SET_SVFLAGS;
+
+    dSS_ADD;
 
     SS_ADD_PTR(sv);
     SS_ADD_INT(mask);
@@ -529,10 +553,10 @@ Perl_save_gp(pTHX_ GV *gv, I32 empty)
 AV *
 Perl_save_ary(pTHX_ GV *gv)
 {
+    PERL_ARGS_ASSERT_SAVE_ARY;
+
     AV * const oav = GvAVn(gv);
     AV *av;
-
-    PERL_ARGS_ASSERT_SAVE_ARY;
 
     if (UNLIKELY(!AvREAL(oav) && AvREIFY(oav)))
         av_reify(oav);
@@ -548,9 +572,9 @@ Perl_save_ary(pTHX_ GV *gv)
 HV *
 Perl_save_hash(pTHX_ GV *gv)
 {
-    HV *ohv, *hv;
-
     PERL_ARGS_ASSERT_SAVE_HASH;
+
+    HV *ohv, *hv;
 
     save_pushptrptr(
         SvREFCNT_inc_simple_NN(gv), (ohv = GvHVn(gv)), SAVEt_HV
@@ -566,9 +590,9 @@ Perl_save_hash(pTHX_ GV *gv)
 void
 Perl_save_item(pTHX_ SV *item)
 {
-    SV * const sv = newSVsv(item);
-
     PERL_ARGS_ASSERT_SAVE_ITEM;
+
+    SV * const sv = newSVsv(item);
 
     save_pushptrptr(item, /* remember the pointer */
                     sv,   /* remember the value */
@@ -578,9 +602,9 @@ Perl_save_item(pTHX_ SV *item)
 void
 Perl_save_bool(pTHX_ bool *boolp)
 {
-    dSS_ADD;
-
     PERL_ARGS_ASSERT_SAVE_BOOL;
+
+    dSS_ADD;
 
     SS_ADD_PTR(boolp);
     SS_ADD_UV(SAVEt_BOOL | (*boolp << 8));
@@ -590,6 +614,8 @@ Perl_save_bool(pTHX_ bool *boolp)
 void
 Perl_save_pushi32ptr(pTHX_ const I32 i, void *const ptr, const int type)
 {
+    PERL_ARGS_ASSERT_SAVE_PUSHI32PTR;
+
     dSS_ADD;
 
     SS_ADD_INT(i);
@@ -601,12 +627,12 @@ Perl_save_pushi32ptr(pTHX_ const I32 i, void *const ptr, const int type)
 void
 Perl_save_int(pTHX_ int *intp)
 {
+    PERL_ARGS_ASSERT_SAVE_INT;
+
     const int i = *intp;
     UV type = ((UV)((UV)i << SAVE_TIGHT_SHIFT) | SAVEt_INT_SMALL);
     int size = 2;
     dSS_ADD;
-
-    PERL_ARGS_ASSERT_SAVE_INT;
 
     if (UNLIKELY((int)(type >> SAVE_TIGHT_SHIFT) != i)) {
         SS_ADD_INT(i);
@@ -621,9 +647,9 @@ Perl_save_int(pTHX_ int *intp)
 void
 Perl_save_I8(pTHX_ I8 *bytep)
 {
-    dSS_ADD;
-
     PERL_ARGS_ASSERT_SAVE_I8;
+
+    dSS_ADD;
 
     SS_ADD_PTR(bytep);
     SS_ADD_UV(SAVEt_I8 | ((UV)*bytep << 8));
@@ -633,9 +659,9 @@ Perl_save_I8(pTHX_ I8 *bytep)
 void
 Perl_save_I16(pTHX_ I16 *intp)
 {
-    dSS_ADD;
-
     PERL_ARGS_ASSERT_SAVE_I16;
+
+    dSS_ADD;
 
     SS_ADD_PTR(intp);
     SS_ADD_UV(SAVEt_I16 | ((UV)*intp << 8));
@@ -645,12 +671,12 @@ Perl_save_I16(pTHX_ I16 *intp)
 void
 Perl_save_I32(pTHX_ I32 *intp)
 {
+    PERL_ARGS_ASSERT_SAVE_I32;
+
     const I32 i = *intp;
     UV type = ((I32)((U32)i << SAVE_TIGHT_SHIFT) | SAVEt_I32_SMALL);
     int size = 2;
     dSS_ADD;
-
-    PERL_ARGS_ASSERT_SAVE_I32;
 
     if (UNLIKELY((I32)(type >> SAVE_TIGHT_SHIFT) != i)) {
         SS_ADD_INT(i);
@@ -665,12 +691,12 @@ Perl_save_I32(pTHX_ I32 *intp)
 void
 Perl_save_strlen(pTHX_ STRLEN *ptr)
 {
+    PERL_ARGS_ASSERT_SAVE_STRLEN;
+
     const IV i = *ptr;
     UV type = ((I32)((U32)i << SAVE_TIGHT_SHIFT) | SAVEt_STRLEN_SMALL);
     int size = 2;
     dSS_ADD;
-
-    PERL_ARGS_ASSERT_SAVE_STRLEN;
 
     if (UNLIKELY((I32)(type >> SAVE_TIGHT_SHIFT) != i)) {
         SS_ADD_IV(*ptr);
@@ -742,6 +768,8 @@ Implements C<SAVEPADSVANDMORTALIZE>.
 void
 Perl_save_padsv_and_mortalize(pTHX_ PADOFFSET off)
 {
+    PERL_ARGS_ASSERT_SAVE_PADSV_AND_MORTALIZE;
+
     dSS_ADD;
 
     ASSERT_CURPAD_ACTIVE("save_padsv");
@@ -785,6 +813,8 @@ C<SAVEFREESV>.
 void
 Perl_save_pushptr(pTHX_ void *const ptr, const int type)
 {
+    PERL_ARGS_ASSERT_SAVE_PUSHPTR;
+
     dSS_ADD;
     SS_ADD_PTR(ptr);
     SS_ADD_UV(type);
@@ -794,10 +824,10 @@ Perl_save_pushptr(pTHX_ void *const ptr, const int type)
 void
 Perl_save_clearsv(pTHX_ SV **svp)
 {
+    PERL_ARGS_ASSERT_SAVE_CLEARSV;
+
     const UV offset = svp - PL_curpad;
     const UV offset_shifted = offset << SAVE_TIGHT_SHIFT;
-
-    PERL_ARGS_ASSERT_SAVE_CLEARSV;
 
     ASSERT_CURPAD_ACTIVE("save_clearsv");
     assert(*svp);
@@ -863,11 +893,11 @@ Implements C<SAVEHDELETE>.
 void
 Perl_save_hdelete(pTHX_ HV *hv, SV *keysv)
 {
+    PERL_ARGS_ASSERT_SAVE_HDELETE;
+
     STRLEN len;
     I32 klen;
     const char *key;
-
-    PERL_ARGS_ASSERT_SAVE_HDELETE;
 
     key  = SvPV_const(keysv, len);
     klen = SvUTF8(keysv) ? -(I32)len : (I32)len;
@@ -887,9 +917,9 @@ Implements C<SAVEADELETE>.
 void
 Perl_save_adelete(pTHX_ AV *av, SSize_t key)
 {
-    dSS_ADD;
-
     PERL_ARGS_ASSERT_SAVE_ADELETE;
+
+    dSS_ADD;
 
     SvREFCNT_inc_void(av);
     SS_ADD_UV(key);
@@ -901,8 +931,9 @@ Perl_save_adelete(pTHX_ AV *av, SSize_t key)
 void
 Perl_save_destructor(pTHX_ DESTRUCTORFUNC_NOCONTEXT_t f, void* p)
 {
-    dSS_ADD;
     PERL_ARGS_ASSERT_SAVE_DESTRUCTOR;
+
+    dSS_ADD;
 
     SS_ADD_DPTR(f);
     SS_ADD_PTR(p);
@@ -913,6 +944,8 @@ Perl_save_destructor(pTHX_ DESTRUCTORFUNC_NOCONTEXT_t f, void* p)
 void
 Perl_save_destructor_x(pTHX_ DESTRUCTORFUNC_t f, void* p)
 {
+    PERL_ARGS_ASSERT_SAVE_DESTRUCTOR_X;
+
     dSS_ADD;
 
     SS_ADD_DXPTR(f);
@@ -933,6 +966,8 @@ Implements C<SAVEHINTS>.
 void
 Perl_save_hints(pTHX)
 {
+    PERL_ARGS_ASSERT_SAVE_HINTS;
+
     COPHH *save_cophh = cophh_copy(CopHINTHASH_get(&PL_compiling));
     if (PL_hints & HINT_LOCALIZE_HH) {
         HV *oldhh = GvHV(PL_hintgv);
@@ -956,6 +991,8 @@ static void
 S_save_pushptri32ptr(pTHX_ void *const ptr1, const I32 i, void *const ptr2,
                         const int type)
 {
+    PERL_ARGS_ASSERT_SAVE_PUSHPTRI32PTR;
+
     dSS_ADD;
     SS_ADD_PTR(ptr1);
     SS_ADD_INT(i);
@@ -992,10 +1029,10 @@ void
 Perl_save_aelem_flags(pTHX_ AV *av, SSize_t idx, SV **sptr,
                             const U32 flags)
 {
+    PERL_ARGS_ASSERT_SAVE_AELEM_FLAGS;
+
     dSS_ADD;
     SV *sv;
-
-    PERL_ARGS_ASSERT_SAVE_AELEM_FLAGS;
 
     SvGETMAGIC(*sptr);
     SS_ADD_PTR(SvREFCNT_inc_simple(av));
@@ -1044,9 +1081,9 @@ is set in in C<flags>.
 void
 Perl_save_helem_flags(pTHX_ HV *hv, SV *key, SV **sptr, const U32 flags)
 {
-    SV *sv;
-
     PERL_ARGS_ASSERT_SAVE_HELEM_FLAGS;
+
+    SV *sv;
 
     SvGETMAGIC(*sptr);
     {
@@ -1083,6 +1120,8 @@ Perl_save_svref(pTHX_ SV **sptr)
 void
 Perl_savetmps(pTHX)
 {
+    PERL_ARGS_ASSERT_SAVETMPS;
+
     dSS_ADD;
     SS_ADD_IV(PL_tmps_floor);
     PL_tmps_floor = PL_tmps_ix;
@@ -1103,6 +1142,8 @@ function.
 SSize_t
 Perl_save_alloc(pTHX_ SSize_t size, I32 pad)
 {
+    PERL_ARGS_ASSERT_SAVE_ALLOC;
+
     const SSize_t start = pad + ((char*)&PL_savestack[PL_savestack_ix]
                           - (char*)PL_savestack);
     const UV elems = 1 + ((size + pad - 1) / sizeof(*PL_savestack));
@@ -1134,6 +1175,8 @@ Implements C<LEAVE_SCOPE> which you should use instead.
 void
 Perl_leave_scope(pTHX_ I32 base)
 {
+    PERL_ARGS_ASSERT_LEAVE_SCOPE;
+
     /* Localise the effects of the TAINT_NOT inside the loop.  */
     bool was = TAINT_get;
 
@@ -1991,7 +2034,8 @@ should not be called directly and has no user serviceable parts.
 */
 
 void
-Perl_mortal_destructor_sv(pTHX_ SV *coderef, SV *args) {
+Perl_mortal_destructor_sv(pTHX_ SV *coderef, SV *args)
+{
     PERL_ARGS_ASSERT_MORTAL_DESTRUCTOR_SV;
     assert(
         (SvROK(coderef) && SvTYPE(SvRV(coderef)) == SVt_PVCV) /* perl coderef */
@@ -2005,7 +2049,8 @@ Perl_mortal_destructor_sv(pTHX_ SV *coderef, SV *args) {
 
 
 void
-Perl_mortal_svfunc_x(pTHX_ SVFUNC_t f, SV *sv) {
+Perl_mortal_svfunc_x(pTHX_ SVFUNC_t f, SV *sv)
+{
     PERL_ARGS_ASSERT_MORTAL_SVFUNC_X;
     SV *sviv = newSViv(PTR2IV(f));
     mortal_destructor_sv(sviv,sv);
@@ -2013,7 +2058,8 @@ Perl_mortal_svfunc_x(pTHX_ SVFUNC_t f, SV *sv) {
 
 
 int
-Perl_magic_freedestruct(pTHX_ SV* sv, MAGIC* mg) {
+Perl_magic_freedestruct(pTHX_ SV* sv, MAGIC* mg)
+{
     PERL_ARGS_ASSERT_MAGIC_FREEDESTRUCT;
     dSP;
     union {

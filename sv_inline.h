@@ -67,6 +67,8 @@
 PERL_STATIC_INLINE SV*
 Perl_new_sv(pTHX_ const char *file, int line, const char *func)
 {
+    PERL_ARGS_ASSERT_NEW_SV;
+
     SV* sv;
 #if !defined(DEBUG_LEAKING_SCALARS) || \
      (!defined(DEBUGGING) && !defined(PERL_MEM_LOG))
@@ -369,6 +371,8 @@ is set to 1.
 PERL_STATIC_INLINE SV *
 Perl_newSV_type(pTHX_ const svtype type)
 {
+    PERL_ARGS_ASSERT_NEWSV_TYPE;
+
     SV *sv;
     void*      new_body;
     const struct body_details *type_details;
@@ -535,6 +539,8 @@ at some point in the future.)
 PERL_STATIC_INLINE SV *
 Perl_newSV_type_mortal(pTHX_ const svtype type)
 {
+    PERL_ARGS_ASSERT_NEWSV_TYPE_MORTAL;
+
     SV *sv = newSV_type(type);
     SSize_t ix = ++PL_tmps_ix;
     if (UNLIKELY(ix >= PL_tmps_max))
@@ -662,6 +668,8 @@ Perl_SvTRUE_common(pTHX_ SV * sv, const bool sv_2bool_is_fallback)
 PERL_STATIC_INLINE SV *
 Perl_SvREFCNT_inc(SV *sv)
 {
+    PERL_ARGS_ASSERT_SVREFCNT_INC;
+
     if (LIKELY(sv != NULL))
         SvREFCNT(sv)++;
     return sv;
@@ -679,6 +687,8 @@ Perl_SvREFCNT_inc_NN(SV *sv)
 PERL_STATIC_INLINE void
 Perl_SvREFCNT_inc_void(SV *sv)
 {
+    PERL_ARGS_ASSERT_SVREFCNT_INC_VOID;
+
     if (LIKELY(sv != NULL))
         SvREFCNT(sv)++;
 }
@@ -686,6 +696,8 @@ Perl_SvREFCNT_inc_void(SV *sv)
 PERL_STATIC_INLINE void
 Perl_SvREFCNT_dec(pTHX_ SV *sv)
 {
+    PERL_ARGS_ASSERT_SVREFCNT_DEC;
+
     if (LIKELY(sv != NULL)) {
         U32 rc = SvREFCNT(sv);
         if (LIKELY(rc > 1))
@@ -707,9 +719,9 @@ Perl_SvREFCNT_dec_ret_NULL(pTHX_ SV *sv)
 PERL_STATIC_INLINE void
 Perl_SvREFCNT_dec_NN(pTHX_ SV *sv)
 {
-    U32 rc = SvREFCNT(sv);
-
     PERL_ARGS_ASSERT_SVREFCNT_DEC_NN;
+
+    U32 rc = SvREFCNT(sv);
 
     if (LIKELY(rc > 1))
         SvREFCNT(sv) = rc - 1;
@@ -813,7 +825,8 @@ guaranteed to evaluate C<sv> only once.
 */
 
 PERL_STATIC_INLINE IV
-Perl_SvIV(pTHX_ SV *sv) {
+Perl_SvIV(pTHX_ SV *sv)
+{
     PERL_ARGS_ASSERT_SVIV;
 
     if (SvIOK_nog(sv))
@@ -822,7 +835,8 @@ Perl_SvIV(pTHX_ SV *sv) {
 }
 
 PERL_STATIC_INLINE UV
-Perl_SvUV(pTHX_ SV *sv) {
+Perl_SvUV(pTHX_ SV *sv)
+{
     PERL_ARGS_ASSERT_SVUV;
 
     if (SvUOK_nog(sv))
@@ -831,7 +845,8 @@ Perl_SvUV(pTHX_ SV *sv) {
 }
 
 PERL_STATIC_INLINE NV
-Perl_SvNV(pTHX_ SV *sv) {
+Perl_SvNV(pTHX_ SV *sv)
+{
     PERL_ARGS_ASSERT_SVNV;
 
     if (SvNOK_nog(sv))
@@ -840,7 +855,8 @@ Perl_SvNV(pTHX_ SV *sv) {
 }
 
 PERL_STATIC_INLINE IV
-Perl_SvIV_nomg(pTHX_ SV *sv) {
+Perl_SvIV_nomg(pTHX_ SV *sv)
+{
     PERL_ARGS_ASSERT_SVIV_NOMG;
 
     if (SvIOK(sv))
@@ -849,7 +865,8 @@ Perl_SvIV_nomg(pTHX_ SV *sv) {
 }
 
 PERL_STATIC_INLINE UV
-Perl_SvUV_nomg(pTHX_ SV *sv) {
+Perl_SvUV_nomg(pTHX_ SV *sv)
+{
     PERL_ARGS_ASSERT_SVUV_NOMG;
 
     if (SvUOK(sv))
@@ -858,7 +875,8 @@ Perl_SvUV_nomg(pTHX_ SV *sv) {
 }
 
 PERL_STATIC_INLINE NV
-Perl_SvNV_nomg(pTHX_ SV *sv) {
+Perl_SvNV_nomg(pTHX_ SV *sv)
+{
     PERL_ARGS_ASSERT_SVNV_NOMG;
 
     if (SvNOK(sv))
@@ -883,10 +901,11 @@ S_sv_or_pv_pos_u2b(pTHX_ SV *sv, const char *pv, STRLEN pos, STRLEN *lenp)
 PERL_STATIC_INLINE char *
 Perl_sv_pvutf8n_force_wrapper(pTHX_ SV * const sv, STRLEN * const lp, const U32 dummy)
 {
+    PERL_ARGS_ASSERT_SV_PVUTF8N_FORCE_WRAPPER;
+
     /* This is just so can be passed to Perl_SvPV_helper() as a function
      * pointer with the same signature as all the other such pointers, and
      * having hence an unused parameter */
-    PERL_ARGS_ASSERT_SV_PVUTF8N_FORCE_WRAPPER;
     PERL_UNUSED_ARG(dummy);
 
     return sv_pvutf8n_force(sv, lp);
@@ -895,10 +914,11 @@ Perl_sv_pvutf8n_force_wrapper(pTHX_ SV * const sv, STRLEN * const lp, const U32 
 PERL_STATIC_INLINE char *
 Perl_sv_pvbyten_force_wrapper(pTHX_ SV * const sv, STRLEN * const lp, const U32 dummy)
 {
+    PERL_ARGS_ASSERT_SV_PVBYTEN_FORCE_WRAPPER;
+
     /* This is just so can be passed to Perl_SvPV_helper() as a function
      * pointer with the same signature as all the other such pointers, and
      * having hence an unused parameter */
-    PERL_ARGS_ASSERT_SV_PVBYTEN_FORCE_WRAPPER;
     PERL_UNUSED_ARG(dummy);
 
     return sv_pvbyten_force(sv, lp);
@@ -915,6 +935,8 @@ Perl_SvPV_helper(pTHX_
                  const U32 return_flags
                 )
 {
+    PERL_ARGS_ASSERT_SVPV_HELPER;
+
     /* 'type' should be known at compile time, so this is reduced to a single
      * conditional at runtime */
     if (   (type == SvPVbyte_type_      && SvPOK_byte_nog(sv))
@@ -971,9 +993,9 @@ SV is B<not> incremented.
 PERL_STATIC_INLINE SV *
 Perl_newRV_noinc(pTHX_ SV *const tmpRef)
 {
-    SV *sv = newSV_type(SVt_IV);
-
     PERL_ARGS_ASSERT_NEWRV_NOINC;
+
+    SV *sv = newSV_type(SVt_IV);
 
     SvTEMP_off(tmpRef);
 
@@ -1019,6 +1041,8 @@ parameter.
 PERL_STATIC_INLINE SV *
 Perl_newSVsv_flags(pTHX_ SV *const old, I32 flags)
 {
+    PERL_ARGS_ASSERT_NEWSVSV_FLAGS;
+
     if (!old)
         return NULL;
 

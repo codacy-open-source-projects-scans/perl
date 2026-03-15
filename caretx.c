@@ -41,7 +41,10 @@
 #endif
 
 void
-Perl_set_caret_X(pTHX) {
+Perl_set_caret_X(pTHX)
+{
+    PERL_ARGS_ASSERT_SET_CARET_X;
+
     GV* tmpgv = gv_fetchpvs("\030", GV_ADD|GV_NOTQUAL, SVt_PV); /* $^X */
     SV *const caret_x = GvSV(tmpgv);
 #if defined(OS2)

@@ -417,10 +417,11 @@ PP(pp_substcont)
 void
 Perl_rxres_save(pTHX_ void **rsp, REGEXP *rx)
 {
+    PERL_ARGS_ASSERT_RXRES_SAVE;
+
     UV *p = (UV*)*rsp;
     U32 i;
 
-    PERL_ARGS_ASSERT_RXRES_SAVE;
     PERL_UNUSED_CONTEXT;
 
     /* deal with regexp_paren_pair items */
@@ -460,12 +461,12 @@ Perl_rxres_save(pTHX_ void **rsp, REGEXP *rx)
 static void
 S_rxres_restore(pTHX_ void **rsp, REGEXP *rx)
 {
+    PERL_ARGS_ASSERT_RXRES_RESTORE;
+
     UV *p = (UV*)*rsp;
     U32 i;
 
-    PERL_ARGS_ASSERT_RXRES_RESTORE;
     PERL_UNUSED_CONTEXT;
-
     RX_MATCH_COPY_FREE(rx);
     RX_MATCH_COPIED_set(rx, *p);
     *p++ = 0;
@@ -491,10 +492,10 @@ S_rxres_restore(pTHX_ void **rsp, REGEXP *rx)
 static void
 S_rxres_free(pTHX_ void **rsp)
 {
-    UV * const p = (UV*)*rsp;
-
     PERL_ARGS_ASSERT_RXRES_FREE;
     PERL_UNUSED_CONTEXT;
+
+    UV * const p = (UV*)*rsp;
 
     if (p) {
         void *tmp = INT2PTR(char*,*p);
@@ -1574,9 +1575,9 @@ static const char * const context_name[] = {
 static I32
 S_dopoptolabel(pTHX_ const char *label, STRLEN len, U32 flags)
 {
-    I32 i;
-
     PERL_ARGS_ASSERT_DOPOPTOLABEL;
+
+    I32 i;
 
     for (i = cxstack_ix; i >= 0; i--) {
         const PERL_CONTEXT * const cx = &cxstack[i];
@@ -1642,6 +1643,8 @@ Deprecated since 5.38
 U8
 Perl_dowantarray(pTHX)
 {
+    PERL_ARGS_ASSERT_DOWANTARRAY;
+
     const U8 gimme = block_gimme();
     return (gimme == G_VOID) ? G_SCALAR : gimme;
 }
@@ -1651,6 +1654,8 @@ Perl_dowantarray(pTHX)
 U8
 Perl_block_gimme(pTHX)
 {
+    PERL_ARGS_ASSERT_BLOCK_GIMME;
+
     const I32 cxix = dopopto_cursub();
     U8 gimme;
     if (cxix < 0)
@@ -1674,6 +1679,8 @@ context.  Returns 0 otherwise.
 I32
 Perl_is_lvalue_sub(pTHX)
 {
+    PERL_ARGS_ASSERT_IS_LVALUE_SUB;
+
     const I32 cxix = dopopto_cursub();
     assert(cxix >= 0);  /* We should only be called from inside subs */
 
@@ -1687,6 +1694,8 @@ Perl_is_lvalue_sub(pTHX)
 I32
 Perl_was_lvalue_sub(pTHX)
 {
+    PERL_ARGS_ASSERT_WAS_LVALUE_SUB;
+
     const I32 cxix = dopoptosub(cxstack_ix-1);
     assert(cxix >= 0);  /* We should only be called from inside subs */
 
@@ -1699,9 +1708,10 @@ Perl_was_lvalue_sub(pTHX)
 static I32
 S_dopoptosub_at(pTHX_ const PERL_CONTEXT *cxstk, I32 startingblock)
 {
+    PERL_ARGS_ASSERT_DOPOPTOSUB_AT;
+
     I32 i;
 
-    PERL_ARGS_ASSERT_DOPOPTOSUB_AT;
 #ifndef DEBUGGING
     PERL_UNUSED_CONTEXT;
 #endif
@@ -1738,6 +1748,8 @@ S_dopoptosub_at(pTHX_ const PERL_CONTEXT *cxstk, I32 startingblock)
 static I32
 S_dopoptoeval(pTHX_ I32 startingblock)
 {
+    PERL_ARGS_ASSERT_DOPOPTOEVAL;
+
     I32 i;
     for (i = startingblock; i >= 0; i--) {
         const PERL_CONTEXT *cx = &cxstack[i];
@@ -1755,6 +1767,8 @@ S_dopoptoeval(pTHX_ I32 startingblock)
 static I32
 S_dopoptoloop(pTHX_ I32 startingblock)
 {
+    PERL_ARGS_ASSERT_DOPOPTOLOOP;
+
     I32 i;
     for (i = startingblock; i >= 0; i--) {
         const PERL_CONTEXT * const cx = &cxstack[i];
@@ -1790,6 +1804,8 @@ S_dopoptoloop(pTHX_ I32 startingblock)
 static I32
 S_dopoptogivenfor(pTHX_ I32 startingblock)
 {
+    PERL_ARGS_ASSERT_DOPOPTOGIVENFOR;
+
     I32 i;
     for (i = startingblock; i >= 0; i--) {
         const PERL_CONTEXT *cx = &cxstack[i];
@@ -1818,6 +1834,8 @@ S_dopoptogivenfor(pTHX_ I32 startingblock)
 static I32
 S_dopoptowhen(pTHX_ I32 startingblock)
 {
+    PERL_ARGS_ASSERT_DOPOPTOWHEN;
+
     I32 i;
     for (i = startingblock; i >= 0; i--) {
         const PERL_CONTEXT *cx = &cxstack[i];
@@ -1842,6 +1860,8 @@ S_dopoptowhen(pTHX_ I32 startingblock)
 void
 Perl_dounwind(pTHX_ I32 cxix)
 {
+    PERL_ARGS_ASSERT_DOUNWIND;
+
     if (!PL_curstackinfo) /* can happen if die during thread cloning */
         return;
 
@@ -1908,6 +1928,8 @@ Perl_dounwind(pTHX_ I32 cxix)
 void
 Perl_rpp_obliterate_stack_to(pTHX_ I32 ix)
 {
+    PERL_ARGS_ASSERT_RPP_OBLITERATE_STACK_TO;
+
 #ifdef PERL_RC_STACK
     I32 nonrc_base = PL_curstackinfo->si_stack_nonrc_base;
     assert(ix >= 0);
@@ -2040,9 +2062,10 @@ S_pop_eval_context_maybe_croak(pTHX_ PERL_CONTEXT *cx, SV *errsv, int action)
 void
 Perl_die_unwind(pTHX_ SV *msv)
 {
+    PERL_ARGS_ASSERT_DIE_UNWIND;
+
     SV *exceptsv = msv;
     U8 in_eval = PL_in_eval;
-    PERL_ARGS_ASSERT_DIE_UNWIND;
 
     if (in_eval) {
         I32 cxix;
@@ -2214,6 +2237,8 @@ frame for the sub call itself.
 const PERL_CONTEXT *
 Perl_caller_cx(pTHX_ I32 count, const PERL_CONTEXT **dbcxp)
 {
+    PERL_ARGS_ASSERT_CALLER_CX;
+
     I32 cxix = dopopto_cursub();
     const PERL_CONTEXT *cx;
     const PERL_CONTEXT *ccstack = cxstack;
@@ -3163,10 +3188,10 @@ PP(pp_redo)
 static OP *
 S_dofindlabel(pTHX_ OP *o, const char *label, STRLEN len, U32 flags, OP **opstack, OP **oplimit)
 {
+    PERL_ARGS_ASSERT_DOFINDLABEL;
+
     OP **ops = opstack;
     static const char* const too_deep = "Target of goto is too deeply nested";
-
-    PERL_ARGS_ASSERT_DOFINDLABEL;
 
     if (ops >= oplimit)
         croak("%s", too_deep);
@@ -3787,11 +3812,11 @@ PP_wrapped(pp_exit, 1, 0)
 static void
 S_save_lines(pTHX_ AV *array, SV *sv)
 {
+    PERL_ARGS_ASSERT_SAVE_LINES;
+
     const char *s = SvPVX_const(sv);
     const char * const send = SvPVX_const(sv) + SvCUR(sv);
     I32 line = 1;
-
-    PERL_ARGS_ASSERT_SAVE_LINES;
 
     while (s && s < send) {
         const char *t;
@@ -3877,6 +3902,8 @@ See L<perlinterp/"Exception handing"> for further details.
 static OP *
 S_docatch(pTHX_ Perl_ppaddr_t firstpp)
 {
+    PERL_ARGS_ASSERT_DOCATCH;
+
     int ret;
     OP * const oldop = PL_op;
     dJMPENV;
@@ -3937,6 +3964,8 @@ rather than in the scope of the debugger itself.)
 CV*
 Perl_find_runcv(pTHX_ U32 *db_seqp)
 {
+    PERL_ARGS_ASSERT_FIND_RUNCV;
+
     return Perl_find_runcv_where(aTHX_ 0, 0, db_seqp);
 }
 
@@ -3944,6 +3973,8 @@ Perl_find_runcv(pTHX_ U32 *db_seqp)
 CV *
 Perl_find_runcv_where(pTHX_ U8 cond, IV arg, U32 *db_seqp)
 {
+    PERL_ARGS_ASSERT_FIND_RUNCV_WHERE;
+
     PERL_SI	 *si;
     int		 level = 0;
 
@@ -4125,6 +4156,8 @@ S_try_run_unitcheck(pTHX_ OP* caller_op)
 static bool
 S_doeval_compile(pTHX_ U8 gimme, CV* outside, U32 seq, HV *hh)
 {
+    PERL_ARGS_ASSERT_DOEVAL_COMPILE;
+
     OP * const saveop = PL_op;
     bool clear_hints = saveop->op_type != OP_ENTEREVAL;
     COP * const oldcurcop = PL_curcop;
@@ -4383,13 +4416,13 @@ S_doeval_compile(pTHX_ U8 gimme, CV* outside, U32 seq, HV *hh)
 static PerlIO *
 S_check_type_and_open(pTHX_ SV *name)
 {
+    PERL_ARGS_ASSERT_CHECK_TYPE_AND_OPEN;
+
     Stat_t st;
     STRLEN len;
     PerlIO * retio;
     const char *p = SvPV_const(name, len);
     int st_rc;
-
-    PERL_ARGS_ASSERT_CHECK_TYPE_AND_OPEN;
 
     /* checking here captures a reasonable error message when
      * PERL_DISABLE_PMC is true, but when PMC checks are enabled, the
@@ -4457,10 +4490,10 @@ S_check_type_and_open(pTHX_ SV *name)
 static PerlIO *
 S_doopen_pm(pTHX_ SV *name)
 {
+    PERL_ARGS_ASSERT_DOOPEN_PM;
+
     STRLEN namelen;
     const char *p = SvPV_const(name, namelen);
-
-    PERL_ARGS_ASSERT_DOOPEN_PM;
 
     /* check the name before trying for the .pmc name to avoid the
      * warning referring to the .pmc which the user probably doesn't
@@ -5759,6 +5792,8 @@ PP(pp_catch)
 void
 Perl_delete_eval_scope(pTHX)
 {
+    PERL_ARGS_ASSERT_DELETE_EVAL_SCOPE;
+
     PERL_CONTEXT *cx;
         
     cx = CX_CUR();
@@ -5773,11 +5808,11 @@ Perl_delete_eval_scope(pTHX)
 void
 Perl_create_eval_scope(pTHX_ OP *retop, SV **sp, U32 flags)
 {
+    PERL_ARGS_ASSERT_CREATE_EVAL_SCOPE;
+
     PERL_CONTEXT *cx;
     const U8 gimme = GIMME_V;
 
-    PERL_ARGS_ASSERT_CREATE_EVAL_SCOPE;
-        
     cx = cx_pushblock((CXt_EVAL|CXp_EVALBLOCK), gimme,
                     sp, PL_savestack_ix);
     cx_pusheval(cx, retop, NULL);
@@ -5891,9 +5926,9 @@ PP(pp_leavegiven)
 static PMOP *
 S_make_matcher(pTHX_ REGEXP *re)
 {
-    PMOP *matcher = cPMOPx(newPMOP(OP_MATCH, OPf_WANT_SCALAR | OPf_STACKED));
-
     PERL_ARGS_ASSERT_MAKE_MATCHER;
+
+    PMOP *matcher = cPMOPx(newPMOP(OP_MATCH, OPf_WANT_SCALAR | OPf_STACKED));
 
     PM_SETRE(matcher, ReREFCNT_inc(re));
 
@@ -5906,10 +5941,10 @@ S_make_matcher(pTHX_ REGEXP *re)
 static bool
 S_matcher_matches_sv(pTHX_ PMOP *matcher, SV *sv)
 {
+    PERL_ARGS_ASSERT_MATCHER_MATCHES_SV;
+
     bool result;
 
-    PERL_ARGS_ASSERT_MATCHER_MATCHES_SV;
-    
     PL_op = (OP *) matcher;
     rpp_xpush_1(sv);
     (void) Perl_pp_match(aTHX);
@@ -5943,6 +5978,8 @@ PP(pp_smartmatch)
 static OP *
 S_do_smartmatch(pTHX_ HV *seen_this, HV *seen_other, const bool copied)
 {
+    PERL_ARGS_ASSERT_DO_SMARTMATCH;
+
     bool object_on_left = FALSE;
     SV *e = PL_stack_sp[0];  /* e is for 'expression' */
     SV *d = PL_stack_sp[-1]; /* d is for 'default', as in PL_defgv */
@@ -6623,6 +6660,8 @@ PP(pp_pushdefer)
 static MAGIC *
 S_doparseform(pTHX_ SV *sv)
 {
+    PERL_ARGS_ASSERT_DOPARSEFORM;
+
     STRLEN len;
     char *s = SvPV(sv, len);
     char *send;
@@ -6640,8 +6679,6 @@ S_doparseform(pTHX_ SV *sv)
     int maxops = 12; /* FF_LINEMARK + FF_END + 10 (\0 without preceding \n) */
     MAGIC *mg = NULL;
     SV *sv_copy;
-
-    PERL_ARGS_ASSERT_DOPARSEFORM;
 
     if (len == 0)
         croak("Null picture in formline");
@@ -6876,6 +6913,8 @@ S_doparseform(pTHX_ SV *sv)
 static bool
 S_num_overflow(NV value, I32 fldsize, I32 frcsize)
 {
+    PERL_ARGS_ASSERT_NUM_OVERFLOW;
+
     /* Can value be printed in fldsize chars, using %*.*f ? */
     NV pwr = 1;
     NV eps = 0.5;
@@ -6903,6 +6942,8 @@ S_num_overflow(NV value, I32 fldsize, I32 frcsize)
 static I32
 S_run_user_filter(pTHX_ int idx, SV *buf_sv, int maxlen)
 {
+    PERL_ARGS_ASSERT_RUN_USER_FILTER;
+
     SV * const datasv = FILTER_DATA(idx);
     const int filter_has_file = IoLINES(datasv);
     SV * const filter_state = MUTABLE_SV(IoTOP_GV(datasv));
@@ -6915,8 +6956,6 @@ S_run_user_filter(pTHX_ int idx, SV *buf_sv, int maxlen)
     bool read_from_cache = FALSE;
     STRLEN umaxlen;
     SV *err = NULL;
-
-    PERL_ARGS_ASSERT_RUN_USER_FILTER;
 
     assert(maxlen >= 0);
     umaxlen = maxlen;

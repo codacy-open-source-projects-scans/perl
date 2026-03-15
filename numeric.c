@@ -112,9 +112,9 @@ These are are available even on platforms that lack plain strtod().
 NV
 Perl_my_strtod(const char * const s, char **e)
 {
-    dTHX;
-
     PERL_ARGS_ASSERT_MY_STRTOD;
+
+    dTHX;
 
 #ifdef Perl_strtod
 
@@ -146,6 +146,8 @@ Perl_my_strtod(const char * const s, char **e)
 U32
 Perl_cast_ulong(NV f)
 {
+    PERL_ARGS_ASSERT_CAST_ULONG;
+
   if (f < 0.0)
     return f < I32_MIN ? (U32) I32_MIN : (U32)(I32) f;
   if (f < U32_MAX_P1) {
@@ -164,6 +166,8 @@ Perl_cast_ulong(NV f)
 I32
 Perl_cast_i32(NV f)
 {
+    PERL_ARGS_ASSERT_CAST_I32;
+
   if (f < I32_MAX_P1)
     return f < I32_MIN ? I32_MIN : (I32) f;
   if (f < U32_MAX_P1) {
@@ -182,6 +186,8 @@ Perl_cast_i32(NV f)
 IV
 Perl_cast_iv(NV f)
 {
+    PERL_ARGS_ASSERT_CAST_IV;
+
   if (f < IV_MAX_P1)
     return f < IV_MIN ? IV_MIN : (IV) f;
   if (f < UV_MAX_P1) {
@@ -201,6 +207,8 @@ Perl_cast_iv(NV f)
 UV
 Perl_cast_uv(NV f)
 {
+    PERL_ARGS_ASSERT_CAST_UV;
+
   if (f < 0.0)
     return f < IV_MIN ? (UV) IV_MIN : (UV)(IV) f;
   if (f < UV_MAX_P1) {
@@ -854,11 +862,11 @@ For backwards compatibility.  Use C<grok_oct> instead.
 NV
 Perl_scan_bin(pTHX_ const char *start, STRLEN len, STRLEN *retlen)
 {
+    PERL_ARGS_ASSERT_SCAN_BIN;
+
     NV rnv;
     I32 flags = *retlen ? PERL_SCAN_ALLOW_UNDERSCORES : 0;
     const UV ruv = grok_bin (start, &len, &flags, &rnv);
-
-    PERL_ARGS_ASSERT_SCAN_BIN;
 
     *retlen = len;
     return (flags & PERL_SCAN_GREATER_THAN_UV_MAX) ? rnv : (NV)ruv;
@@ -867,11 +875,11 @@ Perl_scan_bin(pTHX_ const char *start, STRLEN len, STRLEN *retlen)
 NV
 Perl_scan_oct(pTHX_ const char *start, STRLEN len, STRLEN *retlen)
 {
+    PERL_ARGS_ASSERT_SCAN_OCT;
+
     NV rnv;
     I32 flags = *retlen ? PERL_SCAN_ALLOW_UNDERSCORES : 0;
     const UV ruv = grok_oct (start, &len, &flags, &rnv);
-
-    PERL_ARGS_ASSERT_SCAN_OCT;
 
     *retlen = len;
     return (flags & PERL_SCAN_GREATER_THAN_UV_MAX) ? rnv : (NV)ruv;
@@ -880,11 +888,11 @@ Perl_scan_oct(pTHX_ const char *start, STRLEN len, STRLEN *retlen)
 NV
 Perl_scan_hex(pTHX_ const char *start, STRLEN len, STRLEN *retlen)
 {
+    PERL_ARGS_ASSERT_SCAN_HEX;
+
     NV rnv;
     I32 flags = *retlen ? PERL_SCAN_ALLOW_UNDERSCORES : 0;
     const UV ruv = grok_hex (start, &len, &flags, &rnv);
-
-    PERL_ARGS_ASSERT_SCAN_HEX;
 
     *retlen = len;
     return (flags & PERL_SCAN_GREATER_THAN_UV_MAX) ? rnv : (NV)ruv;
@@ -1289,12 +1297,12 @@ static const U8 uv_max_mod_10 = UV_MAX % 10;
 int
 Perl_grok_number_flags(pTHX_ const char *pv, STRLEN len, UV *valuep, U32 flags)
 {
+  PERL_ARGS_ASSERT_GROK_NUMBER_FLAGS;
+
   const char *s = pv;
   const char * const send = pv + len;
   const char *d;
   int numtype = 0;
-
-  PERL_ARGS_ASSERT_GROK_NUMBER_FLAGS;
 
   if (UNLIKELY(isSPACE(*s))) {
       s++;
@@ -1652,6 +1660,7 @@ S_mulexp10(NV value, I32 exponent)
 NV
 Perl_my_atof(pTHX_ const char* s)
 {
+    PERL_ARGS_ASSERT_MY_ATOF;
 
 /*
 =for apidoc      my_atof
@@ -1668,8 +1677,6 @@ N.B. C<s> must be NUL terminated.
 */
 
     NV x = 0.0;
-
-    PERL_ARGS_ASSERT_MY_ATOF;
 
 #if ! defined(USE_LOCALE_NUMERIC)
 
@@ -1813,6 +1820,8 @@ Perl_my_atof2(pTHX_ const char* orig, NV* value)
 char*
 Perl_my_atof3(pTHX_ const char* orig, NV* value, const STRLEN len)
 {
+    PERL_ARGS_ASSERT_MY_ATOF3;
+
     const char* s = orig;
     NV result[3] = {0.0, 0.0, 0.0};
 #if defined(USE_PERL_ATOF) || defined(Perl_strtod)
@@ -1835,7 +1844,6 @@ Perl_my_atof3(pTHX_ const char* orig, NV* value, const STRLEN len)
 #endif
 
 #if defined(USE_PERL_ATOF) || defined(Perl_strtod)
-    PERL_ARGS_ASSERT_MY_ATOF3;
 
     /* leading whitespace */
     while (s < send && isSPACE(*s))
@@ -2063,6 +2071,8 @@ This is also the logical inverse of Perl_isfinite().
 bool
 Perl_isinfnan(NV nv)
 {
+    PERL_ARGS_ASSERT_ISINFNAN;
+
   PERL_UNUSED_ARG(nv);
 #ifdef Perl_isinf
     if (Perl_isinf(nv))
@@ -2130,7 +2140,8 @@ Perl_my_modfl(long double x, long double *ip)
 /* Similarly, with ilogbl and scalbnl we can emulate frexpl. */
 #if ! defined(HAS_FREXPL) && defined(HAS_ILOGBL) && defined(HAS_SCALBNL)
 long double
-Perl_my_frexpl(long double x, int *e) {
+Perl_my_frexpl(long double x, int *e)
+{
     *e = x == 0.0L ? 0 : ilogbl(x) + 1;
     return (scalbnl(x, -*e));
 }
@@ -2160,7 +2171,10 @@ Users should just always call C<Perl_signbit()>.
 */
 #if !defined(HAS_SIGNBIT)
 int
-Perl_signbit(NV x) {
+Perl_signbit(NV x)
+{
+    PERL_ARGS_ASSERT_PERL_SIGNBIT;
+
 #  ifdef Perl_fp_class_nzero
     return Perl_fp_class_nzero(x);
     /* Try finding the high byte, and assume it's highest bit

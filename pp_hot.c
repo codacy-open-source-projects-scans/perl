@@ -192,7 +192,6 @@ void
 Perl_rpp_free_2_(pTHX_ SV *const sv1,  SV *const sv2,
                        const U32 rc1,  const U32 rc2)
 {
-
     PERL_ARGS_ASSERT_RPP_FREE_2_;
 
 #ifdef PERL_RC_STACK
@@ -3997,7 +3996,8 @@ PP(pp_match)
    is non-blocking but would have blocked if blocking
 */
 PERL_STATIC_INLINE bool
-error_is_would_block(int err) {
+error_is_would_block(int err)
+{
 #ifdef EAGAIN
     if (err == EAGAIN)
         return true;
@@ -4051,6 +4051,7 @@ error_is_would_block(int err) {
 OP *
 Perl_do_readline(pTHX)
 {
+    PERL_ARGS_ASSERT_DO_READLINE;
 
     const I32 type = PL_op->op_type;
 
@@ -5909,10 +5910,10 @@ PP(pp_grepwhile)
 void
 Perl_leave_adjust_stacks(pTHX_ SV **from_sp, SV **to_sp, U8 gimme, int pass)
 {
+    PERL_ARGS_ASSERT_LEAVE_ADJUST_STACKS;
+
     SSize_t tmps_base; /* lowest index into tmps stack that needs freeing now */
     SSize_t nargs;
-
-    PERL_ARGS_ASSERT_LEAVE_ADJUST_STACKS;
 
     TAINT_NOT;
 
@@ -6686,6 +6687,8 @@ Perl_sub_crush_depth(pTHX_ CV *cv)
 void
 Perl_croak_caller(const char *pat, ...)
 {
+    PERL_ARGS_ASSERT_CROAK_CALLER;
+
     dTHX;
     va_list args;
     const PERL_CONTEXT *cx = caller_cx(0, NULL);
@@ -6821,6 +6824,8 @@ Perl_vivify_ref(pTHX_ SV *sv, U32 to_what)
 PERL_STATIC_INLINE HV *
 S_opmethod_stash(pTHX_ SV* meth)
 {
+    PERL_ARGS_ASSERT_OPMETHOD_STASH;
+
     SV* ob;
     HV* stash;
 
@@ -6829,8 +6834,6 @@ S_opmethod_stash(pTHX_ SV* meth)
                             "package or object reference", SVfARG(meth)),
            (SV *)NULL)
         : *(PL_stack_base + TOPMARK + 1);
-
-    PERL_ARGS_ASSERT_OPMETHOD_STASH;
 
     if (UNLIKELY(!sv))
        undefined:

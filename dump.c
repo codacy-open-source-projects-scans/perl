@@ -166,6 +166,7 @@ Perl_pv_escape( pTHX_ SV *dsv, char const * const str,
                 const STRLEN count, STRLEN max,
                 STRLEN * const escaped, U32 flags )
 {
+    PERL_ARGS_ASSERT_PV_ESCAPE;
 
     bool use_uc_hex = false;
     if (flags & PERL_PV_ESCAPE_DWIM_ALL_HEX) {
@@ -215,8 +216,6 @@ Perl_pv_escape( pTHX_ SV *dsv, char const * const str,
     }
 
     octbuf[0] = esc;
-
-    PERL_ARGS_ASSERT_PV_ESCAPE;
 
     if (dsv && !(flags & PERL_PV_ESCAPE_NOCLEAR)) {
             /* This won't alter the UTF-8 flag */
@@ -361,14 +360,14 @@ Perl_pv_pretty( pTHX_ SV *dsv, char const * const str, const STRLEN count,
   const STRLEN max, char const * const start_color, char const * const end_color, 
   const U32 flags ) 
 {
+    PERL_ARGS_ASSERT_PV_PRETTY;
+
     const U8 *quotes = (U8*)((flags & PERL_PV_PRETTY_QUOTE) ? "\"\"" :
                              (flags & PERL_PV_PRETTY_LTGT)  ? "<>" : NULL);
     STRLEN escaped;
     STRLEN max_adjust= 0;
     STRLEN orig_cur;
  
-    PERL_ARGS_ASSERT_PV_PRETTY;
-   
     if (!(flags & PERL_PV_PRETTY_NOCLEAR)) {
         /* This won't alter the UTF-8 flag */
         SvPVCLEAR(dsv);
@@ -455,6 +454,8 @@ Implements C<SvPEEK>
 char *
 Perl_sv_peek(pTHX_ SV *sv)
 {
+    PERL_ARGS_ASSERT_SV_PEEK;
+
     SV * const t = sv_newmortal();
     int unref = 0;
     U32 type;
@@ -621,8 +622,9 @@ Perl_sv_peek(pTHX_ SV *sv)
 void
 Perl_dump_indent(pTHX_ I32 level, PerlIO *file, const char* pat, ...)
 {
-    va_list args;
     PERL_ARGS_ASSERT_DUMP_INDENT;
+
+    va_list args;
     va_start(args, pat);
     dump_vindent(level, file, pat, &args);
     va_end(args);
@@ -762,9 +764,9 @@ function at once, or a single line may be split across multiple calls.
 void
 Perl_opdump_printf(pTHX_ struct Perl_OpDumpContext *ctx, const char *pat, ...)
 {
-    va_list args;
-
     PERL_ARGS_ASSERT_OPDUMP_PRINTF;
+
+    va_list args;
 
     va_start(args, pat);
     SV *msg_sv = sv_2mortal(vnewSVpvf(pat, &args));
@@ -804,12 +806,16 @@ C<PL_defstash>.
 void
 Perl_dump_all(pTHX)
 {
+    PERL_ARGS_ASSERT_DUMP_ALL;
+
     dump_all_perl(FALSE);
 }
 
 void
 Perl_dump_all_perl(pTHX_ bool justperl)
 {
+    PERL_ARGS_ASSERT_DUMP_ALL_PERL;
+
     PerlIO_setlinebuf(Perl_debug_log);
     if (PL_main_root)
         op_dump(PL_main_root);
@@ -834,9 +840,9 @@ Perl_dump_packsubs(pTHX_ const HV *stash)
 void
 Perl_dump_packsubs_perl(pTHX_ const HV *stash, bool justperl)
 {
-    I32	i;
-
     PERL_ARGS_ASSERT_DUMP_PACKSUBS_PERL;
+
+    I32	i;
 
     if (!HvTOTALKEYS(stash))
         return;
@@ -879,9 +885,9 @@ S_do_op_dump_bar(pTHX_ I32 level, UV bar, PerlIO *file, const OP *o,
 void
 Perl_dump_sub_perl(pTHX_ const GV *gv, bool justperl)
 {
-    CV *cv;
-
     PERL_ARGS_ASSERT_DUMP_SUB_PERL;
+
+    CV *cv;
 
     cv = isGV_with_GP(gv) ? GvCV(gv) : CV_FROM_REF((SV*)gv);
     if (justperl && (CvISXSUB(cv) || !CvROOT(cv)))
@@ -921,9 +927,9 @@ message that one doesn't exist.
 void
 Perl_dump_form(pTHX_ const GV *gv)
 {
-    SV * const sv = sv_newmortal();
-
     PERL_ARGS_ASSERT_DUMP_FORM;
+
+    SV * const sv = sv_newmortal();
 
     gv_fullname3(sv, gv, NULL);
     Perl_dump_indent(aTHX_ 0, Perl_debug_log, "\nFORMAT %s = ", SvPVX_const(sv));
@@ -936,6 +942,8 @@ Perl_dump_form(pTHX_ const GV *gv)
 void
 Perl_dump_eval(pTHX)
 {
+    PERL_ARGS_ASSERT_DUMP_EVAL;
+
     op_dump(PL_eval_root);
 }
 
@@ -1054,11 +1062,11 @@ const struct flag_to_name pmflags_flags_names[] = {
 static SV *
 S_pm_description(pTHX_ const PMOP *pm)
 {
+    PERL_ARGS_ASSERT_PM_DESCRIPTION;
+
     SV * const desc = newSVpvs("");
     const REGEXP * const regex = PM_GETRE(pm);
     const U32 pmflags = pm->op_pmflags;
-
-    PERL_ARGS_ASSERT_PM_DESCRIPTION;
 
     if (pmflags & PMf_ONCE)
         sv_catpvs(desc, ",ONCE");
@@ -1250,6 +1258,8 @@ special handling.
 void
 Perl_pmop_dump(pTHX_ PMOP *pm)
 {
+    PERL_ARGS_ASSERT_PMOP_DUMP;
+
     do_pmop_dump(0, Perl_debug_log, pm);
 }
 
@@ -1261,6 +1271,8 @@ Perl_pmop_dump(pTHX_ PMOP *pm)
 static UV
 S_sequence_num(pTHX_ const OP *o)
 {
+    PERL_ARGS_ASSERT_SEQUENCE_NUM;
+
     SV     *op,
           **seq;
     const char *key;
@@ -1334,9 +1346,9 @@ static void
 S_do_op_dump_bar(pTHX_ I32 level, UV bar, PerlIO *file, const OP *o,
                  CV* rootcv)
 {
-    const OPCODE optype = o->op_type;
-
     PERL_ARGS_ASSERT_DO_OP_DUMP;
+
+    const OPCODE optype = o->op_type;
 
     /* print op header line */
 
@@ -1935,6 +1947,8 @@ C<STDERR>.
 void
 Perl_gv_dump(pTHX_ GV *gv)
 {
+    PERL_ARGS_ASSERT_GV_DUMP;
+
     STRLEN len;
     const char* name;
     SV *sv, *tmp = newSVpvs_flags("", SVs_TEMP);
@@ -2105,15 +2119,17 @@ Dumps the contents of the MAGIC C<mg> to C<STDERR>.
 void
 Perl_magic_dump(pTHX_ const MAGIC *mg)
 {
+    PERL_ARGS_ASSERT_MAGIC_DUMP;
+
     do_magic_dump(0, Perl_debug_log, mg, 0, 0, FALSE, 0);
 }
 
 void
 Perl_do_hv_dump(pTHX_ I32 level, PerlIO *file, const char *name, HV *sv)
 {
-    const char *hvname;
-
     PERL_ARGS_ASSERT_DO_HV_DUMP;
+
+    const char *hvname;
 
     Perl_dump_indent(aTHX_ level, file, "%s = 0x%" UVxf, name, PTR2UV(sv));
     if (sv && (hvname = HvNAME_get(sv)))
@@ -2326,12 +2342,12 @@ const struct flag_to_name regexp_core_intflags_names[] = {
 void
 Perl_do_sv_dump(pTHX_ I32 level, PerlIO *file, SV *sv, I32 nest, I32 maxnest, bool dumpops, STRLEN pvlim)
 {
+    PERL_ARGS_ASSERT_DO_SV_DUMP;
+
     SV *d;
     const char *s;
     U32 flags;
     U32 type;
-
-    PERL_ARGS_ASSERT_DO_SV_DUMP;
 
     if (!sv) {
         Perl_dump_indent(aTHX_ level, file, "SV = 0\n");
@@ -3209,6 +3225,8 @@ deep.
 void
 Perl_sv_dump(pTHX_ SV *sv)
 {
+    PERL_ARGS_ASSERT_SV_DUMP;
+
     if (sv && SvROK(sv))
         sv_dump_depth(sv, 4);
     else
@@ -3218,6 +3236,8 @@ Perl_sv_dump(pTHX_ SV *sv)
 void
 Perl_sv_dump_depth(pTHX_ SV *sv, I32 depth)
 {
+    PERL_ARGS_ASSERT_SV_DUMP_DEPTH;
+
     do_sv_dump(0, Perl_debug_log, sv, 0, depth, 0, 0);
 }
 
@@ -3238,6 +3258,8 @@ Perl_hv_dump(pTHX_ HV *hv)
 int
 Perl_runops_debug(pTHX)
 {
+    PERL_ARGS_ASSERT_RUNOPS_DEBUG;
+
 #ifdef PERL_USE_HWM
     SSize_t orig_stack_hwm = PL_curstackinfo->si_stack_hwm;
 
@@ -3413,6 +3435,8 @@ S_append_gv_name(pTHX_ GV *gv, SV *out)
 SV*
 Perl_multideref_stringify(pTHX_ const OP *o, CV *cv)
 {
+    PERL_ARGS_ASSERT_MULTIDEREF_STRINGIFY;
+
     UNOP_AUX_item *items = cUNOP_AUXo->op_aux;
     UV actions = items->uv;
     SV *sv;
@@ -3430,8 +3454,6 @@ Perl_multideref_stringify(pTHX_ const OP *o, CV *cv)
     else
         comppad = NULL;
 #endif
-
-    PERL_ARGS_ASSERT_MULTIDEREF_STRINGIFY;
 
     while (!last) {
         switch (actions & MDEREF_ACTION_MASK) {
@@ -3557,14 +3579,14 @@ Perl_multideref_stringify(pTHX_ const OP *o, CV *cv)
 SV*
 Perl_multiconcat_stringify(pTHX_ const OP *o)
 {
+    PERL_ARGS_ASSERT_MULTICONCAT_STRINGIFY;
+
     UNOP_AUX_item *aux = cUNOP_AUXo->op_aux;
     UNOP_AUX_item *lens;
     STRLEN len;
     SSize_t nargs;
     char *s;
     SV *out = newSVpvn_flags("", 0, SVs_TEMP);
-
-    PERL_ARGS_ASSERT_MULTICONCAT_STRINGIFY;
 
     nargs = aux[PERL_MULTICONCAT_IX_NARGS].ssize;
     s   = aux[PERL_MULTICONCAT_IX_PLAIN_PV].pv;
@@ -3696,6 +3718,8 @@ Returns one of the OPclass enums, such as OPclass_LISTOP.
 OPclass
 Perl_op_class(pTHX_ const OP *o)
 {
+    PERL_ARGS_ASSERT_OP_CLASS;
+
     bool custom = 0;
 
     if (!o)
@@ -3832,6 +3856,8 @@ Perl_op_class(pTHX_ const OP *o)
 static CV*
 S_deb_curcv(pTHX_ I32 ix)
 {
+    PERL_ARGS_ASSERT_DEB_CURCV;
+
     PERL_SI *si = PL_curstackinfo;
     for (; ix >=0; ix--) {
         const PERL_CONTEXT * const cx = &(si->si_cxstack)[ix];
@@ -3897,6 +3923,8 @@ option.
 void
 Perl_debprofdump(pTHX)
 {
+    PERL_ARGS_ASSERT_DEBPROFDUMP;
+
     unsigned i;
     if (!PL_profiledata)
         return;
