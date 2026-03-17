@@ -2115,6 +2115,7 @@ my @unresolved_visibility_overrides = qw(
     padadd_OUR
     padadd_STALEOK
     padadd_STATE
+    padalloc_NO_SV
     PAD_BASE_SV
     PAD_CLONE_VARS
     PAD_COMPNAME
@@ -2678,6 +2679,7 @@ my @unresolved_visibility_overrides = qw(
     SAVEt_OP
     SAVEt_PADSV
     SAVEt_PADSV_AND_MORTALIZE
+    SAVEt_PADSV_NULL
     SAVEt_PARSER
     SAVEt_PPTR
     SAVEt_RCPV

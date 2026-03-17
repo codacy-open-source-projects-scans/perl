@@ -560,7 +560,8 @@ S_pad_alloc_name(pTHX_ PADNAME *name, U32 flags, HV *typestash,
 {
     PERL_ARGS_ASSERT_PAD_ALLOC_NAME;
 
-    const PADOFFSET offset = pad_alloc(OP_PADSV, SVs_PADMY);
+    const PADOFFSET offset = pad_alloc(OP_PADSV,
+            SVs_PADMY | ((flags & padadd_FIELD) ? padalloc_NO_SV : 0));
 
     ASSERT_CURPAD_ACTIVE("pad_alloc_name");
 
@@ -660,6 +661,11 @@ Perl_pad_add_name_pvn(pTHX_ const char *namepv, STRLEN namelen,
     if (!PL_min_intro_pending)
         PL_min_intro_pending = offset;
     PL_max_intro_pending = offset;
+
+    /* fields should not have entries in the pad; we're done here */
+    if (flags & padadd_FIELD)
+        return offset;
+
     /* if it's not a simple scalar, replace with an AV or HV */
     assert(SvTYPE(PL_curpad[offset]) == SVt_NULL);
     assert(SvREFCNT(PL_curpad[offset]) == 1);
@@ -716,6 +722,10 @@ does not cause the SV in the pad slot to be marked read-only, but simply
 tells C<pad_alloc> that it I<will> be made read-only (by the caller), or at
 least should be treated as such.
 
+C<SVs_PADMY> can be combined with C<padalloc_NO_SV> to request that no actual
+SV be allocated and stored in the pad; the pad slot will be left as NULL in
+this case.
+
 C<optype> should be an opcode indicating the type of operation that the
 pad entry is to support.  This doesn't affect operational semantics,
 but is used for debugging.
@@ -728,11 +738,14 @@ Perl_pad_alloc(pTHX_ I32 optype, U32 tmptype)
 {
     PERL_ARGS_ASSERT_PAD_ALLOC;
 
-    SV *sv;
+    SV *sv = NULL;
     PADOFFSET retval;
 
     PERL_UNUSED_ARG(optype);
     ASSERT_CURPAD_ACTIVE("pad_alloc");
+
+    const bool alloc_sv = !(tmptype & padalloc_NO_SV);
+    tmptype &= ~padalloc_NO_SV;
 
     if (AvARRAY(PL_comppad) != PL_curpad)
         croak("panic: pad_alloc, %p!=%p",
@@ -741,7 +754,9 @@ Perl_pad_alloc(pTHX_ I32 optype, U32 tmptype)
         pad_reset();
     if (tmptype == SVs_PADMY) { /* Not & because this ‘flag’ is 0.  */
         /* For a my, simply push a null SV onto the end of PL_comppad. */
-        sv = *av_store_simple(PL_comppad, AvFILLp(PL_comppad) + 1, newSV_type(SVt_NULL));
+        if (alloc_sv)
+            sv = newSV_type(SVt_NULL);
+        av_store_simple(PL_comppad, AvFILLp(PL_comppad) + 1, sv);
         retval = (PADOFFSET)AvFILLp(PL_comppad);
     }
     else {
@@ -785,7 +800,8 @@ Perl_pad_alloc(pTHX_ I32 optype, U32 tmptype)
         }
         *(konst ? &PL_constpadix : &PL_padix) = retval;
     }
-    SvFLAGS(sv) |= tmptype;
+    if (sv)
+        SvFLAGS(sv) |= tmptype;
     PL_curpad = AvARRAY(PL_comppad);
 
     DEBUG_X(PerlIO_printf(Perl_debug_log,
@@ -793,8 +809,10 @@ Perl_pad_alloc(pTHX_ I32 optype, U32 tmptype)
           PTR2UV(PL_comppad), PTR2UV(PL_curpad), (long) retval,
           PL_op_name[optype]));
 #ifdef DEBUG_LEAKING_SCALARS
-    sv->sv_debug_optype = optype;
-    sv->sv_debug_inpad = 1;
+    if (sv) {
+        sv->sv_debug_optype = optype;
+        sv->sv_debug_inpad = 1;
+    }
 #endif
     return retval;
 }
@@ -1259,7 +1277,7 @@ S_pad_findlex(pTHX_ const char *namepv, STRLEN namelen, U32 flags, const CV* cv,
                         "Pad findlex cv=0x%" UVxf " found lex=0x%" UVxf "\n",
                         PTR2UV(cv), PTR2UV(*out_capture)));
 
-                    if (SvPADSTALE(*out_capture)
+                    if (*out_capture && SvPADSTALE(*out_capture)
                         && (!CvDEPTH(cv) || !staleok)
                         && !PadnameIsSTATE(name_p[offset]))
                     {
@@ -1268,7 +1286,7 @@ S_pad_findlex(pTHX_ const char *namepv, STRLEN namelen, U32 flags, const CV* cv,
                         *out_capture = NULL;
                     }
                 }
-                if (!*out_capture) {
+                if (!*out_capture && !PadnameIsFIELD(*out_name)) {
                     if (namelen != 0 && *namepv == '@')
                         *out_capture = newSV_type_mortal(SVt_PVAV);
                     else if (namelen != 0 && *namepv == '%')
@@ -1969,6 +1987,7 @@ S_cv_clone_pad(pTHX_ CV *proto, CV *cv, CV *outside, HV *cloned,
     long depth;
     U32 subclones = 0;
     bool trouble = FALSE;
+    const bool cv_is_method = CvIsMETHOD(cv);
 
     assert(!CvUNIQUE(proto));
 
@@ -2029,6 +2048,12 @@ S_cv_clone_pad(pTHX_ CV *proto, CV *cv, CV *outside, HV *cloned,
         if (namesv && PadnameLEN(namesv)) { /* lexical */
           if (PadnameIsOUR(namesv)) { /* or maybe not so lexical */
                 NOOP;
+          }
+          else if (cv_is_method && PadnameIsFIELD(namesv)) {
+              /* fields within methods shouldn't be captured because the inner
+               * method's pp_methstart will set it up again.
+               */
+              NOOP;
           }
           else {
             if (PadnameOUTER(namesv)) {   /* lexical from outside? */
