@@ -2619,7 +2619,7 @@ Adp	|void	|op_free	|NULLOK OP *arg
 Adp	|OP *	|op_linklist	|NN OP *o
 Admpx	|OP *	|op_lvalue	|NULLOK OP *o				\
 				|I32 type
-Xop	|OP *	|op_lvalue_flags|NULLOK OP *o				\
+Xdop	|OP *	|op_lvalue_flags|NULLOK OP *o				\
 				|I32 type				\
 				|U32 flags
 : Used in various files
@@ -3160,7 +3160,7 @@ Cmp	|void	|save_mortalizesv					\
 				|NN SV *sv
 : Used in SAVEFREOP(), used in gv.c, op.c, perl.c, pp_ctl.c, pp_sort.c
 Cdmp	|void	|save_op
-Cp	|void	|save_padsv	|PADOFFSET padix
+Cdp	|void	|save_padsv	|PADOFFSET padix
 Cdp	|void	|save_padsv_and_mortalize				\
 				|PADOFFSET off
 Cp	|void	|save_pptr	|NN char **pptr
