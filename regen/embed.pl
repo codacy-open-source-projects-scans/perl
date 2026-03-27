@@ -1061,6 +1061,8 @@ my @unresolved_visibility_overrides = qw(
     HvAUXf_IS_CLASS
     HvAUXf_NO_DEREF
     HvAUXf_SCAN_STASH
+    HvCLASS_IS_SEALED
+    HvCLASSf_SEALED
     HV_DELETE
     HV_DISABLE_UVAR_XKEY
     HvEITER
@@ -3980,7 +3982,7 @@ sub generate_proto_h {
         $ind .= "  " x ($level-1) if $level>1;
         my $inner_ind= $ind ? "  " : " ";
 
-        my ($flags, $retval, $plain_func, $args, $assertions ) =
+        my ($flags, $ret_type, $plain_func, $args, $assertions ) =
                         @{$embed}{qw(flags return_type name args assertions)};
         if ($flags =~
              m/([^ aA b C dD eE fF h iI mM nN oO pP Rr sS T uU v W xX ; ])/xx)
@@ -4049,7 +4051,7 @@ sub generate_proto_h {
             $need_longs{$plain_func} = $args_assert_line = 1;
         }
 
-        if (! $can_ignore && $retval eq 'void') {
+        if (! $can_ignore && $ret_type eq 'void') {
             warn "It is nonsensical to require the return value of a void"
                . " function ($plain_func) to be checked";
         }
@@ -4087,6 +4089,7 @@ sub generate_proto_h {
                      "$plain_func: flags $flags_str are mutually exclusive\n";
         }
 
+        my $retval = $ret_type;
         my $static_inline = 0;
         if ($static_flag) {
             my $type;
@@ -4121,7 +4124,12 @@ sub generate_proto_h {
                                     && $plain_func !~ /[Pp]erl/;
 
             if ($never_returns) {
-                $retval = "PERL_CALLCONV_NO_RET $retval";
+                if ($ret_type eq 'void') {
+                    $retval = "PERL_CALLCONV_NO_RET $retval";
+                }
+                else {
+                    $retval = "PERL_CALLCONV_NON_VOID_NO_RET($ret_type) $retval";
+                }
             }
             else {
                 $retval = "PERL_CALLCONV $retval";
