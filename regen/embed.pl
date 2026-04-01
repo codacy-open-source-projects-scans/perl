@@ -3890,7 +3890,13 @@ my @az = ('a'..'z');
 my $never_visible_flags= "eX";
 my $never_visible_flags_re = qr/[$never_visible_flags]/;
 
-my $visibility_flags = "ACE$never_visible_flags";
+my $visible_everywhere_flags = "AC";
+my $visible_everywhere_flags_re = qr/[$visible_everywhere_flags]/;
+
+my $visible_outside_core_flags = "E$visible_everywhere_flags";
+my $visible_outside_core_flags_re = qr/[$visible_outside_core_flags]/;
+
+my $visibility_flags = "$visible_outside_core_flags$never_visible_flags";
 my $visibility_flags_re = qr/[$visibility_flags]/;
 
 my $discard_non_visibility_flags_re = qr/[^$visibility_flags]/;
@@ -4041,13 +4047,13 @@ sub generate_proto_h {
         if (! $has_mflag) {
             $args_assert_line = 1;
         }
-        elsif ($has_mpflags && $has_context && $flags =~ /[ACE]/) {
+        elsif ($has_mpflags && $flags =~ $visible_everywhere_flags_re) {
 
             # And assertions are created for the automatically generated
             # functions from macros.  No function is needed unless one has
-            # been requested (p flag), and is needed.  None is needed if there
-            # is no implicit thread context parameter, nor if the macro
-            # doesn't have visibility outside core.
+            # been requested (p flag), and is needed.  None is needed if the
+            # macro is only visible to core and extensions, as no function
+            # gets generated.
             $need_longs{$plain_func} = $args_assert_line = 1;
         }
 
@@ -4056,7 +4062,7 @@ sub generate_proto_h {
                . " function ($plain_func) to be checked";
         }
 
-        if ($flags =~ /[AC]/ && $flags =~ /([EX])/) {
+        if ($flags =~ $visible_everywhere_flags_re && $flags =~ /([EX])/) {
             die_at_end "$plain_func: $1 flag is incompatible with either A"
                      . " or C flags";
         }
@@ -4071,7 +4077,7 @@ sub generate_proto_h {
 
             # Don't generate a prototype for a macro that is not usable by the
             # outside world.
-            next unless $flags =~ /[ACE]/;
+            next unless $flags =~ $visible_outside_core_flags_re;
 
             # Nor one that is weird, which would likely be a syntax error.
             next if $flags =~ /u/;
@@ -4120,7 +4126,7 @@ sub generate_proto_h {
             # prefix available to call it with (in case of name conflicts).
             die_at_end "$plain_func: requires p flag because has A or C flag"
                                     if $flags !~ /p/
-                                    && $flags =~ /[AC]/
+                                    && $flags =~ $visible_everywhere_flags_re
                                     && $plain_func !~ /[Pp]erl/;
 
             if ($never_returns) {
@@ -4671,7 +4677,7 @@ sub embed_h {
         # Macros with [oO] don't appear without a [Pp]erl_ prefix, so nothing
         # to undef
         if ($flags =~ /m/ && $flags !~ /[oO]/) {
-            if ($flags !~ /[ACE]/) {    # No external visibility
+            if ($flags !~ $visible_outside_core_flags_re) {
                 $always_undefs{$func} = 1
                   unless defined $unresolved_visibility_overrides{$func};
             }
@@ -4694,9 +4700,27 @@ sub embed_h {
 
             # Here is the case where the code implements the functionality
             # with a macro, and we're supposed to create a long name synonym
-            # for it.  If there's no thread context, we can just #define the
-            # long name to be equivalent to the short.
-            if ($flags =~ /[T]/) {
+            # for it.  The long name should work even if the XS code
+            # #undefines the short name (this would happen because it
+            # conflicts with their name).  If there's no thread context, the
+            # naive implementation would be to just copy the macro expansion.
+            # But what if that expansion uses a short name that has also been
+            # #undefined?  The only thing that works in all cases is to create
+            # a function named with the long name, and have it call the short
+            # name macro.  XXX The naive approach could still work for
+            # "simple" enough expansions.
+            #
+            # Another thing to consider is that we can't discard the thread
+            # context for elements visible outside core is because of the
+            # possibility of embedding.  Suppose a program contains two
+            # embedded perl instances.  It calls the various long form
+            # functions with whatever thread context it wants.  We can't just
+            # ignore that context, so an actual function needs to be created
+            # to pass the context to.
+            #
+            # But we don't have to worry about collisions for functions that
+            # are visible only to core or its extensions
+            if ($flags =~ /[T]/ && $flags !~ $visible_everywhere_flags_re) {
                 # Yields
                 #   #define Perl_func  func
                 # which works when there is no thread context.
@@ -4704,31 +4728,19 @@ sub embed_h {
             }
             else {
 
-                # Here, there is thread context.  The macro doesn't have an
-                # explicit thread context argument, but the long name will
-                # which is empty on unthreaded builds.  We need to have two
-                # scenarios, one for threaded, and one for not.
-                #
-                # First, create the base argument list by converting the input
-                # argument list to 'a', 'b' ....  This keeps us from having to
-                # worry about all the extra stuff in the input list; stuff
-                # like the type declarations, things like NULLOK, and pointers
-                # '*'.
+                # Here, there is thread context and/or the function is visible
+                # outside the perl coccoon.  We will have to deal with the
+                # arguments.  Create the base argument list by converting the
+                # input argument list to 'a', 'b' ....  This keeps us from
+                # having to worry about all the extra stuff in the input list;
+                # stuff like the type declarations, things like NULLOK, and
+                # pointers '*'.
                 my $argname = 'a';
                 my @stripped_args;
                 push @stripped_args, $argname++ for $args->@*;
                 my $arglist = join ",", @stripped_args;
 
-                # For the unthreaded case, there is no actual thread context
-                # parameter, so the short and long versions are identical.
-                $ret = "#${ind}ifndef USE_THREADS\n"
-                     . indent_define("$full_name($arglist)",
-                                     "$func($arglist)", $ind);
-                # Code below may add an #else, so defer adding the #endif
-
-                # Now handle the threaded case.  We can shortcut for elements
-                # not visible outside core, so split the possibilities.
-                if ($flags =~ /[ACE]/) {
+                if ($flags =~ $visible_everywhere_flags_re) {
 
                     # For elements visible outside core, we need to generate a
                     # function to implement the macro.  This is done elsehwere
@@ -4738,33 +4750,31 @@ sub embed_h {
                     $need_longs{$full_name} = $object;
                 }
                 else {
-                    
-                    # But a macro suffices for core-only elements.  We just
-                    # discard the thread context passed to the long form and
-                    # call the short form macro whose expansion adds it back
-                    # in.
+
+                    # Here, the visibility is restricted so that we don't have
+                    # to worry about the short name getting undefined.  We
+                    # already took care of the case where there isn't a thread
+                    # context.  But here, we have different code handling
+                    # threaded/unthreaded.  For unthreaded, there is no actual
+                    # thread context parameter, so the short and long versions
+                    # are identical.
+                    $ret = "#${ind}ifndef USE_THREADS\n"
+                         . indent_define("$full_name($arglist)",
+                                         "$func($arglist)", $ind)
+                         . "#${ind}else\n";
+
+                    # But for threaded builds, the macro doesn't have an
+                    # explicit thread context argument, but the long name
+                    # does.  We just discard the thread context passed to the
+                    # long form and call the short form macro whose expansion
+                    # adds it back in.
                     my $mTHX_ = "mTHX";
                     $mTHX_ .= ',' if $arglist ne "";
 
-                    # And append this opposite branch
-                    $ret .= "#${ind}else\n"
-                         . indent_define("$full_name($mTHX_$arglist)",
+                    $ret .= indent_define("$full_name($mTHX_$arglist)",
                                          "$func($arglist)", $ind)
-
-                    # The reason we can't discard the thread context for
-                    # elements visible outside core is because of the
-                    # possibility of embedding.  Suppose a program contains
-                    # two embedded perl instances.  It calls the various long
-                    # form functions with whatever thread context it wants.
-                    # We can't just ignore that context, so an actual function
-                    # needs to be created to pass the context to.  However, if
-                    # the function isn't visible outside core, it can't be
-                    # called directly by the embedding code, so the thread
-                    # context is always going to be aTHX, and so can be
-                    # omitted, and the called-macro will add aTHX back in.
-                } 
-
-                $ret .= "#${ind}endif\n";
+                         . "#${ind}endif\n";
+                }
             }
         }
         elsif ($flags !~ /[omM]/) {
