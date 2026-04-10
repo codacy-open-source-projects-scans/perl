@@ -386,7 +386,7 @@ struct regnode_ssc {
 #define set_ANYOF_SYNTHETIC(n)  \
     STMT_START{                 \
         OP(n) = ANYOF;          \
-        NEXT_OFF(n) = 1;        \
+        NEXT_OFF_set(n, 1);     \
     } STMT_END
 
 #define is_ANYOF_SYNTHETIC(n) (REGNODE_TYPE(OP(n)) == ANYOF && NEXT_OFF(n) == 1)
@@ -481,13 +481,19 @@ struct regnode_ssc {
 #undef NEXT_OFF
 #undef NODE_ALIGN
 
-#define NEXT_OFF(p)     ((p)->head.data.next_off)
+#define NEXT_OFF_base(p)((p)->head.data.next_off)
 #define OP(p)           ((p)->head.data.type)
 #define STR_LEN_U8(p)   ((p)->head.data.u_8.str_len_u8)
 #define FIRST_BYTE(p)   ((p)->head.data.u_8.first_byte)
-#define FLAGS(p)        ((p)->head.data.u_8.flags) /* Caution: Doesn't apply to all      \
-                                           regnode types.  For some, it's the \
-                                           character set of the regnode */
+
+/* Caution: Doesn't apply to all regnode types.  For some, it's the character
+ * set of the regnode */
+#define FLAGS(p)        ((p)->head.data.u_8.flags)
+
+#define NEXT_OFF_set(p, v)                                                  \
+                (assert(inRANGE((v), 0, U16_MAX)), NEXT_OFF_base(p) = (v))
+#define NEXT_OFF(p)  PREVENT_LVALUE(NEXT_OFF_base(p))
+
 #define STR_LENs(p)	(assert(OP(p) != LEXACT && OP(p) != LEXACT_REQ8),   \
                                     STR_LEN_U8((struct regnode_string *)p))
 #define STRINGs(p)	(assert(OP(p) != LEXACT && OP(p) != LEXACT_REQ8),   \
@@ -666,7 +672,7 @@ struct regnode_ssc {
 #define FILL_NODE(offset, op)                                           \
     STMT_START {                                                        \
                     OP(REGNODE_p(offset)) = op;                         \
-                    NEXT_OFF(REGNODE_p(offset)) = 0;                    \
+                    NEXT_OFF_set(REGNODE_p(offset), 0);                 \
     } STMT_END
 #define FILL_ADVANCE_NODE(offset, op)                                   \
     STMT_START {                                                        \
