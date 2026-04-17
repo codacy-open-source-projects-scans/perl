@@ -741,7 +741,7 @@ Perl_no_bareword_allowed(pTHX_ OP *o)
 {
     PERL_ARGS_ASSERT_NO_BAREWORD_ALLOWED;
 
-    qerror(mess("Bareword \"%" SVf "\" not allowed while \"strict subs\" in"
+    defer_error(mess("Bareword \"%" SVf "\" not allowed while \"strict subs\" in"
                 " use", SVfARG(cSVOPo_sv)));
     o->op_private &= ~OPpCONST_STRICT; /* prevent warning twice about the same OP */
 }
@@ -771,7 +771,7 @@ Perl_no_bareword_filehandle(pTHX_ const char *fhname)
     PERL_ARGS_ASSERT_NO_BAREWORD_FILEHANDLE;
 
     if (!is_standard_filehandle_name(fhname)) {
-        qerror(mess("Bareword filehandle \"%s\" not allowed under 'no"
+        defer_error(mess("Bareword filehandle \"%s\" not allowed under 'no"
                     " feature \"bareword_filehandles\"'", fhname));
     }
 }
@@ -1100,6 +1100,16 @@ void S_op_clear_gv(pTHX_ OP *o, SV**svp)
     }
 }
 
+/*
+=for apidoc op_clear
+
+Clean up anything allocated for an OP, except the OP itself.
+
+You may want to use L<C<op_null()>|/op_null> or
+L<C<op_free()>|/op_free> instead.
+
+=cut
+*/
 
 void
 Perl_op_clear(pTHX_ OP *o)
@@ -16215,7 +16225,7 @@ Perl_ck_each(pTHX_ OP *o)
                     goto bad;
                 /* FALLTHROUGH */
             default:
-                qerror(mess("Experimental %s on scalar is now forbidden",
+                defer_error(mess("Experimental %s on scalar is now forbidden",
                             PL_op_desc[orig_type]));
                bad:
                 bad_type_pv(1, "hash or array", o, kid);

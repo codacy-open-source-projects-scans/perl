@@ -2206,7 +2206,7 @@ Perl_vfatal_warner(pTHX_ U32 err, const char *pat, va_list *args)
     SV * const msv = vmess(pat, args);
 
     if (PL_parser && PL_parser->error_count) {
-        qerror(msv);
+        defer_error(msv);
     }
     else {
         invoke_exception_hook(msv, FALSE);
@@ -3870,11 +3870,12 @@ Perl_report_evil_fh(pTHX_ const GV *gv)
 void
 Perl_init_tm(pTHX_ struct tm *ptm)	/* see mktime, strftime and asctime */
 {
+    PERL_ARGS_ASSERT_INIT_TM;
+    PERL_UNUSED_CONTEXT;
+
 #ifdef HAS_TM_TM_ZONE
     Time_t now;
     const struct tm* my_tm;
-    PERL_UNUSED_CONTEXT;
-    PERL_ARGS_ASSERT_INIT_TM;
     (void)time(&now);
 
     LOCALTIME_LOCK;
@@ -3883,8 +3884,6 @@ Perl_init_tm(pTHX_ struct tm *ptm)	/* see mktime, strftime and asctime */
         Copy(my_tm, ptm, 1, struct tm);
     LOCALTIME_UNLOCK;
 #else
-    PERL_UNUSED_CONTEXT;
-    PERL_ARGS_ASSERT_INIT_TM;
     PERL_UNUSED_ARG(ptm);
 #endif
 }

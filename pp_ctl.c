@@ -1956,11 +1956,43 @@ Perl_rpp_obliterate_stack_to(pTHX_ I32 ix)
 
 }
 
+/*
+=for apidoc defer_error
+
+Called to report compilation errors, doing one of:
+
+=over
+
+=item *
+
+adding C<err> to C<$@> within an C<eval EXPR>,
+
+=item *
+
+appending C<err> to C<PL_errors>, to be reported when the next
+exception is thrown, or
+
+=item *
+
+by warning, if called early in interpreter construction or late in
+interpreter destruction, when PL_errors isn't available.
+
+=back
+
+and incrementing the parser error count if we're parsing.
+
+This function may throw an exception if too many errors have been
+produced.
+
+This is intended for use during compilation.
+
+=cut
+*/
 
 void
-Perl_qerror(pTHX_ SV *err)
+Perl_defer_error(pTHX_ SV *err)
 {
-    PERL_ARGS_ASSERT_QERROR;
+    PERL_ARGS_ASSERT_DEFER_ERROR;
     if (err!=NULL) {
         if (PL_in_eval) {
             if (PL_in_eval & EVAL_KEEPERR) {

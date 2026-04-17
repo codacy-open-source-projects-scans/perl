@@ -4030,7 +4030,6 @@ sub generate_proto_h {
 
         my @nonnull;
         my $has_depth = ( $flags =~ /W/ );
-        my $has_context = ( $flags !~ /T/ );
         my $never_returns = ( $flags =~ /r/ );
         my $binarycompat = ( $flags =~ /b/ );
         my $has_mflag = ( $flags =~ /m/ );
@@ -4056,6 +4055,11 @@ sub generate_proto_h {
             # gets generated.
             $need_longs{$plain_func} = $args_assert_line = 1;
         }
+
+        # Macros don't have a context parameter unless there is a Perl_ form
+        # generated for them.
+        my $has_context = ($flags !~ /T/ && (   $need_longs{$plain_func}
+                                             || ! $has_mflag));
 
         if (! $can_ignore && $ret_type eq 'void') {
             warn "It is nonsensical to require the return value of a void"
@@ -4146,9 +4150,16 @@ sub generate_proto_h {
         $ret = "";
         $ret .= "$retval\n";
         $ret .= "$func(";
-        if ( $has_context ) {
-            $ret .= @$args ? "pTHX_ " : "pTHX";
+
+        if ($has_context) {
+
+            # Pretend there was an aTHX argument in the first position.
+            unshift $args->@*, "PerlInterpreter* aTHX NN";
+
+            $ret .= "pTHX";
+            $ret .= "_ " if $args->@* > 1;
         }
+
         if (@$args) {
             die_at_end
                     "$plain_func: n flag is contradicted by having arguments"
@@ -4212,7 +4223,7 @@ sub generate_proto_h {
                          . " an EPTR form, MPTR, SPTR), NULLOK, or NZ"
                                                if 0 + $nn + $nz + $nullok > 1;
 
-                    push( @nonnull, $n ) if $nn;
+                    push( @nonnull, $n - $has_context) if $nn;
 
                     # A non-pointer shouldn't have a pointer-related modifier.
                     # But typedefs may be pointers without our knowing it, so
@@ -4239,18 +4250,28 @@ sub generate_proto_h {
                     $temp_arg =~
                               s/ \s* \b ( struct | enum | union ) \b \s*/ /xg;
                     if ( ($temp_arg ne "...")
-                        && ($temp_arg !~ /\w+\s+(\w+)(?:\[\d+\])?\s*$/) ) {
+                        && ($temp_arg !~ /\w+\s+(\w+)(?:\[\d+\])?\s*$/) )
+                    {
                         die_at_end "$func: $arg ($n) doesn't have a name\n";
                     }
                     my $argname = $1;
+                    my $is_aTHX = (   $has_context
+                                   && defined $argname
+                                   && $argname eq 'aTHX' && $n == 1);
 
-                    if (   defined $argname
+                    if ($is_aTHX) {
+                        if ($nn) {
+                            push @asserts,  "Perl_assert_aTHX";
+                            push @attrs, "Perl_attribute_nonnull_aTHX";
+                        }
+                    }
+                    elsif (   defined $argname
                         && ($args_assert_line || $binarycompat))
                     {
                         if ($nn||$nz) {
                             push @asserts, "assert($argname)";
                             if ($nn) {
-                                my $string_n = $n;
+                                my $string_n = $n - $has_context;
                                 $string_n = "pTHX_$string_n" if $has_context;
                                 push @attrs,
                                      "Perl_attribute_nonnull($string_n)";
@@ -4422,6 +4443,7 @@ sub generate_proto_h {
                 }
             }
 
+            shift $args->@* if $has_context;    # Remove implicit aTHX arg
             $ret .= join ", ", @$args;
         }
         else {
@@ -4494,8 +4516,6 @@ sub generate_proto_h {
                      . " f or F flag";
         }
 
-        unshift @attrs, "Perl_attribute_nonnull_aTHX" if $has_context;
-
         if ( @attrs ) {
             $ret .= "\n"
                  .  join( "\n", map { (" " x 8) . $_ } @attrs);
@@ -4566,9 +4586,11 @@ sub generate_proto_h {
         #endif
 
         #if defined(MULTIPLICITY)
-        #  define Perl_attribute_nonnull_aTHX  __attribute__nonnull__(1)
+          #  define Perl_assert_aTHX             assert(aTHX)
+          #  define Perl_attribute_nonnull_aTHX  __attribute__nonnull__(1)
         #else
-        #  define Perl_attribute_nonnull_aTHX
+          #  define Perl_assert_aTHX
+          #  define Perl_attribute_nonnull_aTHX
         #endif
 
         START_EXTERN_C
