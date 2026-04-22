@@ -203,28 +203,36 @@ typedef struct refcounted_he COPHH;
 =for apidoc_item|SV *|cophh_fetch_sv |const COPHH *cophh|        SV *key              |U32 hash|U32 flags
 =for apidoc_flag COPHH_KEY_UTF8
 
-These look up the entry in the cop hints hash C<cophh> with the key specified by
-C<key> (and C<keylen> in the C<pvn> form), returning that value as a mortal
-scalar copy, or C<&PL_sv_placeholder> if there is no value associated with the
-key.
+These each look up the entry in the cop hints hash C<cophh> with the specified
+key, returning that value as a mortal scalar copy, or C<&PL_sv_placeholder> if
+there is no value associated with the key.
 
-The forms differ in how the key is specified.
-In the plain C<pv> form, the key is a C language NUL-terminated string.
-In the C<pvs> form, the key is a C language string literal.
-In the C<pvn> form, an additional parameter, C<keylen>, specifies the length of
-the string, which hence, may contain embedded-NUL characters.
-In the C<sv> form, C<*key> is an SV, and the key is the PV extracted from that.
-using C<L</SvPV_const>>.
+You should probably be instead using the wrappers for these functions that take
+a C<COP*>, see L</cop_hints_fetch_pv>.
+
+The forms here differ only in how the key is specified.
+
+In C<cophh_fetch_pv>, C<key> is a C language NUL-terminated string.
+
+In C<cophh_fetch_pvs>, C<key> is a C language string literal, enclosed in
+double quotes.
+
+In C<cophh_fetch_pvn>, C<key> points to the first byte of the string
+specifying the key, and an additional parameter, C<keylen>, specifies its
+length in bytes.  Hence, C<key> may contain embedded-NUL characters.
+
+In C<cophh_fetch_sv>, C<*key> is an SV, and the key is the PV extracted from
+that.  using C<L</SvPV_const>>.
 
 C<hash> is a precomputed hash of the key string, or zero if it has not been
-precomputed.  This parameter is omitted from the C<pvs> form, as it is computed
-automatically at compile time.
+precomputed.  This parameter is omitted from C<cophh_fetch_pvs>, which behaves
+as if zero had been specified.
 
 The only flag currently used from the C<flags> parameter is C<COPHH_KEY_UTF8>.
-It is illegal to set this in the C<sv> form.  In the C<pv*> forms, it specifies
-whether the key octets are interpreted as UTF-8 (if set) or as Latin-1 (if
-cleared).  The C<sv> form uses the underlying SV to determine the UTF-8ness of
-the octets.
+It is illegal to set this in C<cophh_fetch_sv>.  In the C<pv*> forms, it
+specifies whether the key octets are interpreted as UTF-8 (if set) or as
+Latin-1 (if cleared).  The C<sv> form uses the underlying SV to determine the
+UTF-8ness of the octets.
 
 =cut
 
@@ -247,29 +255,40 @@ the octets.
                                       (flags & COPHH_KEY_UTF8))
 
 /*
-=for apidoc Amx|bool|cophh_exists_pvn|const COPHH *cophh|const char *key|STRLEN keylen|U32 hash|U32 flags
+=for apidoc  Amx|bool|cophh_exists_pv |const COPHH *cophh|const char *key              |U32 hash|U32 flags
+=for apidoc_item|bool|cophh_exists_pvn|const COPHH *cophh|const char *key|STRLEN keylen|U32 hash|U32 flags
+=for apidoc_item|bool|cophh_exists_pvs|const COPHH *cophh|           "key"                      |U32 flags
+=for apidoc_item|bool|cophh_exists_sv |const COPHH *cophh|        SV *key              |U32 hash|U32 flags
 
-These look up the hint entry in the cop C<cop> with the key specified by
-C<key> (and C<keylen> in the C<pvn> form), returning true if a value exists,
-and false otherwise.
+These each look up the entry in the cop hints hash C<cophh> with the specified
+key, returning true if a value exists, and false otherwise.
 
-The forms differ in how the key is specified.
-In the plain C<pv> form, the key is a C language NUL-terminated string.
-In the C<pvs> form, the key is a C language string literal.
-In the C<pvn> form, an additional parameter, C<keylen>, specifies the length of
-the string, which hence, may contain embedded-NUL characters.
-In the C<sv> form, C<*key> is an SV, and the key is the PV extracted from that.
-using C<L</SvPV_const>>.
+You should probably be instead using the wrappers for these functions that take
+a C<COP*>, see L</cop_hints_exists_pv>.
+
+The forms here differ only in how the key is specified.
+
+In C<cophh_exists_pv>, C<key> is a C language NUL-terminated string.
+
+In C<cophh_exists_pvs>, C<key> is a C language string literal, enclosed in
+double quotes.
+
+In C<cophh_exists_pvn>, C<key> points to the first byte of the string
+specifying the key, and an additional parameter, C<keylen>, specifies its
+length in bytes.  Hence, C<key> may contain embedded-NUL characters.
+
+In C<cophh_exists_sv>, C<*key> is an SV, and the key is the PV extracted from
+that.  using C<L</SvPV_const>>.
 
 C<hash> is a precomputed hash of the key string, or zero if it has not been
-precomputed.  This parameter is omitted from the C<pvs> form, as it is computed
-automatically at compile time.
+precomputed.  This parameter is omitted from C<cophh_exists_pvs>, which behaves
+as if zero had been specified.
 
 The only flag currently used from the C<flags> parameter is C<COPHH_KEY_UTF8>.
-It is illegal to set this in the C<sv> form.  In the C<pv*> forms, it specifies
-whether the key octets are interpreted as UTF-8 (if set) or as Latin-1 (if
-cleared).  The C<sv> form uses the underlying SV to determine the UTF-8ness of
-the octets.
+It is illegal to set this in C<cophh_exists_sv>.  In the C<pv*> forms, it
+specifies whether the key octets are interpreted as UTF-8 (if set) or as
+Latin-1 (if cleared).  The C<sv> form uses the underlying SV to determine the
+UTF-8ness of the octets.
 
 =cut
 */
@@ -336,30 +355,36 @@ Generate and return a fresh cop hints hash containing no entries.
 =for apidoc_item|COPHH *|cophh_store_pvs|COPHH *cophh|           "key"                      |SV *value|U32 flags
 =for apidoc_item|COPHH *|cophh_store_sv |COPHH *cophh|        SV *key              |U32 hash|SV *value|U32 flags
 
-These store a value, associated with a key, in the cop hints hash C<cophh>,
-and return the modified hash.  The returned hash pointer is in general
-not the same as the hash pointer that was passed in.  The input hash is
-consumed by the function, and the pointer to it must not be subsequently
-used.  Use L</cophh_copy> if you need both hashes.
+These each store a value associated with the specified key.  The value is
+stored into the cop hints hash C<cophh>, and a pointer to the modified
+structure returned.  The returned pointer is in general not the same as the
+pointer that was passed in.  The input C<cophh> is consumed by the function,
+and the pointer to it must not be subsequently used.  Use L</cophh_copy> first
+if you need both structures.
 
 C<value> is the scalar value to store for this key.  C<value> is copied
 by these functions, which thus do not take ownership of any reference
 to it, and hence later changes to the scalar will not be reflected in the value
-visible in the cop hints hash.  Complex types of scalar will not be stored with
+visible in C<cophh>.  Complex types of scalar will not be stored with
 referential integrity, but will be coerced to strings.
 
-The forms differ in how the key is specified.  In all forms, the key is pointed
-to by C<key>.
-In the plain C<pv> form, the key is a C language NUL-terminated string.
-In the C<pvs> form, the key is a C language string literal.
-In the C<pvn> form, an additional parameter, C<keylen>, specifies the length of
-the string, which hence, may contain embedded-NUL characters.
-In the C<sv> form, C<*key> is an SV, and the key is the PV extracted from that.
-using C<L</SvPV_const>>.
+The forms differ only in how the key is specified.
+
+In C<cophh_store_pv>, C<key> is a C language NUL-terminated string.
+
+In C<cophh_store_pvs>, C<key> is a C language string literal, enclosed in
+double quotes.
+
+In C<cophh_store_pvn>, C<key> points to the first byte of the string
+specifying the key, and an additional parameter, C<keylen>, specifies its
+length in bytes.  Hence, C<key> may contain embedded-NUL characters.
+
+In C<cophh_store_sv>, C<*key> is an SV, and the key is the PV extracted from
+that, using C<L</SvPV_const>>.
 
 C<hash> is a precomputed hash of the key string, or zero if it has not been
-precomputed.  This parameter is omitted from the C<pvs> form, as it is computed
-automatically at compile time.
+precomputed.  This parameter is omitted from C<cophh_store_pvs>, which behaves
+as if zero had been specified.
 
 The only flag currently used from the C<flags> parameter is C<COPHH_KEY_UTF8>.
 It is illegal to set this in the C<sv> form.  In the C<pv*> forms, it specifies
@@ -388,24 +413,31 @@ the octets.
 =for apidoc_item|COPHH *|cophh_delete_pvs|COPHH *cophh|           "key"                      |U32 flags
 =for apidoc_item|COPHH *|cophh_delete_sv |COPHH *cophh|        SV *key              |U32 hash|U32 flags
 
-These delete a key and its associated value from the cop hints hash C<cophh>,
-and return the modified hash.  The returned hash pointer is in general
-not the same as the hash pointer that was passed in.  The input hash is
-consumed by the function, and the pointer to it must not be subsequently
-used.  Use L</cophh_copy> if you need both hashes.
+These each delete a key and its associated value from the cop hints hash
+C<cophh>, and return a pointer to the modified structure.  The returned pointer
+is in general not the same as the pointer that was passed in.  The input
+C<cophh> is consumed by the function, and the pointer to it must not be
+subsequently used.
 
-The forms differ in how the key is specified.  In all forms, the key is pointed
-to by C<key>.
-In the plain C<pv> form, the key is a C language NUL-terminated string.
-In the C<pvs> form, the key is a C language string literal.
-In the C<pvn> form, an additional parameter, C<keylen>, specifies the length of
-the string, which hence, may contain embedded-NUL characters.
-In the C<sv> form, C<*key> is an SV, and the key is the PV extracted from that.
-using C<L</SvPV_const>>.
+Use L</cophh_copy> first if you need both structures.
+
+The forms differ only in how the key is specified.
+
+In C<cophh_delete_pv>, C<key> is a C language NUL-terminated string.
+
+In C<cophh_delete_pvs>, C<key> is a C language string literal, enclosed in
+double quotes.
+
+In C<cophh_delete_pvn>, C<key> points to the first byte of the string
+specifying the key, and an additional parameter, C<keylen>, specifies its
+length in bytes.  Hence, C<key> may contain embedded-NUL characters.
+
+In C<cophh_delete_sv>, C<*key> is an SV, and the key is the PV extracted from
+that.  using C<L</SvPV_const>>.
 
 C<hash> is a precomputed hash of the key string, or zero if it has not been
-precomputed.  This parameter is omitted from the C<pvs> form, as it is computed
-automatically at compile time.
+precomputed.  This parameter is omitted from C<cophh_delete_pvs>, which behaves
+as if zero had been specified.
 
 The only flag currently used from the C<flags> parameter is C<COPHH_KEY_UTF8>.
 It is illegal to set this in the C<sv> form.  In the C<pv*> forms, it specifies
