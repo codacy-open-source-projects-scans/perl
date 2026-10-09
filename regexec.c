@@ -215,6 +215,15 @@ static void S_setup_eval_state(pTHX_ regmatch_info *const reginfo);
 static void S_cleanup_regmatch_info_aux(pTHX_ void *arg);
 static regmatch_state * S_push_slab(pTHX);
 
+enum {
+    /* The original subbeg state existed before we pointed RXp_SUBBEG at the
+     * current string for /(?{...})/. */
+    EVAL_STATE_HAS_SUBBEG    = 0x01,
+    /* The original subbeg state owned its buffer directly, as opposed to
+     * keeping it alive via saved_copy. */
+    EVAL_STATE_SUBBEG_COPIED = 0x02
+};
+
 #define REGCP_OTHER_ELEMS 3
 #define REGCP_FRAME_ELEMS 1
 /* REGCP_FRAME_ELEMS are not part of the REGCP_OTHER_ELEMS and
@@ -1004,8 +1013,6 @@ Perl_re_intuit_start(pTHX_
     reginfo->strend = strend;
     reginfo->is_utf8_pat = cBOOL(RX_UTF8(rx));
     reginfo->intuit = 1;
-    /* not actually used within intuit, but zero for safety anyway */
-    reginfo->poscache_maxiter = 0;
     reginfo->prog = NULL;
     reginfo->sv = NULL;
     reginfo->warned = false;
@@ -1088,20 +1095,25 @@ Perl_re_intuit_start(pTHX_
              * caller will have set strpos = pos()-4; we look for the substr
              * at position pos()-4+1, which lines up with the "a" */
 
-            if (prog->check_offset_min == prog->check_offset_max) {
+            SV *anchored_sv = utf8_target ? prog->anchored_utf8
+                                       : prog->anchored_substr;
+
+            if (anchored_sv) {
                 /* Substring at constant offset from beg-of-str... */
-                SSize_t slen = SvCUR(check);
-                char *s = HOP3c(strpos, prog->check_offset_min, strend);
+
+                SSize_t slen = SvCUR(anchored_sv);
+                SSize_t offset = prog->substrs->data[0].min_offset;
+                char *s = HOP3c(strpos, offset, strend);
 
                 DEBUG_EXECUTE_r(re_printf(
-                    "  Looking for check substr at fixed offset %" IVdf "...\n",
-                    (IV)prog->check_offset_min));
+                    "  Looking for anchored substr at fixed offset %" IVdf "...\n",
+                    (IV)offset));
 
-                if (SvTAIL(check)) {
+                if (SvTAIL(anchored_sv)) {
                     /* In this case, the regex is anchored at the end too.
                      * Unless it's a multiline match, the lengths must match
                      * exactly, give or take a \n.  NB: slen >= 1 since
-                     * the last char of check is \n */
+                     * the last char of anchored is \n */
                     if (!multiline
                         && (   strend - s > slen
                             || strend - s < slen - 1
@@ -1115,8 +1127,8 @@ Perl_re_intuit_start(pTHX_
                     slen--;
                 }
                 if (slen && (strend - s < slen
-                    || *SvPVX_const(check) != *s
-                    || (slen > 1 && (memNE(SvPVX_const(check), s, slen)))))
+                    || *SvPVX_const(anchored_sv) != *s
+                    || (slen > 1 && (memNE(SvPVX_const(anchored_sv), s, slen)))))
                 {
                     DEBUG_EXECUTE_r(re_printf(
                                     "  String not equal...\n"));
@@ -1801,11 +1813,21 @@ Perl_re_intuit_start(pTHX_
 
 /* 'uscan' is set to foldbuf, and incremented, so below the end of uscan is
  * 'foldbuf+sizeof(foldbuf)' */
-#define REXEC_TRIE_READ_CHAR(trie_type, trie, widecharmap, uc, uc_end,      \
-                             uscan, len, uvc, charid, foldlen, foldbuf,     \
-                             uniflags)                                      \
+#define REXEC_TRIE_READ_CHAR(trie_type, trie, uc, uc_end,                  \
+                             uscan, len, uvc, octet, foldlen, foldbuf,      \
+                             uniflags, octet_scan, octets_remaining,       \
+                             octet_buffer)                                 \
 STMT_START {                                                                \
     STRLEN skiplen;                                                         \
+    if (TRIE_RAW_INPUT_MODE(trie, utf8_target)) {                            \
+        uvc = (U8)*uc;                                                       \
+        octet = uvc;                                                         \
+        len = 1;                                                             \
+    } else if (octets_remaining > 0) {                                       \
+        octet = *octet_scan++;                                               \
+        octets_remaining--;                                                  \
+        len = 0;                                                             \
+    } else {                                                                 \
     U8 flags = FOLD_FLAGS_FULL;                                             \
     switch (trie_type) {                                                    \
     case trie_flu8:                                                         \
@@ -1872,18 +1894,24 @@ STMT_START {                                                                \
         uvc = (UV)*uc;                                                      \
         len = 1;                                                            \
     }                                                                       \
-    if (uvc < 256) {                                                        \
-        charid = trie->charmap[ uvc ];                                      \
-    }                                                                       \
-    else {                                                                  \
-        charid = 0;                                                         \
-        if (widecharmap) {                                                  \
-            SV** const svpp = hv_fetch(widecharmap,                         \
-                        (char*)&uvc, sizeof(UV), 0);                        \
-            if (svpp)                                                       \
-                charid = (U16)SvIV(*svpp);                                  \
+    {                                                                       \
+        const native_octet_utf8_t *native_octet;                            \
+        U8 *end;                                                            \
+        if (!utf8_target && FITS_IN_8_BITS(uvc)) {                          \
+            /* Non-UTF-8 input is a native octet.  Use its cached UTF-8     \
+             * representation for the trie transition stream. */            \
+            native_octet = &PL_native_octet_utf8[(U8)uvc];                 \
+            octet = native_octet->bytes[0];                                 \
+            octet_scan = native_octet->bytes + 1;                           \
+            octets_remaining = native_octet->len - 1;                       \
+        } else {                                                            \
+            end = uvchr_to_utf8(octet_buffer, uvc);                         \
+            octet = octet_buffer[0];                                        \
+            octet_scan = octet_buffer + 1;                                  \
+            octets_remaining = (STRLEN)(end - octet_buffer - 1);            \
         }                                                                   \
     }                                                                       \
+    }                                                                        \
 } STMT_END
 
 #define DUMP_EXEC_POS(li,s,doutf8,depth)                    \
@@ -2379,8 +2407,20 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
       case NANYOFM_t8_p8: /* UTF-8ness does matter because can match UTF-8
                                   variants. */
         REXEC_FBC_UTF8_FIND_NEXT_SCAN(
-                        (char *) find_span_end_mask((U8 *) s, (U8 *) strend,
-                                                    (U8) ARG1u(c), FLAGS(c)));
+            (char *) find_span_end_mask((U8 *) s, (U8 *) strend,
+                                        (U8) ARG1u(c), FLAGS(c)));
+        break;
+
+      case NEXACTb_tb_pb:
+      case NEXACTb_tb_p8:
+        REXEC_FBC_NON_UTF8_FIND_NEXT_SCAN(
+           find_span_end((U8 *) s, (U8 *) strend, (U8) ARG1u(c)));
+        break;
+
+      case NEXACTb_t8_pb:
+      case NEXACTb_t8_p8:
+        REXEC_FBC_UTF8_CLASS_SCAN(
+           ! (UTF8SKIP(s) == 1 && (U8) *s == (U8) ARG1u(c)));
         break;
 
       /* These nodes all require at least one code point to be in UTF-8 to
@@ -3243,10 +3283,6 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
         }
         break;
 
-      case AHOCORASICKC_tb_pb:
-      case AHOCORASICKC_tb_p8:
-      case AHOCORASICKC_t8_pb:
-      case AHOCORASICKC_t8_p8:
       case AHOCORASICK_tb_pb:
       case AHOCORASICK_tb_p8:
       case AHOCORASICK_t8_pb:
@@ -3254,9 +3290,8 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
         {
             DECL_TRIE_TYPE(c);
             /* what trie are we using right now */
-            reg_ac_data *aho = (reg_ac_data*)progi->data->data[ ARG1u( c ) ];
+            reg_ac_data *aho = (reg_ac_data*)progi->data->data[ TRIE_DATA_SLOT(c) ];
             reg_trie_data *trie = (reg_trie_data*)progi->data->data[aho->trie];
-            HV *widecharmap = MUTABLE_HV(progi->data->data[ aho->trie + 1 ]);
 
             const char *last_start = strend - trie->minlen;
 #ifdef DEBUGGING
@@ -3280,7 +3315,9 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
             bool used_heap = false;
 
             U8 foldbuf[ UTF8_MAXBYTES_CASE + 1 ];
-            U8 *bitmap = NULL;
+            U8 octet_buffer[ UTF8_MAXBYTES_CASE + 1 ];
+            const U8 *octet_scan = NULL;
+            STRLEN octets_remaining = 0;
             U8 **points_heap = NULL;
 
             DECLARE_AND_GET_RE_DEBUG_FLAGS;
@@ -3297,14 +3334,8 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
                 points = points_heap;
             }
 
-            if ( trie_type != trie_utf8_fold
-                 && (trie->bitmap || OP(c)==AHOCORASICKC) )
-            {
-                if (trie->bitmap)
-                    bitmap = (U8*)trie->bitmap;
-                else
-                    bitmap = (U8*)ANYOF_BITMAP(c);
-            }
+            /* Trie start-byte filtering is temporarily disabled while the
+             * post-prefix-extraction start state is being validated. */
             /* this is the Aho-Corasick algorithm modified a touch
                to include special handling for long "unknown char" sequences.
                The basic idea being that we use AC as long as we are dealing
@@ -3323,7 +3354,7 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
             while (s <= last_start) {
                 const U32 uniflags = UTF8_ALLOW_DEFAULT;
                 U8 *uc = (U8*)s;
-                U16 charid = 0;
+                U32 octet;
                 U32 base = 1;
                 U32 state = 1;
                 UV uvc = 0;
@@ -3336,38 +3367,12 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 #endif
                 U32 pointpos = 0;
 
-                while ( state && uc <= (U8*)strend ) {
+                while (state && (foldlen || octets_remaining
+                                 || uc < (U8*)strend)) {
                     bool failed = false;
                     U32 word = aho->states[ state ].wordnum;
 
                     if( state == 1 ) {
-                        if ( bitmap ) {
-                            DEBUG_TRIE_EXECUTE_r(
-                                if (  uc <= (U8*)last_start
-                                    && !BITMAP_TEST(bitmap,*uc) )
-                                {
-                                    dump_exec_pos( (char *)uc, c, strend,
-                                        real_start,
-                                        (char *)uc, utf8_target, 0 );
-                                    re_printf(
-                                        " Scanning for legal start char...\n");
-                                }
-                            );
-                            if (utf8_target) {
-                                while (  uc <= (U8*)last_start
-                                       && !BITMAP_TEST(bitmap,*uc) )
-                                {
-                                    uc += UTF8SKIP(uc);
-                                }
-                            } else {
-                                while (  uc <= (U8*)last_start
-                                       && ! BITMAP_TEST(bitmap,*uc) )
-                                {
-                                    uc++;
-                                }
-                            }
-                            s = (char *)uc;
-                        }
                         if (uc >(U8*)last_start) break;
                     }
 
@@ -3381,28 +3386,25 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
                         if (base == 0) break;
 
                     }
-                    points[pointpos++ % maxlen]= uc;
-                    if (foldlen || uc < (U8*)strend) {
-                        REXEC_TRIE_READ_CHAR(trie_type, trie, widecharmap, uc,
-                                             (U8 *) strend, uscan, len, uvc,
-                                             charid, foldlen, foldbuf,
-                                             uniflags);
-                        DEBUG_TRIE_EXECUTE_r({
-                            dump_exec_pos( (char *)uc, c, strend,
-                                        real_start, s, utf8_target, 0);
-                            re_printf(
-                                "%sAHOC: Chid:0x%-2" UVXf " CP:0x%-4" UVXf " ",
-                                 PL_colors[4], (UV)charid, uvc);
-                            if (isPRINT_A(uvc))
-                                re_printf("'%c' ", (int)uvc );
-                            else
-                                re_printf("    " ); /* four spaces to match "'x' " */
-                        });
-                    }
-                    else {
-                        len = 0;
-                        charid = 0;
-                    }
+                    if (!octets_remaining \
+                            && (!utf8_target || !UTF8_IS_CONTINUATION(*uc)))
+                        points[pointpos++ % maxlen]= uc;
+                    REXEC_TRIE_READ_CHAR(trie_type, trie, uc,
+                                         (U8 *) strend, uscan, len, uvc,
+                                         octet, foldlen, foldbuf,
+                                         uniflags, octet_scan,
+                                         octets_remaining, octet_buffer);
+                    DEBUG_TRIE_EXECUTE_r({
+                        dump_exec_pos( (char *)uc, c, strend,
+                                    real_start, s, utf8_target, 0);
+                        re_printf(
+                            "%sAHOC: Octet:0x%-2" UVXf " CP:0x%-4" UVXf " ",
+                             PL_colors[4], (UV)octet, uvc);
+                        if (isPRINT_A(uvc))
+                            re_printf("'%c' ", (int)uvc );
+                        else
+                            re_printf("    " ); /* four spaces to match "'x' " */
+                    });
 
 
                     do {
@@ -3422,17 +3424,11 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
                                 (UV)state, (UV)word);
                         });
                         if ( base ) {
-                            U32 tmp;
-                            I32 offset;
-                            if (charid &&
-                                 ( ((offset = base + charid
-                                    - 1 - trie->uniquecharcount)) >= 0)
-                                 && ((U32)offset < trie->lasttrans)
-                                 && trie->trans[offset].check == state
-                                 && (tmp = trie->trans[offset].next))
+                            const U32 offset = base + octet;
+                            if (trie->trans[offset].check == state)
                             {
                                 failed = false;
-                                state = tmp;
+                                state = trie->trans[offset].next;
                                 DEBUG_TRIE_EXECUTE_r(
                                     re_printf(" - good -> St:%#-6" UVxf "%s\n",
                                         (UV)state, PL_colors[5]));
@@ -3653,29 +3649,30 @@ S_reg_set_capture_string(pTHX_ REGEXP * const rx,
             RXp_SUBOFFSET(prog) = min;
             RXp_SUBLEN(prog) = sublen;
             RXp_MATCH_COPIED_on(prog);
-        }
-        RXp_SUBCOFFSET(prog) = RXp_SUBOFFSET(prog);
-        if (RXp_SUBOFFSET(prog) && utf8_target) {
-            /* Convert byte offset to chars.
-             * XXX ideally should only compute this if @-/@+
-             * has been seen, a la PL_sawampersand ??? */
 
-            /* If there's a direct correspondence between the
-             * string which we're matching and the original SV,
-             * then we can use the utf8 len cache associated with
-             * the SV. In particular, it means that under //g,
-             * sv_pos_b2u() will use the previously cached
-             * position to speed up working out the new length of
-             * subcoffset, rather than counting from the start of
-             * the string each time. This stops
-             *   $x = "\x{100}" x 1E6; 1 while $x =~ /(.)/g;
-             * from going quadratic */
-            if (SvPOKp(sv) && SvPVX(sv) == strbeg)
-                RXp_SUBCOFFSET(prog) = sv_pos_b2u_flags(sv, RXp_SUBCOFFSET(prog),
-                                                SV_GMAGIC|SV_CONST_RETURN);
-            else
-                RXp_SUBCOFFSET(prog) = utf8_length((U8*)strbeg,
-                                    (U8*)(strbeg+RXp_SUBOFFSET(prog)));
+            RXp_SUBCOFFSET(prog) = RXp_SUBOFFSET(prog);
+            if (RXp_SUBOFFSET(prog) && utf8_target) {
+                /* Convert byte offset to chars.
+                 * XXX ideally should only compute this if @-/@+
+                 * has been seen, a la PL_sawampersand ??? */
+
+                /* If there's a direct correspondence between the
+                 * string which we're matching and the original SV,
+                 * then we can use the utf8 len cache associated with
+                 * the SV. In particular, it means that under //g,
+                 * sv_pos_b2u() will use the previously cached
+                 * position to speed up working out the new length of
+                 * subcoffset, rather than counting from the start of
+                 * the string each time. This stops
+                 *   $x = "\x{100}" x 1E6; 1 while $x =~ /(.)/g;
+                 * from going quadratic */
+                if (SvPOKp(sv) && SvPVX(sv) == strbeg)
+                    RXp_SUBCOFFSET(prog) = sv_pos_b2u_flags(sv, RXp_SUBCOFFSET(prog),
+                                                    SV_GMAGIC|SV_CONST_RETURN);
+                else
+                    RXp_SUBCOFFSET(prog) = utf8_length((U8*)strbeg,
+                                        (U8*)(strbeg+RXp_SUBOFFSET(prog)));
+            }
         }
     }
     else {
@@ -3689,6 +3686,15 @@ S_reg_set_capture_string(pTHX_ REGEXP * const rx,
 
 
 
+
+static void
+S_clear_offs_spare(pTHX_ void *arg)
+{
+    PERL_ARGS_ASSERT_CLEAR_OFFS_SPARE;
+
+    regexp *prog = (regexp *)arg;
+    prog->offs_spare_used = FALSE;
+}
 
 /*
  - regexec_flags - match a regexp against a string
@@ -3723,6 +3729,7 @@ Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, char *strend,
     regmatch_info reginfo_buf __attribute__uninitialized__;
     regmatch_info *const reginfo = &reginfo_buf;
     regexp_paren_pair *swap = NULL;
+    bool offs_spare_used = FALSE;
     I32 oldsave;
     DECLARE_AND_GET_RE_DEBUG_FLAGS;
 
@@ -3874,12 +3881,13 @@ Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, char *strend,
     reginfo->is_utf8_pat = cBOOL(RX_UTF8(rx));
     reginfo->warned = false;
     reginfo->sv = sv;
-    reginfo->poscache_maxiter = 0; /* not yet started a countdown */
     /* see how far we have to get to not match where we matched before */
     reginfo->till = stringarg + minend;
 
     /* zero for safety */
     reginfo->info_aux = NULL;
+
+    progi->depth++;
 
     if (prog->extflags & RXf_EVAL_SEEN && SvPADTMP(sv)) {
         /* SAVEFREESV, not sv_mortalcopy, as this SV must last until after
@@ -3931,7 +3939,7 @@ Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, char *strend,
 
         reginfo->info_aux->old_regmatch_state = old_regmatch_state;
         reginfo->info_aux->old_regmatch_slab  = old_regmatch_slab;
-        reginfo->info_aux->poscache = NULL;
+        reginfo->info_aux->rexi = progi;
 
         SAVEDESTRUCTOR_X(S_cleanup_regmatch_info_aux, reginfo->info_aux);
 
@@ -3941,18 +3949,78 @@ Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, char *strend,
             reginfo->info_aux_eval = reginfo->info_aux->info_aux_eval = NULL;
     }
 
+    if (progi->slc_whilem_seen) {
+        /* Allocate array of cache pointers / countdowns for the
+         * super-linear cache; or if already present, zero its countdowns.
+         * Once allocated, it is permanently attached to the
+         * regex_internal struct. Except that on recursion, a new one
+         * is allocated and freed on every run.
+         */
+        struct slc_cache_item *slc = progi->depth > 1 ? NULL : progi->slc;
+        if (slc) {
+#ifdef DEBUGGING
+            for (U8 i = 0; i < progi->slc_whilem_seen; i++)
+                assert(!slc[i].slc_bitmap);
+#endif
+            Zero(slc, progi->slc_whilem_seen, struct slc_cache_item);
+        }
+        else {
+            Newxz(slc, progi->slc_whilem_seen, struct slc_cache_item);
+            if (progi->depth == 1)
+                progi->slc = slc; /* keep for future matches */
+        }
+        reginfo->info_aux->slc = slc;
+    }
+    else
+        reginfo->info_aux->slc = NULL;
+
     if (PL_curpm && (PM_GETRE(PL_curpm) == rx)) {
         /* We have to be careful. If the previous successful match
            was from this regex we don't want a subsequent partially
            successful match to clobber the old results.
-           So when we detect this possibility we add a swap buffer
-           to the re, and switch the buffer each match. If we fail,
-           we switch it back; otherwise we leave it swapped.
+
+           So when we detect this possibility we use a swap buffer
+           and revert back to the original buffer if the match fails.
         */
         swap = RXp_OFFSp(prog);
-        /* avoid leak if we die, or clean up anyway if match completes */
-        SAVEFREEPV(swap);
-        Newxz(RXp_OFFSp(prog), (prog->nparens + 1), regexp_paren_pair);
+        if (UNLIKELY(prog->offs_spare_used)) {
+            /* This regex is re-entering. The number of swap buffers needed
+             * is not statically determinable, so heap allocations are
+             * unavoidable. */
+            SAVEFREEPV(swap);
+            Newx(RXp_OFFSp(prog), (prog->nparens + 1), regexp_paren_pair);
+        } else {
+            /* This regex is not re-entering (at least, not yet), so
+             * only one swap buffer is needed and this is kept as a
+             * regex-local spare. This means that code like:
+             *     while ($x =~ /(.)/g) { ... }
+             * does not do a calloc+free in every loop iteration.*/
+            regexp_paren_pair * const old_offs_spare = prog->offs_spare;
+            prog->offs_spare = swap; /* Stash the successful match offs */
+            prog->offs_spare_used = TRUE;
+            offs_spare_used = TRUE;
+            SAVEDESTRUCTOR_X(S_clear_offs_spare, prog);
+
+            if (old_offs_spare) {
+                /* Nice! There is already a buffer ready to use. */
+                RXp_OFFSp(prog) = old_offs_spare;
+            } else {
+                /* Lazily allocate the per-regex spare buffer. */
+                Newx(RXp_OFFSp(prog), (prog->nparens + 1), regexp_paren_pair);
+            }
+        }
+
+        /* Initialize in the same way that S_regtry does it. */
+        if (prog->nparens) {
+            regexp_paren_pair *pp = RXp_OFFSp(prog);
+            I32 i;
+            for (i = prog->nparens; i > 0; i--) {
+                ++pp;
+                pp->start = -1;
+                pp->end = -1;
+            }
+        }
+
         DEBUG_BUFFERS_r(re_exec_indentf(
             "rex = 0x%" UVxf " saving  offs: orig = 0x%" UVxf " new = 0x%" UVxf "\n",
             0,
@@ -4028,8 +4096,6 @@ Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, char *strend,
 
     if ((prog->anchored_substr || prog->anchored_utf8) && prog->intflags & PREGf_SKIP) {
         /* we have /x+whatever/ */
-        /* it must be a one character string (XXXX Except is_utf8_pat?) */
-        char ch;
 #ifdef DEBUGGING
         int did_match = 0;
 #endif
@@ -4037,14 +4103,26 @@ Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, char *strend,
             if (! prog->anchored_utf8) {
                 to_utf8_substr(prog);
             }
-            ch = SvPVX_const(prog->anchored_utf8)[0];
+
+            const char * const ch = SvPVX_const(prog->anchored_utf8);
+            const STRLEN ch_bytes = UTF8SKIP(ch);
+            assert(ch_bytes <= (STRLEN)(strend - s));
+
             REXEC_FBC_UTF8_SCAN(
-                if (*s == ch) {
+                if (ch_bytes <= (STRLEN)(strend - s)
+                    && *s == *ch                     /* Did the first byte match? */
+                    && (ch_bytes == 1                /* and it's not a multi-byte char */
+                        || memEQ(s, ch, ch_bytes)    /* or else the whole char matches */
+                       )
+                ) {
                     DEBUG_EXECUTE_r( did_match = 1 );
                     if (regtry(reginfo, &s)) goto got_it;
-                    s += UTF8_SAFE_SKIP(s, strend);
-                    while (s < strend && *s == ch)
-                        s += UTF8SKIP(s);
+                    /* No match at this x, skip this run of x's */
+                    s += ch_bytes;
+                    while (ch_bytes <= (STRLEN)(strend - s)
+                           && *s == *ch
+                           && memEQ(s + 1, ch + 1, ch_bytes - 1))
+                        s += ch_bytes;
                 }
             );
 
@@ -4055,7 +4133,7 @@ Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, char *strend,
                     NON_UTF8_TARGET_BUT_UTF8_REQUIRED(phooey);
                 }
             }
-            ch = SvPVX_const(prog->anchored_substr)[0];
+            const char ch = SvPVX_const(prog->anchored_substr)[0];
             REXEC_FBC_NON_UTF8_SCAN(
                 if (*s == ch) {
                     DEBUG_EXECUTE_r( did_match = 1 );
@@ -4360,19 +4438,28 @@ Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, char *strend,
 
     if (swap) {
         /* we failed :-( roll it back.
-         * Since the swap buffer will be freed on scope exit which follows
-         * shortly, restore the old captures by copying 'swap's original
-         * data to the new offs buffer
+         * Restore the old captures by copying 'swap's original data to
+         * the new offs buffer. The regex-local offs_spare will be
+         * retained, any heap allocated swaps will be freed on scope
+         * exit which follows shortly.
          */
         DEBUG_BUFFERS_r(re_exec_indentf(
-            "rex = 0x%" UVxf " rolling back offs: 0x%" UVxf " will be freed; restoring data to =0x%" UVxf "\n",
+            "rex = 0x%" UVxf " rolling back offs: 0x%" UVxf " %s; restoring data to =0x%" UVxf "\n",
             0,
             PTR2UV(prog),
             PTR2UV(RXp_OFFSp(prog)),
+            offs_spare_used ? "kept as offs_spare" : "will be freed",
             PTR2UV(swap)
         ));
 
-        Copy(swap, RXp_OFFSp(prog), prog->nparens + 1, regexp_paren_pair);
+        if (offs_spare_used) {
+            prog->offs_spare = RXp_OFFSp(prog);
+            RXp_OFFSp(prog)  = swap;
+            prog->offs_spare_used = FALSE;
+        } else {
+            Copy(swap, RXp_OFFSp(prog), prog->nparens + 1, regexp_paren_pair);
+        }
+
     }
 
     /* clean up; this will trigger destructors that will free all slabs
@@ -4617,11 +4704,13 @@ S_dump_exec_pos(pTHX_ const char *locinput,
 #endif
 
 /* reg_check_named_buff_matched()
+ *
  * Checks to see if a named buffer has matched. The data array of
- * buffer numbers corresponding to the buffer is expected to reside
- * in the regexp->data->data array in the slot stored in the ARG1u() of
- * node involved. Note that this routine doesn't actually care about the
- * name, that information is not preserved from compilation to execution.
+ * buffer numbers corresponding to the buffer is expected to reside in
+ * the regexp->data->data array in the slot stored in the TRIE_DATA_SLOT()
+ * of the node involved. Note that this routine doesn't actually care about
+ * the name, that information is not preserved from compilation to execution.
+ *
  * Returns the index of the leftmost defined buffer with the given name
  * or 0 if non of the buffers matched.
  */
@@ -4977,7 +5066,19 @@ S_setup_EXACTISH_ST(pTHX_ const regnode * const text_node,
                  && memBEGINs(pat, pat_len, LATIN_SMALL_LETTER_LONG_S_UTF8
                                             LATIN_SMALL_LETTER_LONG_S_UTF8))
         {
+
+            /* Anything that folds to U+00DF is very specially handled.
+             * Anything beyond the first such character (U+1E9E) has to be
+             * manually added here */
+            static const U32 remaining_folds_to_17F_17F[] = {
+
+#ifdef SURSOLIDUM
+                                                               SURSOLIDUM
+#endif
+                                                             };
             first_fold_from = LATIN_CAPITAL_LETTER_SHARP_S;
+            remaining_fold_froms = remaining_folds_to_17F_17F;
+            folds_to_count = 1 + C_ARRAY_LENGTH(remaining_folds_to_17F_17F);
         }
         else if (UNLIKELY(    op == TURKISH
                           && (   isALPHA_FOLD_EQ(folded, 'i')
@@ -5278,24 +5379,14 @@ S_isGCB(pTHX_ const GCB_enum before, const GCB_enum after, const U8 * const strb
            * if the input matches what the DFA expects and then 'break's out of
            * the switch.  */
 
-          case GCB_InCB_Consonant_then_InCB_Extend_or_InCB_Linker_v_InCB_Consonant: ;
-            /* GB9c  \p{InCB=Consonant} [ \p{InCB=Extend} \p{InCB=Linker} ]*
-             *       \p{InCB=Linker}    [ \p{InCB=Extend} \p{InCB=Linker} ]*
-             *   ×   \p{InCB=Consonant}
-             *
-             *   This translates to, we can have any number of Linker and
-             *   Extend characters in a row, immediately preceded by a
-             *   Consonant, as long as there is at least one Linker. */
-            bool has_linker;
-            has_linker = false;
-            while (isGCB_InCB_Linker(prev) || isGCB_InCB_Extend(prev)) {
-                if (isGCB_InCB_Linker(prev)) {
-                    has_linker = true;
-                }
+          case GCB_InCB_Linker_then_InCB_Extend_v_InCB_Consonant:
+            /* GB9c  \p{InCB=Linker} \p{InCB=Extend}*  ×  \p{InCB=Consonant}
+             * */
+            while (isGCB_InCB_Extend(prev)) {
                 prev = backup_one_GCB(strbeg, &prev_pos, utf8_target);
             }
 
-            matched = has_linker && isGCB_InCB_Consonant(prev);
+            matched = isGCB_InCB_Linker(prev);
             break;
 
           case GCB_various_then_RI_v_RI: ;
@@ -6438,8 +6529,17 @@ S_backup_one_WB_but_over_Extend_FO(pTHX_ WB_enum * previous,
 /* we don't use STMT_START/END here because it leads to
    "unreachable code" warnings, which are bogus, but distracting. */
 #define CACHEsayNO \
-    if (ST.cache_mask) \
-       reginfo->info_aux->poscache[ST.cache_offset] |= ST.cache_mask; \
+    if (ST.slc_mask && !seen_nonregular) {                             \
+        DEBUG_EXECUTE_r({                                              \
+            regnode *whilem =                                          \
+                REGNODE_BEFORE(regnext(cur_curlyx->u.curlyx.me));      \
+            re_exec_indentf(                                           \
+                "WHILEM[%d/%d]: (cache) marking failure at pos %" UVuf "\n",  \
+                depth, (int)FLAGS(whilem), (int)rexi->slc_whilem_seen, \
+                (UV)(locinput - reginfo->strbeg));                     \
+        });                                                            \
+       *ST.slc_byte |= ST.slc_mask;                                    \
+    }                                                                  \
     sayNO
 
 #define EVAL_CLOSE_PAREN_IS(st,expr)                        \
@@ -6484,12 +6584,17 @@ S_backup_one_WB_but_over_Extend_FO(pTHX_ WB_enum * previous,
     st->resume_state = state;                               \
     goto push_yes_state;
 
-#define DEBUG_STATE_pp(pp)                                      \
+/* output a 'push #N' (push==1) or 'pop #N' (push==0) message */
+
+#define DEBUG_STATE_pp(push, extra_text)                        \
     DEBUG_STATE_r({                                             \
         DUMP_EXEC_POS(locinput, scan, utf8_target,depth);       \
-        re_printf(\
-            "%*s" pp " %s%s%s%s%s\n",                           \
+        re_printf(                                              \
+            "%*s%s #%u %s %s%s%s%s%s\n",                        \
             INDENT_CHARS(depth), "",                            \
+            push ? "push" : "pop",                              \
+            (unsigned int)(depth -1 + push),                    \
+            extra_text,                                         \
             REGNODE_NAME(st->resume_state),                     \
             ((st == yes_state || st == mark_state) ? "[" : ""), \
             ((st == yes_state) ? "Y" : ""),                     \
@@ -6706,6 +6811,10 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
                                 false: plain (?=foo)
                                 true:  used as a condition: (?(?=foo))
                             */
+    bool seen_nonregular = false; /* we've encountered a non-regular node
+                                     type such as \1 or (??{...}. For more
+                                     details, see
+                                     L<perlreguts/The super-linear cache> */
     PAD* last_pad = NULL;
     dMULTICALL;
     U8 gimme = G_SCALAR;
@@ -6752,9 +6861,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
     REGCP_SET(orig_savestack_ix);
 
     while (scan != NULL) {
-        next = scan + NEXT_OFF(scan);
-        if (next == scan)
-            next = NULL;
+        next = regnext(scan);
         state_num = OP(scan);
 
       reenter_switch:
@@ -6849,22 +6956,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
 
 #undef  ST
 #define ST st->u.trie
-        case TRIEC: /* (ab|cd) with known charclass */
-            /* In this case the charclass data is available inline so
-               we can fail fast without a lot of extra overhead.
-             */
-            if ( !   NEXTCHR_IS_EOS
-                &&   locinput < loceol
-                && ! ANYOF_BITMAP_TEST(scan, nextbyte))
-            {
-                DEBUG_EXECUTE_r(
-                    re_exec_indentf("%sTRIE: failed to match trie start class...%s\n",
-                              depth, PL_colors[4], PL_colors[5])
-                );
-                sayNO_SILENT;
-                NOT_REACHED; /* NOTREACHED */
-            }
-            /* FALLTHROUGH */
+        case LTRIE:
         case TRIE:  /* (ab|cd)  */
             /* the basic plan of execution of the trie is:
              * At the beginning, run though all the states, and
@@ -6916,13 +7008,12 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
 
                 /* what trie are we using right now */
                 reg_trie_data * const trie
-                    = (reg_trie_data*)rexi->data->data[ ARG1u( scan ) ];
+                    = (reg_trie_data*)rexi->data->data[ TRIE_DATA_SLOT(scan) ];
                 ST.before_paren = trie->before_paren;
                 ST.after_paren = trie->after_paren;
                 assert(ST.before_paren <= rex->nparens);
                 assert(ST.after_paren <= rex->nparens);
 
-                HV * widecharmap = MUTABLE_HV(rexi->data->data[ ARG1u( scan ) + 1 ]);
                 U32 state = trie->startstate;
 
                 if (FLAGS(scan) == EXACTL || FLAGS(scan) == EXACTFLU8) {
@@ -6939,26 +7030,9 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
                                                                reginfo->strend);
                     }
                 }
-                if (   trie->bitmap
-                    && (     NEXTCHR_IS_EOS
-                        ||   locinput >= loceol
-                        || ! TRIE_BITMAP_TEST(trie, nextbyte)))
-                {
-                    if (trie->states[ state ].wordnum) {
-                         DEBUG_EXECUTE_r(
-                            re_exec_indentf("%sTRIE: matched empty string...%s\n",
-                                          depth, PL_colors[4], PL_colors[5])
-                        );
-                        if (!trie->jump)
-                            break;
-                    } else {
-                        DEBUG_EXECUTE_r(
-                            re_exec_indentf("%sTRIE: failed to match trie start class...%s\n",
-                                          depth, PL_colors[4], PL_colors[5])
-                        );
-                        sayNO_SILENT;
-                   }
-                }
+                /* Start-class filtering is disabled while trie prefix
+                 * extraction is being brought into alignment with the
+                 * executable start state. */
 
             {
                 U8 *uc = ( U8* )locinput;
@@ -6967,6 +7041,9 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
                 STRLEN foldlen = 0;
                 U8 *uscan = (U8*)NULL;
                 U8 foldbuf[ UTF8_MAXBYTES_CASE + 1 ];
+                U8 octet_buffer[ UTF8_MAXBYTES_CASE + 1 ];
+                const U8 *octet_scan = NULL;
+                STRLEN octets_remaining = 0;
                 U32 charcount = 0; /* how many input chars we have matched */
                 U32 accepted = 0; /* how many accepting states have we seen? */
 
@@ -6982,11 +7059,12 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
                    shortest accept state and the wordnum of the longest
                    accept state */
 
-                while ( state && uc <= (U8*)(loceol) ) {
+                while ( state && (uc <= (U8*)(loceol) || octets_remaining) ) {
                     UV uvc = 0;
-                    U16 charid = 0;
+                    U32 octet = 0;
+                    assert(state < trie->statecount);
                     U32 base = trie->states[ state ].trans.base;
-                    U16 wordnum = trie->states[ state ].wordnum;
+                    U32 wordnum = trie->states[ state ].wordnum;
                     PERL_DEB(U32 old_state = state);
 
                     if (wordnum) { /* it's an accept state */
@@ -7008,23 +7086,24 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
                     }
 
                     /* read a char and goto next state */
-                    if ( base && (foldlen || uc < (U8*)(loceol))) {
-                        I32 offset;
-                        REXEC_TRIE_READ_CHAR(trie_type, trie, widecharmap, uc,
+                    if ( base && (foldlen || octets_remaining || uc < (U8*)(loceol))) {
+                        REXEC_TRIE_READ_CHAR(trie_type, trie, uc,
                                              (U8 *) loceol, uscan,
-                                             len, uvc, charid, foldlen,
-                                             foldbuf, uniflags);
-                        charcount++;
+                                             len, uvc, octet, foldlen,
+                                             foldbuf, uniflags, octet_scan,
+                                             octets_remaining, octet_buffer);
+                        if (TRIE_RAW_INPUT_MODE(trie, utf8_target) \
+                                ? (!utf8_target || !UTF8_IS_CONTINUATION(*uc)) \
+                                : len)
+                            charcount++;
                         if (foldlen > 0)
                             ST.longfold = true;
-                        if (charid &&
-                             ( ((offset =
-                              base + charid - 1 - trie->uniquecharcount)) >= 0)
-
-                             && ((U32)offset < trie->lasttrans)
-                             && trie->trans[offset].check == state)
+                        const U32 offset = base + octet;
+                        if (trie->trans[offset].check == state)
                         {
-                            state = trie->trans[offset].next;
+                            const U32 next_state = trie->trans[offset].next;
+                            assert(next_state < trie->statecount);
+                            state = next_state;
                         }
                         else {
                             state = 0;
@@ -7038,8 +7117,8 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
                     DEBUG_TRIE_EXECUTE_r(
                         DUMP_EXEC_POS( (char *)uc, scan, utf8_target, depth );
                         re_printf(
-                            "%sTRIE: Chid:0x%-2" UVXf " CP:0x%-4" UVXf " ",
-                            PL_colors[4], (UV)charid, uvc);
+                            "%sTRIE: Octet:0x%-2" UVXf " CP:0x%-4" UVXf " ",
+                            PL_colors[4], (UV)octet, uvc);
                         if (isPRINT_A(uvc))
                             re_printf("'%c' ", (int)uvc );
                         else
@@ -7047,7 +7126,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
                         re_printf(
                                 "St:0x%-4" UVXf " W:0x%-2" UVXf " - %s -> St: 0x%-4" UVXf "%s\n",
                                 (UV)old_state, (UV)wordnum,
-                                state ? "good" : charid ? "fail" : "last",
+                                state ? "good" : "fail",
                                 (UV)state, PL_colors[5]
 
                         );
@@ -7058,7 +7137,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
 
                 /* calculate total number of accept states */
                 {
-                    U16 w = ST.topword;
+                    U32 w = ST.topword;
                     accepted = 0;
                     while (w) {
                         w = trie->wordinfo[w].prev;
@@ -7108,11 +7187,11 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
             {
                 /* Find next-highest word to process.  Note that this code
                  * is O(N^2) per trie run (O(N) per branch), so keep tight */
-                U16 min = 0;
-                U16 word;
-                U16 const nextword = ST.nextword;
+                U32 min = 0;
+                U32 word;
+                U32 const nextword = ST.nextword;
                 reg_trie_wordinfo * const wordinfo
-                    = ((reg_trie_data*)rexi->data->data[ARG1u(ST.me)])->wordinfo;
+                    = ((reg_trie_data*)rexi->data->data[TRIE_DATA_SLOT(ST.me)])->wordinfo;
                 for (word = ST.topword; word; word = wordinfo[word].prev) {
                     if (word > nextword && (!min || word < min))
                         min = word;
@@ -7136,11 +7215,10 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
             {
                 U32 chars; /* how many chars to skip */
                 reg_trie_data * const trie
-                    = (reg_trie_data*)rexi->data->data[ARG1u(ST.me)];
-
-                assert((trie->wordinfo[ST.nextword].len - trie->prefixlen)
+                    = (reg_trie_data*)rexi->data->data[TRIE_DATA_SLOT(ST.me)];
+                assert((trie->wordinfo[ST.nextword].len - trie->prefixlen_chars)
                             >=  ST.firstchars);
-                chars = (trie->wordinfo[ST.nextword].len - trie->prefixlen)
+                chars = (trie->wordinfo[ST.nextword].len - trie->prefixlen_chars)
                             - ST.firstchars;
                 uc = ST.firstpos;
 
@@ -7186,13 +7264,16 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
                 }
             }
             if (ST.jump && ST.jump[ST.nextword]) {
-                scan = ST.me + ST.jump[ST.nextword];
+                reg_trie_data * const trie
+                    = (reg_trie_data*)rexi->data->data[TRIE_DATA_SLOT(ST.me)];
+                scan = TRIE_JUMP_TARGET(ST.me, ST.jump, trie->jump_correction,
+                                        ST.nextword);
                 ST.before_paren = ST.j_before_paren[ST.nextword];
                 assert(ST.before_paren <= rex->nparens);
                 ST.after_paren = ST.j_after_paren[ST.nextword];
                 assert(ST.after_paren <= rex->nparens);
             } else {
-                scan = ST.me + NEXT_OFF(ST.me);
+                scan = ST.me + TRIE_NEXT(ST.me);
             }
 
 
@@ -7217,7 +7298,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
             /* only one choice left - just continue */
             DEBUG_EXECUTE_r({
                 AV *const trie_words
-                    = MUTABLE_AV(rexi->data->data[ARG1u(ST.me)+TRIE_WORDS_OFFSET]);
+                    = MUTABLE_AV(rexi->data->data[TRIE_DATA_SLOT(ST.me)+TRIE_WORDS_OFFSET]);
                 SV ** const tmp = trie_words
                         ? av_fetch(trie_words, ST.nextword - 1, 0) : NULL;
                 SV *sv= tmp ? sv_newmortal() : NULL;
@@ -7797,6 +7878,16 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
             goto increment_locinput;
             break;
 
+        case NEXACTb: /*  /[^x]/ : single excluded byte  */
+            if (   NEXTCHR_IS_EOS
+                || (U8) ARG1u(scan) == UCHARAT(locinput)
+                || locinput >= loceol)
+            {
+                sayNO;
+            }
+            goto increment_locinput;
+            break;
+
         case ANYOFH:
             if (   ! utf8_target
                 ||   NEXTCHR_IS_EOS
@@ -8237,7 +8328,9 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
             type = OP(scan);
             n = ARG1u(scan);  /* which paren pair */
             if (rex->logical_to_parno) {
-                n = rex->logical_to_parno[n];
+                /* The compiler has already mapped this from logical to
+                 * physical; only search the other physical buffers sharing
+                 * the same logical number. */
                 do {
                     if ( RXp_LASTPAREN(rex) < n ||
                          RXp_OFFS_START(rex,n) == -1 ||
@@ -8255,7 +8348,8 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
             }
 
           do_nref_ref_common:
-            reginfo->poscache_iter = reginfo->poscache_maxiter; /* Void cache */
+            seen_nonregular = true;
+
             if (RXp_LASTPAREN(rex) < n)
                 sayNO;
 
@@ -8700,15 +8794,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
                             * At this point we expect the stack context to be
                             * set up correctly */
 
-                /* invalidate the S-L poscache. We're now executing a
-                 * different set of WHILEM ops (and their associated
-                 * indexes) against the same string, so the bits in the
-                 * cache are meaningless. Setting maxiter to zero forces
-                 * the cache to be invalidated and zeroed before reuse.
-                 * XXX This is too dramatic a measure. Ideally we should
-                 * save the old cache and restore when running the outer
-                 * pattern again */
-                reginfo->poscache_maxiter = 0;
+                seen_nonregular = true;
 
                 /* the new regexp might have a different is_utf8_pat than we do */
                 is_utf8_pat = reginfo->is_utf8_pat = cBOOL(RX_UTF8(re_sv));
@@ -8723,6 +8809,10 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
                 ST.B = next;
                 ST.prev_eval = cur_eval;
                 cur_eval = st;
+                DEBUG_STACK_r({
+                    re_exec_indentf("EVAL/GOSUB: set cur_eval = %p; was %p\n",
+                        depth, cur_eval, ST.prev_eval);
+                });
                 /* now continue from first node in postoned RE */
                 PUSH_YES_STATE_GOTO(EVAL_postponed_A, startpoint, locinput,
                                     loceol, script_run_begin);
@@ -8734,10 +8824,6 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
         case EVAL_postponed_B: /* cleanup the B part after a
                                   successful (??{A})B */
             /* note: this is called twice; first after popping B, then A */
-            DEBUG_STACK_r({
-                re_exec_indentf("EVAL_postponed_A/B cur_eval = %p prev_eval = %p\n",
-                    depth, cur_eval, ST.prev_eval);
-            });
 
 #define SET_RECURSE_LOCINPUT(STR,VAL)                                   \
             if ( cur_eval && CUR_EVAL.close_paren ) {                   \
@@ -8759,11 +8845,13 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
             S_set_reg_curpm(aTHX_ rex_sv, reginfo);
             rex = ReANY(rex_sv);
             rexi = RXi_GET(rex);
+            DEBUG_STACK_r({
+                re_exec_indentf("EVAL_postponed_A/B set cur_eval = %p; was %p\n",
+                    depth, ST.prev_eval, cur_eval);
+            });
             cur_eval = ST.prev_eval;
             cur_curlyx = ST.prev_curlyx;
 
-            /* Invalidate cache. See "invalidate" comment above. */
-            reginfo->poscache_maxiter = 0;
             if ( nochange_depth )
                 nochange_depth--;
 
@@ -8779,12 +8867,9 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
         case EVAL_postponed_A_fail: /* unsuccessfully ran A in (??{A})B */
         case EVAL_postponed_B_fail: /* unsuccessfully ran B in (??{A})B */
             /* note: this is called twice; first after popping B, then A */
-            DEBUG_STACK_r({
-                re_exec_indentf("EVAL_AB_fail cur_eval = %p prev_eval = %p\n",
-                    depth, cur_eval, ST.prev_eval);
-            });
 
-            SET_RECURSE_LOCINPUT("EVAL_AB_fail[before]", CUR_EVAL.prev_recurse_locinput);
+            SET_RECURSE_LOCINPUT("EVAL_postponed_A/B_fail[before]",
+                CUR_EVAL.prev_recurse_locinput);
 
             rex_sv = ST.prev_rex;
             is_utf8_pat = reginfo->is_utf8_pat = cBOOL(RX_UTF8(rex_sv));
@@ -8794,15 +8879,18 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
 
             REGCP_UNWIND(ST.lastcp);
             regcppop(rex, &maxopenparen);
+            DEBUG_STACK_r({
+                re_exec_indentf("EVAL_postponed_A/B_fail set cur_eval = %p; was %p\n",
+                    depth, ST.prev_eval, cur_eval);
+            });
             cur_eval = ST.prev_eval;
             cur_curlyx = ST.prev_curlyx;
 
-            /* Invalidate cache. See "invalidate" comment above. */
-            reginfo->poscache_maxiter = 0;
             if ( nochange_depth )
                 nochange_depth--;
 
-            SET_RECURSE_LOCINPUT("EVAL_AB_fail[after]", cur_eval->locinput);
+            SET_RECURSE_LOCINPUT("EVAL_postponed_A/B_fail[after]",
+                cur_eval->locinput);
             sayNO_SILENT;
 #undef ST
 
@@ -8905,7 +8993,8 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
             break;
 
         case IFTHEN:   /*  (?(cond)A|B)  */
-            reginfo->poscache_iter = reginfo->poscache_maxiter; /* Void cache */
+            seen_nonregular = true;
+
             if (sw)
                 next = REGNODE_AFTER_type(scan,tregnode_IFTHEN);
             else {
@@ -9031,6 +9120,8 @@ NULL
             minmod = 0;
             ST.count = -1;	/* this will be updated by WHILEM */
             ST.lastloc = NULL;  /* this will be updated by WHILEM */
+            ST.saved_seen_nonregular = seen_nonregular;
+            seen_nonregular = false;
 
             PUSH_YES_STATE_GOTO(CURLYX_end, REGNODE_BEFORE(next), locinput, loceol,
                                 script_run_begin);
@@ -9038,11 +9129,13 @@ NULL
         }
 
         case CURLYX_end: /* just finished matching all of A*B */
+            seen_nonregular |= ST.saved_seen_nonregular;
             cur_curlyx = ST.prev_curlyx;
             sayYES;
             NOT_REACHED; /* NOTREACHED */
 
         case CURLYX_end_fail: /* just failed to match all of A*B */
+            seen_nonregular |= ST.saved_seen_nonregular;
             REGCP_UNWIND(ST.cp); /* LEAVE in disguise */
             cur_curlyx = ST.prev_curlyx;
             sayNO;
@@ -9069,8 +9162,7 @@ NULL
             A = REGNODE_AFTER(cur_curlyx->u.curlyx.me);
             n = ++cur_curlyx->u.curlyx.count; /* how many A's matched */
             ST.save_lastloc = cur_curlyx->u.curlyx.lastloc;
-            ST.cache_offset = 0;
-            ST.cache_mask = 0;
+            ST.slc_mask = 0;
 
             DEBUG_EXECUTE_r( re_exec_indentf("WHILEM: matched %ld out of %d..%d\n",
                   depth, (long)n, min, max)
@@ -9096,92 +9188,111 @@ NULL
                 goto do_whilem_B_max;
             }
 
-            /* super-linear cache processing.
-             *
-             * The idea here is that for certain types of CURLYX/WHILEM -
-             * principally those whose upper bound is infinity (and
-             * excluding regexes that have things like \1 and other very
-             * non-regular expressiony things), then if a pattern like
-             * /....A*.../ fails and we backtrack to the WHILEM, then we
-             * make a note that this particular WHILEM op was at string
-             * position 47 (say) when the rest of pattern failed. Then, if
-             * we ever find ourselves back at that WHILEM, and at string
-             * position 47 again, we can just fail immediately rather than
-             * running the rest of the pattern again.
-             *
-             * This is very handy when patterns start to go
-             * 'super-linear', like in (a+)*(a+)*(a+)*, where you end up
-             * with a combinatorial explosion of backtracking.
-             *
-             * The cache is implemented as a bit array, with one bit per
-             * string byte position per WHILEM op (up to 16) - so its
-             * between 0.25 and 2x the string size.
-             *
-             * To avoid allocating a poscache buffer every time, we do an
-             * initially countdown; only after we have  executed a WHILEM
-             * op (string-length x #WHILEMs) times do we allocate the
-             * cache.
-             *
-             * The top 4 bits of FLAGS(scan) byte say how many different
-             * relevant CURLLYX/WHILEM op pairs there are, while the
-             * bottom 4-bits is the identifying index number of this
-             * WHILEM.
-             */
+            if (   FLAGS(scan)
+                   /* not running a (??{...}) or (?N) sub-pattern */
+                && !cur_eval)
+            {
+                /* Super-linear cache (SLC) processing.
+                 *
+                 * See L<perlreguts/The super-linear cache> for a detailed
+                 * background on how this works.
+                 *
+                 * For WHILEM nodes which can participate in the cache
+                 * (FLAGS() is non-zero), the processing at this point is
+                 * to first initiate a countdown. Then when on subsequent
+                 * iterations that reaches zero, the match has likely gone
+                 * super-linear and the per-WHILEM cache is allocated and
+                 * used.
+                 */
+                assert(rexi->slc);
+                assert(reginfo->info_aux->slc);
+                struct slc_cache_item *item =
+                                &reginfo->info_aux->slc[FLAGS(scan)-1];
 
-            if (FLAGS(scan)) {
+                if (item->slc_bitmap) {
+                    /* Cache is live */
+                    STRLEN offset;
+                    U8     mask, *bytep;
+                  slc_is_live:
+                    offset = locinput - reginfo->strbeg;
+                    mask   = 1 << (offset % 8);
+                    bytep  = &item->slc_bitmap[offset/8];
 
-                if (!reginfo->poscache_maxiter) {
-                    /* start the countdown: Postpone detection until we
-                     * know the match is not *that* much linear. */
-                    reginfo->poscache_maxiter
-                        =    (reginfo->strend - reginfo->strbeg + 1)
-                           * (FLAGS(scan)>>4);
-                    /* possible overflow for long strings and many CURLYX's */
-                    if (reginfo->poscache_maxiter < 0)
-                        reginfo->poscache_maxiter = I32_MAX;
-                    reginfo->poscache_iter = reginfo->poscache_maxiter;
-                }
-
-                if (reginfo->poscache_iter-- == 0) {
-                    /* initialise cache */
-                    const SSize_t size = (reginfo->poscache_maxiter + 7)/8;
-                    regmatch_info_aux *const aux = reginfo->info_aux;
-                    if (aux->poscache) {
-                        if ((SSize_t)reginfo->poscache_size < size) {
-                            Renew(aux->poscache, size, char);
-                            reginfo->poscache_size = size;
-                        }
-                        Zero(aux->poscache, size, char);
-                    }
-                    else {
-                        reginfo->poscache_size = size;
-                        Newxz(aux->poscache, size, char);
-                    }
-                    DEBUG_EXECUTE_r( re_printf(
-      "%sWHILEM: Detected a super-linear match, switching on caching%s...\n",
-                              PL_colors[4], PL_colors[5])
-                    );
-                }
-
-                if (reginfo->poscache_iter < 0) {
-                    /* have we already failed at this position? */
-                    SSize_t offset, mask;
-
-                    reginfo->poscache_iter = -1; /* stop eventual underflow */
-                    offset  = (FLAGS(scan) & 0xf) - 1
-                                +   (locinput - reginfo->strbeg)
-                                  * (FLAGS(scan)>>4);
-                    mask    = 1 << (offset % 8);
-                    offset /= 8;
-                    if (reginfo->info_aux->poscache[offset] & mask) {
-                        DEBUG_EXECUTE_r( re_exec_indentf("WHILEM: (cache) already tried at this position...\n",
-                            depth)
+                    if (*bytep & mask) {
+                        /* We have already failed at this position */
+                        DEBUG_EXECUTE_r( re_exec_indentf(
+                            "WHILEM[%d/%d]: (cache) already failed at pos %"
+                                                                    UVuf "\n",
+                            depth, (int)FLAGS(scan),
+                            (int)rexi->slc_whilem_seen,
+                            (UV)(locinput - reginfo->strbeg))
                         );
                         cur_curlyx->u.curlyx.count--;
-                        sayNO; /* cache records failure */
+                        sayNO;
                     }
-                    ST.cache_offset = offset;
-                    ST.cache_mask   = mask;
+
+                    /* Make cache index available to CACHEsayNO */
+                    ST.slc_byte = bytep;
+                    ST.slc_mask = mask;
+                }
+                else if (item->slc_countdown) {
+                    /* Cache is not yet live; currently counting down */
+                    DEBUG_OPTIMISE_MORE_r(re_exec_indentf(
+                        "  cache countdown=%" UVuf "\n", depth,
+                        (UV)item->slc_countdown)
+                    );
+
+                    if (!--item->slc_countdown) {
+                        /* countdown finished: alloc and use the cache:
+                         * 1 bit per string byte */
+                        Newxz(item->slc_bitmap,
+                              ((reginfo->strend - reginfo->strbeg + 1) + 7)/8,
+                              U8);
+
+                        DEBUG_EXECUTE_r( re_exec_indentf(
+                            "%sWHILEM[%d/%d]: detected a super-linear match, enabling cache%s...\n",
+                            depth, PL_colors[4],
+                            (int)FLAGS(scan),
+                            (int)rexi->slc_whilem_seen,
+                            PL_colors[5]
+                        ));
+
+                        goto slc_is_live;
+                    }
+                }
+                else {
+                    /* Cache is not yet live; countdown not yet started.
+                     * Initialise the countdown: postpone detection until
+                     * we know that the match is not *that* much
+                     * linear. Note that a degenerate zero-length
+                     * string will have the effect of not starting a
+                     * countdown */
+                    STRLEN count = reginfo->strend - locinput;
+
+                    if (PL_re_superlinear_cache_delay) {
+                        /* Apply countdown modifier */
+                        if (PL_re_superlinear_cache_delay > 0)
+                            /* use specified value  */
+                            count = PL_re_superlinear_cache_delay;
+                        else if (PL_re_superlinear_cache_delay == -1)
+                            /* disable cache processing */
+                            count = 0;
+                        else {
+                             /* use -N/1E6 scaling factor */
+                            NV delay =
+                                -(NV)PL_re_superlinear_cache_delay / 1E6
+                                 * (NV)count;
+                            count = delay >= (NV)STRLEN_MAX
+                                    ? STRLEN_MAX
+                                    : delay < 1 ? 1 : delay;
+                        }
+                    }
+
+                    item->slc_countdown = count;
+                    DEBUG_OPTIMISE_MORE_r(re_exec_indentf(
+                        "  cache countdown initialised to %" UVuf "\n",
+                        depth, (UV)count)
+                    );
                 }
             }
 
@@ -9190,6 +9301,8 @@ NULL
             if (cur_curlyx->u.curlyx.minmod) {
                 ST.save_curlyx = cur_curlyx;
                 cur_curlyx = cur_curlyx->u.curlyx.prev_curlyx;
+                ST.saved_seen_nonregular = seen_nonregular;
+                seen_nonregular = false;
                 PUSH_YES_STATE_GOTO(WHILEM_B_min, ST.save_curlyx->u.curlyx.B,
                                     locinput, loceol, script_run_begin);
                 NOT_REACHED; /* NOTREACHED */
@@ -9212,11 +9325,13 @@ NULL
 
         case WHILEM_B_min: /* just matched B in a minimal match */
         case WHILEM_B_max: /* just matched B in a maximal match */
+            seen_nonregular |= ST.saved_seen_nonregular;
             cur_curlyx = ST.save_curlyx;
             sayYES;
             NOT_REACHED; /* NOTREACHED */
 
         case WHILEM_B_max_fail: /* just failed to match B in a maximal match */
+            seen_nonregular |= ST.saved_seen_nonregular;
             cur_curlyx = ST.save_curlyx;
             cur_curlyx->u.curlyx.lastloc = ST.save_lastloc;
             cur_curlyx->u.curlyx.count--;
@@ -9244,11 +9359,14 @@ NULL
             /* now try B */
             ST.save_curlyx = cur_curlyx;
             cur_curlyx = cur_curlyx->u.curlyx.prev_curlyx;
+            ST.saved_seen_nonregular = seen_nonregular;
+            seen_nonregular = false;
             PUSH_YES_STATE_GOTO(WHILEM_B_max, ST.save_curlyx->u.curlyx.B,
                                 locinput, loceol, script_run_begin);
             NOT_REACHED; /* NOTREACHED */
 
         case WHILEM_B_min_fail: /* just failed to match B in a minimal match */
+            seen_nonregular |= ST.saved_seen_nonregular;
             cur_curlyx = ST.save_curlyx;
 
             if (cur_curlyx->u.curlyx.count >= /*max*/ARG2i(cur_curlyx->u.curlyx.me)) {
@@ -9892,8 +10010,8 @@ NULL
                 st->u.eval.prev_eval = cur_eval;
                 cur_eval = CUR_EVAL.prev_eval;
                 DEBUG_EXECUTE_r(
-                    re_exec_indentf("END: EVAL trying tail ... (cur_eval = %p)\n",
-                                      depth, cur_eval););
+                    re_exec_indentf("END: EVAL trying tail ...  set cur_eval = %p; was %p\n",
+                                  depth, cur_eval, st->u.eval.prev_eval););
                 if ( nochange_depth )
                     nochange_depth--;
 
@@ -10240,7 +10358,7 @@ NULL
                         curyes = cur->u.yes.prev_yes_state;
                 }
             } else {
-                DEBUG_STATE_pp("push")
+                DEBUG_STATE_pp(1, "")
             });
             depth++;
             st->locinput = locinput;
@@ -10282,13 +10400,7 @@ NULL
                 PL_regmatch_slab = PL_regmatch_slab->prev;
                 st = SLAB_LAST(PL_regmatch_slab);
             }
-            DEBUG_STATE_r({
-                if (no_final) {
-                    DEBUG_STATE_pp("pop (no final)");
-                } else {
-                    DEBUG_STATE_pp("pop (yes)");
-                }
-            });
+            DEBUG_STATE_pp(0, no_final ? "(no final)" : "(yes)");
             depth--;
         }
 #else
@@ -10364,7 +10476,7 @@ NULL
         loceol = st->loceol;
         script_run_begin = st->sr0;
 
-        DEBUG_STATE_pp("pop");
+        DEBUG_STATE_pp(0, "");
         depth--;
         if (yes_state == st)
             yes_state = st->u.yes.prev_yes_state;
@@ -10757,6 +10869,27 @@ S_regrepeat(pTHX_ regexp *prog, char **startposp, const regnode *p,
       case NANYOFM_tb:
         scan = (char *) find_next_masked((U8 *) scan, (U8 *) this_eol,
                                          (U8) ARG1u(p), FLAGS(p));
+        break;
+
+      case NEXACTb_t8:
+        {
+          const U8 nchar = (U8) ARG1u(p);
+          while (     hardcount < max
+                 &&   scan < this_eol
+                 &&  (UTF8SKIP(scan) != 1 || (U8) *scan != nchar))
+             {
+                 scan += UTF8SKIP(scan);
+                 hardcount++;
+             }
+        }
+        break;
+
+      case NEXACTb_tb:
+        {
+          char * found = (char *) memchr(scan, (U8) ARG1u(p),
+                                         this_eol - scan);
+          scan = found ? found : this_eol;
+        }
         break;
 
       case ANYOFH_tb: /* ANYOFH only can match UTF-8 targets */
@@ -11489,12 +11622,18 @@ S_setup_eval_state(pTHX_ regmatch_info *const reginfo)
     eval_state->curpm = PL_curpm;
     PL_curpm_under = PL_curpm;
     PL_curpm = PL_reg_curpm;
-    /* Temporarily set RXp_SUBBEG to the current string so that $1 etc
-     * are valid during code execution. If the current subbeg is a copy,
-     * then restore it at the end so that it gets properly freed when
-     * subbeg is finally updated after a successful match.
-     */
-    if (RXp_MATCH_COPIED(rex)) {
+    /* Temporarily set RXp_SUBBEG to the current string so that $1 etc are
+     * valid during code execution. We must save any existing copied or COW
+     * backed state so that cleanup can restore both the pointer values and
+     * the ownership flags. */
+    if (RXp_MATCH_COPIED(rex)
+#ifdef PERL_ANY_COW
+        || RXp_SAVED_COPY(rex)
+#endif
+    ) {
+        eval_state->subbeg_flags = EVAL_STATE_HAS_SUBBEG;
+        if (RXp_MATCH_COPIED(rex))
+            eval_state->subbeg_flags |= EVAL_STATE_SUBBEG_COPIED;
         eval_state->subbeg     = RXp_SUBBEG(rex);
         eval_state->sublen     = RXp_SUBLEN(rex);
         eval_state->suboffset  = RXp_SUBOFFSET(rex);
@@ -11502,10 +11641,12 @@ S_setup_eval_state(pTHX_ regmatch_info *const reginfo)
 #ifdef PERL_ANY_COW
         eval_state->saved_copy = RXp_SAVED_COPY(rex);
 #endif
+        /* The temporary subbeg aliases the current target string, so
+         * RXp_MATCH_COPIED must be off for this state. */
         RXp_MATCH_COPIED_off(rex);
     }
     else
-        eval_state->subbeg = NULL;
+        eval_state->subbeg_flags = 0;
     RXp_SUBBEG(rex) = (char *)reginfo->strbeg;
     RXp_SUBOFFSET(rex) = 0;
     RXp_SUBCOFFSET(rex) = 0;
@@ -11522,15 +11663,29 @@ S_cleanup_regmatch_info_aux(pTHX_ void *arg)
 {
     regmatch_info_aux *aux = (regmatch_info_aux *) arg;
     regmatch_info_aux_eval *eval_state =  aux->info_aux_eval;
+    regexp_internal *rexi = aux->rexi;
     regmatch_slab *s;
 
-    Safefree(aux->poscache);
+    assert(rexi->depth > 0);
+    rexi->depth--;
+
+    /* free any allocated super-linear caches */
+    if (aux->slc) {
+        U8 i;
+        for (i = 0; i < rexi->slc_whilem_seen; i++) {
+            Safefree(aux->slc[i].slc_bitmap);
+            aux->slc[i].slc_bitmap = NULL;
+        }
+    }
+    /* free the cache array too if it was used during recursion */
+    if (rexi->depth)
+            Safefree(aux->slc);
 
     if (eval_state) {
 
         /* undo the effects of S_setup_eval_state() */
 
-        if (eval_state->subbeg) {
+        if (eval_state->subbeg_flags & EVAL_STATE_HAS_SUBBEG) {
             regexp * const rex = ReANY(eval_state->rx);
             RXp_SUBBEG(rex) = eval_state->subbeg;
             RXp_SUBLEN(rex)     = eval_state->sublen;
@@ -11539,7 +11694,12 @@ S_cleanup_regmatch_info_aux(pTHX_ void *arg)
 #ifdef PERL_ANY_COW
             RXp_SAVED_COPY(rex) = eval_state->saved_copy;
 #endif
-            RXp_MATCH_COPIED_on(rex);
+            if (eval_state->subbeg_flags & EVAL_STATE_SUBBEG_COPIED)
+                RXp_MATCH_COPIED_on(rex);
+            else
+                /* When the original state used saved_copy we restore that
+                 * borrowed/COW state without claiming ownership of RXp_SUBBEG. */
+                RXp_MATCH_COPIED_off(rex);
         }
         if (eval_state->pos_magic)
         {

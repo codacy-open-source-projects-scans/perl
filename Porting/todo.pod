@@ -1187,13 +1187,15 @@ much of the work.  However, that code has bit-rotted a little; some patterns
 don't make as much use of it as they should.  The proposal is to analyse
 where the current cache code has problems, and extend it to cover those cases.
 
-See also
-L<http://www.xray.mpe.mpg.de/mailing-lists/perl5-porters/2013-01/msg00339.html>
+See L<perlreguts/The super-linear cache> for a detailed explanation of the
+cache. See also
+L<https://www.nntp.perl.org/group/perl.perl5.porters/2013/01/msg197378.html>
+for a discussion about the cache's limitations.
 
 =head1 Big projects
 
 Tasks that will get your name mentioned in the description of the "Highlights
-of 5.43.11"
+of 5.45.4"
 
 =head2 make ithreads more robust
 

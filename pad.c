@@ -371,9 +371,9 @@ Perl_cv_undef_flags(pTHX_ CV *cv, U32 flags)
     SvPOK_off(MUTABLE_SV(cv));		/* forget prototype */
     sv_unmagic((SV *)cv, PERL_MAGIC_checkcall);
     if (!(flags & CV_UNDEF_KEEP_NAME)) {
-        if (CvNAMED(&cvbody)) {
+        if (CvHasNAME_HEK(&cvbody)) {
             CvNAME_HEK_set(&cvbody, NULL);
-            CvNAMED_off(&cvbody);
+            CvHasNAME_HEK_off(&cvbody);
         }
         else CvGV_set(cv, NULL);
     }
@@ -492,7 +492,7 @@ Perl_cv_undef_flags(pTHX_ CV *cv, U32 flags)
      * ref status of CvOUTSIDE and CvGV, and ANON, NAMED and
      * LEXICAL, which are used to determine the sub's name.  */
     CvFLAGS(&cvbody) &= (CVf_WEAKOUTSIDE|CVf_CVGV_RC|CVf_ANON|CVf_LEXICAL
-                   |CVf_NAMED);
+                   |CVf_HasNAME_HEK);
 }
 
 /*
@@ -1154,8 +1154,10 @@ S_pad_findlex(pTHX_ const char *namepv, STRLEN namelen, U32 flags, const CV* cv,
     *out_flags = 0;
 
     DEBUG_Xv(PerlIO_printf(Perl_debug_log,
-        "Pad findlex cv=0x%" UVxf " searching \"%.*s\" seq=%d%s\n",
-                           PTR2UV(cv), (int)namelen, namepv, (int)seq,
+        "Pad findlex cv=0x%" UVxf " searching \"%.*s\" seq=%" U32uf
+        " flags=%" U32uf "%s\n",
+                           PTR2UV(cv), (int)namelen, namepv, seq, flags,
+                           
         out_capture ? " capturing" : "" ));
 
     /* first, search this pad */
@@ -1315,7 +1317,7 @@ S_pad_findlex(pTHX_ const char *namepv, STRLEN namelen, U32 flags, const CV* cv,
     U32 recurse_flags = flags;
     if(new_capturep == &new_capture)
         recurse_flags |= padadd_STALEOK;
-    if(CvIsMETHOD(cv))
+    if(CvIsMETHOD(cv) || fieldok)
         recurse_flags |= padfind_FIELD_OK;
 
     offset = pad_findlex(namepv, namelen, recurse_flags,
@@ -1836,8 +1838,12 @@ Perl_pad_free(pTHX_ PADOFFSET po)
     if (sv && sv != &PL_sv_undef && !SvPADMY(sv))
         SvFLAGS(sv) &= ~SVs_PADTMP;
 
-    if (po < PL_padix)
+    if (po <= PL_padix)
         PL_padix = po - 1;
+#if defined(USE_ITHREADS)
+    if (po <= PL_constpadix)
+        PL_constpadix = po - 1;
+#endif
 #endif
 }
 
@@ -2276,14 +2282,14 @@ S_cv_clone(pTHX_ CV *proto, CV *cv, CV *outside, HV *cloned)
 
     assert(!CvUNIQUE(proto));
 
-    if (!cv) cv = MUTABLE_CV(newSV_type(SvTYPE(proto)));
+    if (!cv) cv = MUTABLE_CV(newSV_type_generic(SvTYPE(proto)));
     CvFLAGS(cv) = CvFLAGS(proto) & ~(CVf_CLONE|CVf_WEAKOUTSIDE|CVf_CVGV_RC
                                     |CVf_SLABBED);
     CvCLONED_on(cv);
 
     CvFILE(cv)		= CvDYNFILE(proto) ? savepv(CvFILE(proto))
                                            : CvFILE(proto);
-    if (CvNAMED(proto))
+    if (CvHasNAME_HEK(proto))
          CvNAME_HEK_set(cv, share_hek_hek(CvNAME_HEK(proto)));
     else CvGV_set(cv,CvGV(proto));
     CvSTASH_set(cv, CvSTASH(proto));
@@ -2376,7 +2382,7 @@ Perl_cv_name(pTHX_ CV *cv, SV *sv, U32 flags)
     {
         SV * const retsv = sv ? (sv) : sv_newmortal();
         if (SvTYPE(cv) == SVt_PVCV) {
-            if (CvNAMED(cv)) {
+            if (CvHasNAME_HEK(cv)) {
                 if (CvLEXICAL(cv) || flags & CV_NAME_NOTQUAL)
                     sv_sethek(retsv, CvNAME_HEK(cv));
                 else {
@@ -2703,7 +2709,7 @@ is allocated.
 */
 
 PADNAMELIST *
-Perl_newPADNAMELIST(size_t max)
+Perl_newPADNAMELIST(pTHX_ size_t max)
 {
     PERL_ARGS_ASSERT_NEWPADNAMELIST;
 
@@ -2838,7 +2844,7 @@ C<L</newPADNAMEouter>>.
 */
 
 PADNAME *
-Perl_newPADNAMEpvn(const char *s, STRLEN len)
+Perl_newPADNAMEpvn(pTHX_ const char *s, STRLEN len)
 {
     PERL_ARGS_ASSERT_NEWPADNAMEPVN;
 
@@ -2851,10 +2857,11 @@ Perl_newPADNAMEpvn(const char *s, STRLEN len)
     alloc = (struct padname_with_str *)alloc2;
     pn = (PADNAME *)alloc;
     PadnameREFCNT(pn) = 1;
-    PadnamePV(pn) = alloc->xpadn_str;
-    Copy(s, PadnamePV(pn), len, char);
-    *(PadnamePV(pn) + len) = '\0';
-    PadnameLEN(pn) = len;
+    char *pv = alloc->xpadn_str;
+    Copy(s, pv, len, char);
+    *(pv + len) = '\0';
+    PadnamePV_set(pn, pv);
+    PadnameLEN_set(pn, len);
     return pn;
 }
 
@@ -2871,14 +2878,14 @@ C<PADNAMEf_OUTER> flag already set.
 */
 
 PADNAME *
-Perl_newPADNAMEouter(PADNAME *outer)
+Perl_newPADNAMEouter(pTHX_ PADNAME *outer)
 {
     PERL_ARGS_ASSERT_NEWPADNAMEOUTER;
 
     PADNAME *pn;
     Newxz(pn, 1, PADNAME);
     PadnameREFCNT(pn) = 1;
-    PadnamePV(pn) = PadnamePV(outer);
+    PadnamePV_set(pn, PadnamePV(outer));
     /* Not PadnameREFCNT(outer), because ‘outer’ may itself close over
        another entry.  The original pad name owns the buffer.  */
     PadnameREFCNT_inc(PADNAME_FROM_PV(PadnamePV(outer)));
@@ -2889,7 +2896,7 @@ Perl_newPADNAMEouter(PADNAME *outer)
         PadnameFIELDINFO(pn)->refcount++;
         PadnameFLAGS(pn) |= PADNAMEf_FIELD;
     }
-    PadnameLEN(pn) = PadnameLEN(outer);
+    PadnameLEN_set(pn, PadnameLEN(outer));
     return pn;
 }
 
@@ -2917,8 +2924,37 @@ Perl_padname_free(pTHX_ PADNAME *pn)
                 Safefree(info);
             }
         }
+        if (PadnameIsFULLSV(pn))
+            SvREFCNT_dec(PadnameSV(pn));
         Safefree(pn);
     }
+}
+
+/*
+In-place upgrades a PADNAME so that PadnameIsFULLSV() is true. This stores an
+SV inside the padname, which is now always the one returned by PadnameSV().
+Code may use this SV as a place to attach magic.
+*/
+PADNAME *
+Perl_padname_upgrade_sv(pTHX_ PADNAME *pn)
+{
+    PERL_ARGS_ASSERT_PADNAME_UPGRADE_SV;
+
+    if(PadnameIsFULLSV(pn))
+        return pn;
+
+    SV *sv = newSV_type(SVt_PV);
+    SvLEN_set(sv, 0); /* sv does not own the buffer, it belongs to the underlying Padname */
+    SvCUR_set(sv, PadnameLEN(pn));
+    SvPVX(sv) = PadnamePV(pn);
+    SvPOK_on(sv);
+    SvUTF8_on(sv);
+    SvREADONLY_on(sv);
+
+    pn->xpadn_name_u.xpadn_sv = sv;
+
+    PadnameFLAGS(pn) |= PADNAMEf_FULLSV;
+    return pn;
 }
 
 #if defined(USE_ITHREADS)
@@ -2949,11 +2985,21 @@ Perl_padname_dup(pTHX_ PADNAME *src, CLONE_PARAMS *param)
         return dst;
     }
 
-    dst = PadnameOUTER(src)
-     ? newPADNAMEouter(padname_dup(PADNAME_FROM_PV(PadnamePV(src)), param))
-     : newPADNAMEpvn(PadnamePV(src), PadnameLEN(src));
+    if(PadnameOUTER(src))
+        /* Cloning an outer padname just makes a capture of the outer part
+         * regardless of whether it is SV-backed
+         */
+        dst = newPADNAMEouter(padname_dup(PADNAME_FROM_PV(PadnamePV(src)), param));
+    else {
+        dst = newPADNAMEpvn(PadnamePV(src), PadnameLEN(src));
+
+        if(PadnameIsFULLSV(src)) {
+            char *pnpv = PadnamePV(dst);
+            dst->xpadn_name_u.xpadn_sv = sv_dup_inc(src->xpadn_name_u.xpadn_sv, param);
+            SvPVX(dst->xpadn_name_u.xpadn_sv) = pnpv;
+        }
+    }
     ptr_table_store(PL_ptr_table, src, dst);
-    PadnameLEN(dst) = PadnameLEN(src);
     PadnameFLAGS(dst) = PadnameFLAGS(src);
     PadnameREFCNT(dst) = 0; /* The caller will increment it.  */
     PadnameTYPE   (dst) = (HV *)sv_dup_inc((SV *)PadnameTYPE(src), param);
@@ -3078,6 +3124,79 @@ Perl_resume_compcv(pTHX_ struct suspended_compcv *buffer, bool save)
 
     if(save)
         SAVEDESTRUCTOR_X(S_suspend_compcv_destruct, buffer);
+}
+
+/*
+=for apidoc prepare_export_lexical
+
+Sets up the parser state ready to call L</export_lexical> one or more times.
+Calling this function implies a call to C<ENTER>, and must be paired with a
+corresponding call to L</finish_export_lexical> to end it.
+
+=cut
+ */
+void
+Perl_prepare_export_lexical(pTHX)
+{
+    PERL_ARGS_ASSERT_PREPARE_EXPORT_LEXICAL;
+
+    assert(PL_compcv);
+
+    /* We need to have PL_comppad / PL_curpad set correctly for lexical importing */
+    ENTER;
+    SAVESPTR(PL_comppad_name); PL_comppad_name = PadlistNAMES(CvPADLIST(PL_compcv));
+    SAVECOMPPAD();
+    PL_comppad      = PadlistARRAY(CvPADLIST(PL_compcv))[1];
+    PL_curpad       = PadARRAY(PL_comppad);
+}
+
+/*
+=for apidoc export_lexical
+
+Adds an entry into the lexical scope of the code which called this. In order
+to have any effect this must be while the surrounding code is still being
+compiled; usually by being invoked as part of a C<BEGIN> block (or the one
+implied by a C<use> statement.)
+
+Calls to this function must be wrapped between a pair of calls to
+L</prepare_export_lexical> and L</finish_export_lexical>, between which may be
+placed one or more calls to C<export_lexical> itself.
+
+    prepare_export_lexical();
+    export_lexical(name1, sv1);
+    export_lexical(name2, sv2);
+    ...
+    finish_export_lexical();
+
+=cut
+*/
+void
+Perl_export_lexical(pTHX_ SV *name, SV *sv)
+{
+    PERL_ARGS_ASSERT_EXPORT_LEXICAL;
+
+    PADOFFSET off = pad_add_name_sv(name, padadd_STATE, 0, 0);
+    SvREFCNT_dec(PL_curpad[off]);
+    PL_curpad[off] = SvREFCNT_inc(sv);
+}
+
+/*
+=for apidoc finish_export_lexical
+
+Commits any recently exported lexical names to the caller's pad and undoes
+the effect of L</prepare_export_lexical>. See L</export_lexical> for more
+detail.
+
+=cut
+*/
+void
+Perl_finish_export_lexical(pTHX)
+{
+    PERL_ARGS_ASSERT_FINISH_EXPORT_LEXICAL;
+
+    intro_my();
+
+    LEAVE;
 }
 
 /*

@@ -1,0 +1,9 @@
+\.mailmap
+\.gitignore
+\.gitattributes
+\.git_patch
+^\.git\b
+^\.github/
+^\.agents/
+^AGENTS\.md$
+^CLAUDE\.md$

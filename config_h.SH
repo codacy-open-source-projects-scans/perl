@@ -142,12 +142,6 @@ sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un
  */
 #$d_fcntl HAS_FCNTL		/**/
 
-/* HAS_FDOPENDIR:
- * This symbol, if defined, indicates that the fdopendir routine is
- * available to open a directory descriptor.
- */
-#$d_fdopendir HAS_FDOPENDIR		/**/
-
 /* HAS_FGETPOS:
  *	This symbol, if defined, indicates that the fgetpos routine is
  *	available to get the file position indicator, similar to ftell().
@@ -560,12 +554,6 @@ sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un
  *	available to issue a shell command.
  */
 #$d_system HAS_SYSTEM	/**/
-
-/* HAS_SYSRANDOM:
- *	This symbol, if defined, indicates that the system has the
- *	sys/random.h header file.
- */
-#$i_sysrandom HAS_SYSRANDOM	/**/
 
 /* HAS_TCGETPGRP:
  *	This symbol, if defined, indicates that the tcgetpgrp routine is
@@ -1615,12 +1603,6 @@ sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un
  */
 #$d_flexfnam	FLEXFILENAMES		/**/
 
-/* HAS_GETENTROPY:
- *	This symbol, if defined, indicates that the getentropy routine is
- *	available.
- */
-#$d_getentropy HAS_GETENTROPY		/**/
-
 /* HAS_GETGRENT:
  *	This symbol, if defined, indicates that the getgrent routine is
  *	available for sequential access of the group database.
@@ -2400,6 +2382,25 @@ sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un
 #$d_builtin_sub_overflow HAS_BUILTIN_SUB_OVERFLOW	/**/
 #$d_builtin_mul_overflow HAS_BUILTIN_MUL_OVERFLOW	/**/
 
+/* HAS_BUILTIN_POPCOUNT:
+ *	This symbol, if defined, indicates that the compiler supports
+ *	__builtin_popcount for counting the number of bits set in an
+ *	unsigned int.
+ */
+/* HAS_BUILTIN_POPCOUNTL:
+ *	This symbol, if defined, indicates that the compiler supports
+ *	__builtin_popcountl for counting the number of bits set in an
+ *	unsigned long.
+ */
+/* HAS_BUILTIN_POPCOUNTLL:
+ *	This symbol, if defined, indicates that the compiler supports
+ *	__builtin_popcountll for counting the number of bits set in an
+ *	unsigned long long.
+ */
+#$d_builtin_popcount HAS_BUILTIN_POPCOUNT		/**/
+#$d_builtin_popcountl HAS_BUILTIN_POPCOUNTL		/**/
+#$d_builtin_popcountll HAS_BUILTIN_POPCOUNTLL		/**/
+
 /* HAS_C99_VARIADIC_MACROS:
  *	If defined, the compiler supports C99 variadic macros.
  */
@@ -2542,6 +2543,13 @@ sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un
  *	available to do the positive difference function.
  */
 #$d_fdim HAS_FDIM		/**/
+
+/* HAS_FDOPENDIR:
+ *	This symbol, if defined, indicates that the fdopendir() routine is
+ *	available to open directories using an opened file descriptor already
+ *	referring to that directory.
+ */
+#$d_fdopendir HAS_FDOPENDIR		/**/
 
 /* HAS_FEGETROUND:
  *	This symbol, if defined, indicates that the fegetround routine is
@@ -2783,6 +2791,12 @@ sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un
  *	available to get the current working directory.
  */
 #$d_getcwd HAS_GETCWD		/**/
+
+/* HAS_GETENTROPY:
+ *	This symbol, if defined, indicates that the getentropy system call
+ *	is available to retrieve fill a buffer with random bytes.
+ */
+#$d_getentropy HAS_GETENTROPY		/**/
 
 /* HAS_GETESPWNAM:
  *	This symbol, if defined, indicates that the getespwnam system call is
@@ -3169,6 +3183,10 @@ sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un
  *	This symbol, if defined, indicates that the querylocale routine is
  *	available to return the name of the locale for a category mask.
  */
+/* HAS_GETLOCALENAME_L:
+ *	This symbol, if defined, indicates that the getlocalename_l routine is
+ *	available to return the name of the locale for a category.
+ */
 /* I_XLOCALE:
  *	This symbol, if defined, indicates to the C program that the
  *	header xlocale.h is available.  See also NEED_XLOCALE_H
@@ -3182,6 +3200,7 @@ sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un
 #$d_uselocale	HAS_USELOCALE	/**/
 #$d_duplocale	HAS_DUPLOCALE	/**/
 #$d_querylocale	HAS_QUERYLOCALE	/**/
+#$d_getlocalename_l	HAS_GETLOCALENAME_L	/**/
 #$xlocale_needed	NEED_XLOCALE_H	/**/
 #$i_xlocale	I_XLOCALE               /**/
 
@@ -3863,7 +3882,7 @@ sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un
  *	This symbol, if defined, indicates that <stdckdint.h> exists and
  *	can be included.
  */
-#$i_stdckdint	I_STDCKDINT		/**/
+#$i_stdckdint I_STDCKDINT		/**/
 
 /* I_STDINT:
  *	This symbol, if defined, indicates that <stdint.h> exists and
@@ -3894,6 +3913,12 @@ sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un
  *	should be included.
  */
 #$i_sysmount	I_SYS_MOUNT		/**/
+
+/* I_SYS_RANDOM:
+ *	This symbol, if defined, indicates that <sys/random.h> exists and
+ *	should be included.
+ */
+#$i_sysrandom	I_SYS_RANDOM		/**/
 
 /* I_SYS_STATFS:
  *	This symbol, if defined, indicates that <sys/statfs.h> exists.
@@ -4413,6 +4438,13 @@ sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un
 #$usefaststdio	USE_FAST_STDIO		/**/
 #endif
 
+/* USE_GETEXECPATH:
+ *	This symbol, if defined, indicates that we can use getexecpath
+ *	to get a full path for the executable, and hence convert $^X to
+ *	an absolute path.
+ */
+#$usegetexecpath	USE_GETEXECPATH	/**/
+
 /* USE_KERN_PROC_PATHNAME:
  *	This symbol, if defined, indicates that we can use sysctl with
  *	KERN_PROC_PATHNAME to get a full path for the executable, and hence
@@ -4483,6 +4515,16 @@ sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un
 #ifndef USE_SOCKS
 #$usesocks	USE_SOCKS		/**/
 #endif
+
+/* PERL_USE_TAINT:
+ *	This symbol, if defined, enables support for taint mode.
+ */
+#$usetaint PERL_USE_TAINT	/* use taint */
+
+/* PERL_USE_VALUEMAGIC:
+ *	This symbol, if defined, enables support for Value Magic.
+ */
+#$usevaluemagic PERL_USE_VALUEMAGIC	/* use value magic */
 
 /* HAS_DRAND48_PROTO:
  *	This symbol, if defined, indicates that the system provides

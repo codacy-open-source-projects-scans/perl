@@ -1,43 +1,47 @@
 #!./perl
+use strict;
+use warnings;
 
-BEGIN {
-    require Config;
-    if ($Config::Config{'extensions'} !~ m!\bList/Util\b!){
-	print "1..0 # Skip -- Perl configured without List::Util module\n";
-	exit 0;
-    }
-}
+use lib 't/lib';
+use autouse ();
 
-my ($ok1, $ok2);
-BEGIN {
-    require autouse;
-    eval {
-        "autouse"->import('Scalar::Util' => 'Scalar::Util::set_prototype(&$)');
-    };
-    $ok1 = !$@;
+use Test::More tests => 18;
 
-    eval {
-        "autouse"->import('Scalar::Util' => 'Foo::min');
-    };
-    $ok2 = $@;
+eval {
+    "autouse"->import('MyTestModuleNormal' => 'MyTestModuleNormal::test_function_normal');
+};
+is( $@, '', "Import of fully qualified function from same package works");
 
-    "autouse"->import('Scalar::Util' => qw(isdual set_prototype(&$)));
-}
+eval {
+    "autouse"->import('MyTestModuleNormal' => 'Foo::min');
+};
+like( $@, qr/^autouse into different package attempted/, "Catch autouse into different package" );
 
-use Test::More tests => 15;
+use autouse 'MyTestModuleWithProto' => qw(test_function_another(@) test_function_with_proto(&$));
 
-ok( $ok1, "Function from package with custom 'import()' correctly imported" );
-like( $ok2, qr/^autouse into different package attempted/, "Catch autouse into different package" );
+ok !exists $INC{'MyTestModuleWithProto.pm'},
+    'Module not yet loaded';
 
-ok( isdual($!),
-    "Function imported via 'autouse' performs as expected");
+is prototype(\&test_function_with_proto), '&$',
+    'specified prototype set correctly';
 
+is eval { test_function_with_proto(sub {}, 1) }, 'works',
+    "Function imported via 'autouse' performs as expected";
 
-# set_prototype() has a prototype of &$.  Make sure that's preserved.
-sub sum { return $_[0] + $_[1] };
-is( (set_prototype \&sum, '$$'), \&sum,
-    "Subroutine prototype preserved after import via 'autouse'");
+is prototype(\&test_function_with_proto), '&$',
+    'prototype still correct after call';
 
+ok exists $INC{'MyTestModuleWithProto.pm'},
+    'Module has been lazily loaded';
+
+is prototype(\&test_function_another), '@',
+    'specified incorrect prototype set correctly';
+
+is eval { test_function_another() }, 'works',
+    "Function imported via 'autouse' with incorrect prototype performs as expected";
+
+is prototype(\&test_function_another), undef,
+    'specified incorrect prototype updated to real prototype';
 
 # Example from the docs.
 use autouse 'Carp' => qw(carp croak);
@@ -56,14 +60,6 @@ use autouse 'Carp' => qw(carp croak);
 }
 
 
-# Test that autouse's lazy module loading works.
-use autouse 'Errno' => qw(EPERM);
-
-my $mod_file = 'Errno.pm';   # just fine and portable for %INC
-ok( !exists $INC{$mod_file}, "Module not yet loaded" );
-ok( EPERM, "Access a constant from that module" ); # test if non-zero
-ok( exists $INC{$mod_file}, "Module has been lazily loaded" );
-
 use autouse Env => "something";
 eval { something() };
 like( $@, qr/^\Qautoused module Env has unique import() method/,
@@ -72,8 +68,6 @@ like( $@, qr/^\Qautoused module Env has unique import() method/,
 # Check that UNIVERSAL.pm doesn't interfere with modules that don't use
 # Exporter and have no import() of their own.
 require UNIVERSAL;
-require File::Spec;
-unshift @INC, File::Spec->catdir('t', 'lib'), 'lib';
 autouse->import("MyTestModule" => 'test_function');
 my $ret = test_function();
 is( $ret, 'works', "No interference from UNIVERSAL.pm" );
@@ -89,11 +83,11 @@ SKIP: {
     *MyTestModule2::test_function2 = \&test_function2;
     require MyTestModule2;
     is $w, undef,
-       'no redefinition warning when clobbering autouse stub with new sub';
+        'no redefinition warning when clobbering autouse stub with new sub';
     undef $w;
     MyTestModule2->import('test_function2');
     is $w, undef,
-       'no redefinition warning when clobbering autouse stub via *a=\&b';
+        'no redefinition warning when clobbering autouse stub via *a=\&b';
 }
 SKIP: {
     skip "Fails in 5.15.5 and below (perl bug)", 1 if $] < 5.0150051;
@@ -107,5 +101,5 @@ SKIP: {
     *Hash::Util::all_keys = \&all_keys;
     require Hash::Util;
     is $w, undef,
-      'no redefinition warning when clobbering autouse stub with new XSUB';
+        'no redefinition warning when clobbering autouse stub with new XSUB';
 }

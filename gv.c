@@ -96,7 +96,7 @@ Perl_gv_add_by_type(pTHX_ GV *gv, svtype type)
 
     if (!*where)
     {
-        *where = newSV_type(type);
+        *where = newSV_type_generic(type);
         if (   type == SVt_PVAV
             && memEQs(GvNAME(gv), GvNAMELEN(gv), "ISA"))
         {
@@ -191,7 +191,6 @@ SV *
 Perl_gv_const_sv(pTHX_ GV *gv)
 {
     PERL_ARGS_ASSERT_GV_CONST_SV;
-    PERL_UNUSED_CONTEXT;
 
     if (SvTYPE(gv) == SVt_PVGV)
         return cv_const_sv(GvCVu(gv));
@@ -246,7 +245,7 @@ Perl_cvgv_set(pTHX_ CV* cv, GV* gv)
 {
     PERL_ARGS_ASSERT_CVGV_SET;
 
-    GV * const oldgv = CvNAMED(cv) ? NULL : SvANY(cv)->xcv_gv_u.xcv_gv;
+    GV * const oldgv = CvHasNAME_HEK(cv) ? NULL : SvANY(cv)->xcv_gv_u.xcv_gv;
     HEK *hek;
 
     if (oldgv == gv)
@@ -266,7 +265,7 @@ Perl_cvgv_set(pTHX_ CV* cv, GV* gv)
         CvLEXICAL_off(cv);
     }
 
-    CvNAMED_off(cv);
+    CvHasNAME_HEK_off(cv);
     SvANY(cv)->xcv_gv_u.xcv_gv = gv;
     assert(!CvCVGV_RC(cv));
 
@@ -308,12 +307,12 @@ Perl_cvgv_from_hek(pTHX_ CV *cv)
         gv_init_pvn(gv, CvSTASH(cv), HEK_KEY(CvNAME_HEK(cv)),
                 HEK_LEN(CvNAME_HEK(cv)),
                 SVf_UTF8 * cBOOL(HEK_UTF8(CvNAME_HEK(cv))));
-    if (!CvNAMED(cv)) { /* gv_init took care of it */
+    if (!CvHasNAME_HEK(cv)) { /* gv_init took care of it */
         assert (SvANY(cv)->xcv_gv_u.xcv_gv == gv);
         return gv;
     }
     unshare_hek(CvNAME_HEK(cv));
-    CvNAMED_off(cv);
+    CvHasNAME_HEK_off(cv);
     SvANY(cv)->xcv_gv_u.xcv_gv = gv;
     if (svp && *svp) SvREFCNT_inc_simple_void_NN(gv);
     CvCVGV_RC_on(cv);
@@ -531,7 +530,7 @@ Perl_gv_init_pvn(pTHX_ GV *gv, HV *stash, const char *name, STRLEN len, U32 flag
         /* Not actually a constant.  Just a regular sub.  */
         CV * const cv = (CV *)has_constant;
         GvCV_set(gv,cv);
-        if (CvNAMED(cv) && CvSTASH(cv) == stash && (
+        if (CvHasNAME_HEK(cv) && CvSTASH(cv) == stash && (
                CvNAME_HEK(cv) == GvNAME_HEK(gv)
             || (  HEK_LEN(CvNAME_HEK(cv)) == HEK_LEN(GvNAME_HEK(gv))
                && HEK_FLAGS(CvNAME_HEK(cv)) != HEK_FLAGS(GvNAME_HEK(gv))
@@ -625,7 +624,7 @@ S_maybe_add_coresub(pTHX_ HV * const stash, GV *gv,
     case KEY_catch   : case KEY_class   :
     case KEY_cmp     : case KEY_default : case KEY_defer :
     case KEY_do      : case KEY_dump   : case KEY_else  : case KEY_elsif  :
-    case KEY_eq     : case KEY_eval  : case KEY_field  :
+    case KEY_eq      : case KEY_equ     : case KEY_eval  : case KEY_field  :
     case KEY_finally:
     case KEY_for     : case KEY_foreach: case KEY_format: case KEY_ge     :
     case KEY_given   : case KEY_goto   : case KEY_grep  : case KEY_gt     :
@@ -633,7 +632,8 @@ S_maybe_add_coresub(pTHX_ HV * const stash, GV *gv,
     case KEY_last   :
     case KEY_le      : case KEY_local  : case KEY_lt    : case KEY_m      :
     case KEY_map     : case KEY_method : case KEY_my    :
-    case KEY_ne   : case KEY_next : case KEY_no: case KEY_or: case KEY_our:
+    case KEY_ne      : case KEY_neu    : case KEY_next : case KEY_no:
+    case KEY_or      : case KEY_our    :
     case KEY_package: case KEY_print: case KEY_printf:
     case KEY_q    : case KEY_qq   : case KEY_qr     : case KEY_qw    :
     case KEY_qx   : case KEY_redo : case KEY_require: case KEY_return:
@@ -1485,7 +1485,7 @@ Perl_gv_autoload_pvn(pTHX_ HV *stash, const char *name, STRLEN len, U32 flags)
      * use that, but for lack of anything better we will use the sub's
      * original package to look up $AUTOLOAD.
      */
-    varstash = CvNAMED(cv) ? CvSTASH(cv) : GvSTASH(CvGV(cv));
+    varstash = CvHasNAME_HEK(cv) ? CvSTASH(cv) : GvSTASH(CvGV(cv));
     vargv = *(GV**)hv_fetch(varstash, S_autoload, S_autolen, TRUE);
     ENTER;
 
@@ -2160,9 +2160,9 @@ S_gv_magicalize(pTHX_ GV *gv, HV *stash, const char *name, STRLEN len,
                     HV *hv;
                     I32 i;
                     if (!PL_psig_name) {
-                        Newxz(PL_psig_name, 2 * SIG_SIZE, SV*);
-                        Newxz(PL_psig_pend, SIG_SIZE, int);
-                        PL_psig_ptr = PL_psig_name + SIG_SIZE;
+                        Newxz(PL_psig_name, SIG_SIZE, SV*);
+                        Newxz(PL_psig_ptr,  SIG_SIZE, PERL_ATOMIC(SV*));
+                        Newxz(PL_psig_pend, SIG_SIZE, PERL_ATOMIC(int));
                     } else {
                         /* I think that the only way to get here is to re-use an
                            embedded perl interpreter, where the previous
@@ -2173,8 +2173,9 @@ S_gv_magicalize(pTHX_ GV *gv, HV *stash, const char *name, STRLEN len,
                            interpreter structure that something else will crash
                            before we get here. I suspect that this is one of
                            those "doctor, it hurts when I do this" bugs.  */
-                        Zero(PL_psig_name, 2 * SIG_SIZE, SV*);
-                        Zero(PL_psig_pend, SIG_SIZE, int);
+                        Zero(PL_psig_name, SIG_SIZE, SV*);
+                        Zero(PL_psig_ptr,  SIG_SIZE, PERL_ATOMIC(SV*));
+                        Zero(PL_psig_pend, SIG_SIZE, PERL_ATOMIC(int));
                     }
                     GvMULTI_on(gv);
                     hv = GvHVn(gv);
@@ -2244,6 +2245,10 @@ S_gv_magicalize(pTHX_ GV *gv, HV *stash, const char *name, STRLEN len,
                     paren = RX_BUFF_IDX_CARET_POSTMATCH;
                     goto storeparen;
                 }
+                break;
+              case '\022':
+                if (memEQs(name, len, "\022E_SUPERLINEAR_CACHE_DELAY"))
+                    goto magicalize;
                 break;
               case '\023':
                 if (memEQs(name, len, "\023AFE_LOCALES"))
@@ -3225,10 +3230,10 @@ Perl_Gv_AMupdate(pTHX_ HV *stash, bool destructing)
            numifying instead of C's "+0". */
         gv = gv_fetchmeth_pvn(stash, cooky, l, -1, 0);
         cv = 0;
-        if (gv && (cv = GvCV(gv)) && CvHASGV(cv)) {
+        if (gv && (cv = GvCV(gv)) && CvHasNAME(cv)) {
             const HEK * const gvhek = CvGvNAME_HEK(cv);
             const HEK * const stashek =
-                HvNAME_HEK(CvNAMED(cv) ? CvSTASH(cv) : GvSTASH(CvGV(cv)));
+                HvNAME_HEK(CvHasNAME_HEK(cv) ? CvSTASH(cv) : GvSTASH(CvGV(cv)));
             if (memEQs(HEK_KEY(gvhek), HEK_LEN(gvhek), "nil")
              && stashek
              && memEQs(HEK_KEY(stashek), HEK_LEN(stashek), "overload")) {
@@ -3368,7 +3373,8 @@ Perl_gv_handler(pTHX_ HV *stash, I32 id)
 /* Implement tryAMAGICun_MG macro.
    Do get magic, then see if the stack arg is overloaded and if so call it.
    Flags:
-        AMGf_numeric apply sv_2num to the stack arg.
+        AMGf_numeric      apply sv_2num to the stack arg.
+        AMGf_no_GETMAGIC  do not call SvGETMAGIC on arguments
 */
 
 bool
@@ -3380,7 +3386,8 @@ Perl_try_amagic_un(pTHX_ int method, int flags)
     SV* const arg = PL_stack_sp[0];
     bool is_rc = rpp_stack_is_rc();
 
-    SvGETMAGIC(arg);
+    if (LIKELY(!(flags & AMGf_no_GETMAGIC)))
+        SvGETMAGIC(arg);
 
     if (SvAMAGIC(arg) && (tmpsv = amagic_call(arg, &PL_sv_undef, method,
                                               AMGf_noright | AMGf_unary
@@ -3460,7 +3467,7 @@ bool
 Perl_amagic_applies(pTHX_ SV *sv, int method, int flags)
 {
     PERL_ARGS_ASSERT_AMAGIC_APPLIES;
-    PERL_UNUSED_VAR(flags);
+    PERL_UNUSED_ARG(flags);
 
     assert(method >= 0 && method < NofAMmeth);
 
@@ -3573,8 +3580,9 @@ Perl_amagic_applies(pTHX_ SV *sv, int method, int flags)
    Do get magic, then see if the two stack args are overloaded and if so
    call it.
    Flags:
-        AMGf_assign  op may be called as mutator (eg +=)
-        AMGf_numeric apply sv_2num to the stack arg.
+        AMGf_assign       op may be called as mutator (eg +=)
+        AMGf_numeric      apply sv_2num to the stack arg.
+        AMGf_no_GETMAGIC  do not call SvGETMAGIC on arguments
 */
 
 bool
@@ -3586,9 +3594,11 @@ Perl_try_amagic_bin(pTHX_ int method, int flags)
     SV* right = PL_stack_sp[0];
     bool is_rc = rpp_stack_is_rc();
 
-    SvGETMAGIC(left);
-    if (left != right)
-        SvGETMAGIC(right);
+    if (LIKELY(!(flags & AMGf_no_GETMAGIC))) {
+        SvGETMAGIC(left);
+        if (left != right)
+            SvGETMAGIC(right);
+    }
 
     if (SvAMAGIC(left) || SvAMAGIC(right)) {
         SV * tmpsv;
@@ -4400,7 +4410,7 @@ Perl_gv_try_downgrade(pTHX_ GV *gv)
         (void)hv_deletehek(stash, gvnhek, G_DISCARD);
     } else if (GvMULTI(gv) && cv && SvREFCNT(cv) == 1 &&
             !SvOBJECT(cv) && !SvMAGICAL(cv) && !SvREADONLY(cv) &&
-            CvSTASH(cv) == stash && !CvNAMED(cv) && CvGV(cv) == gv &&
+            CvSTASH(cv) == stash && !CvHasNAME_HEK(cv) && CvGV(cv) == gv &&
             CvCONST(cv) && !CvNOWARN_AMBIGUOUS(cv) && !CvLVALUE(cv) && !CvUNIQUE(cv) &&
             !CvNODEBUG(cv) && !CvCLONE(cv) && !CvCLONED(cv) && !CvANON(cv) &&
             (namehek = GvNAME_HEK(gv)) &&

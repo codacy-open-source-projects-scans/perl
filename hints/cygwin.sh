@@ -15,8 +15,8 @@ test -z "$cc" && cc='gcc'
 if test -z "$plibpth"
 then
     plibpth=`gcc -print-file-name=libc.a`
-    plibpth=`dirname $plibpth`
-    plibpth=`cd $plibpth && pwd`
+    plibpth=`dirname "$plibpth"`
+    plibpth=`cd "$plibpth" && pwd`
 fi
 so='dll'
 # - eliminate -lc, implied by gcc and a symlink to libcygwin.a
@@ -106,5 +106,12 @@ lddlflags="$lddlflags $ldflags"
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=64697
 d_thread_local=undef
 
-# Broken: https://sourceware.org/pipermail/cygwin/2022-August/252043.html */
-d_newlocale=undef
+case "$osvers" in
+    # https://cygwin.com/cgit/newlib-cygwin/commit/?h=cygwin-3_3-branch&id=b612db5b14728214ca09355af5d1490df2fa1c2f
+    [12].*|3.[12].*|3.3.[12345])
+        d_newlocale=undef
+        ;;
+esac
+
+# Doesn't work properly yet
+d_getlocalename_l=undef

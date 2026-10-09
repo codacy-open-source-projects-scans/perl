@@ -7,9 +7,19 @@
 # from information stored in the DATA section of this file.
 #
 # Accepts the standard regen_lib -q and -v args.
+#
+# Normally run with `make regen_keywords`.
 
 use strict;
-use Devel::Tokenizer::C 0.05;
+BEGIN {
+    eval {
+        require Devel::Tokenizer::C;
+        Devel::Tokenizer::C->VERSION(0.05);
+        1;
+    } or die "regen/keywords.pl requires Devel::Tokenizer::C 0.05 or newer.\n",
+              "Install that module in the Perl used to run this script,\n",
+              "then run 'make regen_keywords' again.\n";
+}
 
 require './regen/regen_lib.pl';
 
@@ -18,7 +28,17 @@ my $h = open_new('keywords.h', '>',
                    file => 'keywords.h', style => '*',
                    copyright => [1994 .. 1997, 1999 .. 2002, 2005 .. 2007]});
 my $c = open_new('keywords.c', '>',
-                 { by => 'regen/keywords.pl', from => 'its data', style => '*'});
+                 { by => 'regen/keywords.pl', from => 'its data', style => '*',
+                   quote => <<'EOQ' });
+ */
+
+/*
+ *      If thought can corrupt language, language can also corrupt thought.
+ *              --George Orwell
+ *
+ *     ["Politics and the English Language"]
+ */
+EOQ
 
 my %by_strength;
 
@@ -181,6 +201,7 @@ __END__
 -endservent
 -eof
 -eq
+-equ
 +eval
 -evalbytes
 -exec
@@ -263,6 +284,7 @@ __END__
 -msgsnd
 +my
 -ne
+-neu
 +next
 +no
 -not

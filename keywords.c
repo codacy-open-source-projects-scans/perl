@@ -4,6 +4,13 @@
  * Any changes made here will be lost!
  */
 
+/*
+ *      If thought can corrupt language, language can also corrupt thought.
+ *              --George Orwell
+ *
+ *     ["Politics and the English Language"]
+ */
+
 #include "EXTERN.h"
 #define PERL_IN_KEYWORDS_C
 #include "perl.h"
@@ -203,7 +210,7 @@ Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
           goto unknown;
       }
 
-    case 3: /* 32 tokens of length 3 */
+    case 3: /* 34 tokens of length 3 */
       switch (name[0])
       {
         case 'E':
@@ -306,6 +313,14 @@ Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
 
               goto unknown;
 
+            case 'q':
+              if (name[2] == 'u')
+              {                                   /* equ              */
+                return -KEY_equ;
+              }
+
+              goto unknown;
+
             case 'x':
               if (name[2] == 'p')
               {                                   /* exp              */
@@ -378,13 +393,27 @@ Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
           goto unknown;
 
         case 'n':
-          if (name[1] == 'o' &&
-              name[2] == 't')
-          {                                       /* not              */
-            return -KEY_not;
-          }
+          switch (name[1])
+          {
+            case 'e':
+              if (name[2] == 'u')
+              {                                   /* neu              */
+                return -KEY_neu;
+              }
 
-          goto unknown;
+              goto unknown;
+
+            case 'o':
+              if (name[2] == 't')
+              {                                   /* not              */
+                return -KEY_not;
+              }
+
+              goto unknown;
+
+            default:
+              goto unknown;
+          }
 
         case 'o':
           switch (name[1])
@@ -3590,5 +3619,5 @@ unknown:
 }
 
 /* Generated from:
- * bdfd5529dba8257e060f7e4ed712f683cd6a533285abf8ce7ee78c4d0677ff38 regen/keywords.pl
+ * c62898f89dd6a63c0deff80c8c0e1c31656a9fb51fbcb2bd4c71ba6846c73228 regen/keywords.pl
  * ex: set ro ft=c: */

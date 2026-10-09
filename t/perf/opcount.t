@@ -1290,29 +1290,104 @@ test_opcount(0, "defined(ABC) gets constant folded",
                     defined      => 0,
                 });
 
-# Empty condop other/next branch optimizations
-test_opcount(0, "Empty if{} blocks are optimised away",
+# Empty condop other/next branch optimizations (void context)
+test_opcount(0, "Empty if{} blocks in void context are optimised away",
+                sub { my $x; if ($x) { } else { 1 } 42; },
+                       {
+                    stub => 0
+                });
+
+test_opcount(0, "Empty else{} blocks in void context are optimised away",
+                sub { my $x; if ($x) { 1 } else { } 42; },
+                       {
+                    stub => 0
+                });
+
+test_opcount(0, "Empty ternary true blocks in void context are optimised away",
+                sub { my $x; ($x) ? () : 1 ; 42; },
+                {
+                    stub => 0
+                });
+
+test_opcount(0, "Empty ternary false blocks in void context are optimised away",
+                sub { my $x; ($x) ? 1 : () ; 42; },
+                {
+                    stub => 0
+                });
+
+# Empty condop other/next branch optimizations (list context)
+test_opcount(0, "Empty if{} blocks in list context are optimised away",
+                sub { my $x; my @y = do {if ($x) { } else { 1 } } },
+                       {
+                    stub => 0
+                });
+
+test_opcount(0, "Empty else{} blocks in list context are optimised away",
+                sub { my $x; my @y = do { if ($x) { 1 } else { } } },
+                       {
+                    stub => 0
+                });
+
+test_opcount(0, "Empty ternary true blocks in list context are optimised away",
+                sub { my $x; my @y = ($x) ? () : 1 ; },
+                {
+                    stub => 0
+                });
+
+test_opcount(0, "Empty ternary false blocks in list context are optimised away",
+                sub { my $x; my @y = ($x) ? 1 : () ; },
+                {
+                    stub => 0
+                });
+
+# Empty condop other/next branch optimizations (unknown context)
+test_opcount(0, "Empty if{} blocks in scalar/unknown context are not optimised away",
                 sub { my $x; if ($x) { } else { 1 } },
                        {
-                    stub => 0
+                    stub => 1
                 });
 
-test_opcount(0, "Empty else{} blocks are optimised away",
+test_opcount(0, "Empty else{} blocks in scalar/unknown context are not optimised away",
                 sub { my $x; if ($x) { 1 } else { } },
                        {
-                    stub => 0
+                    stub => 1
                 });
 
-test_opcount(0, "Empty ternary true blocks are optimised away",
-                sub { my $x; ($x) ? () : 1 },
+test_opcount(0, "Empty ternary true blocks in scalar/unknown context are not optimised away",
+                sub { my $x; ($x) ? () : 1 ; },
                 {
-                    stub => 0
+                    stub => 1
                 });
 
-test_opcount(0, "Empty ternary false blocks are optimised away",
-                sub { my $x; ($x) ? 1 : () },
+test_opcount(0, "Empty ternary false blocks in scalar/unknown context are not optimised away",
+                sub { my $x; ($x) ? 1 : () ; },
                 {
-                    stub => 0
+                    stub => 1
+                });
+
+# Empty condop other/next branch optimizations (scalar context)
+test_opcount(0, "Empty if{} blocks in scalar context are not optimised away",
+                sub { my $x; my $y = do { if ($x) { } else { 1 } } },
+                       {
+                    stub => 1
+                });
+
+test_opcount(0, "Empty else{} blocks in scalar context are not optimised away",
+                sub { my $x; my $y = do { if ($x) { 1 } else { } } },
+                       {
+                    stub => 1
+                });
+
+test_opcount(0, "Empty ternary true blocks in scalar context are not optimised away",
+                sub { my $x; my $y = ($x) ? () : 1 ; },
+                {
+                    stub => 1
+                });
+
+test_opcount(0, "Empty ternary false blocks in scalar context are not optimised away",
+                sub { my $x; my $y = ($x) ? 1 : () ; },
+                {
+                    stub => 1
                 });
 
 # make sure the code block for an any/all gets optimised
@@ -1337,6 +1412,54 @@ test_opcount(0, "Don't fold string repetition above a multiplier threshold",
                 sub { my $x = "A" x (2**22) },
                 {
                     repeat      => 1,
+                });
+# GH #23369 - optimize away the list slice of "(caller \d?)[...]"
+test_opcount(0, "No list slice in (caller)[0]",
+                sub { my $x = (caller)[0] },
+                {
+                    lslice => 0,
+                    const  => 0
+                });
+test_opcount(0, "Still a list slice in (caller)[4]",
+                sub { my $x = (caller)[4] },
+                {
+                    lslice => 1,
+                    const  => 1
+                });
+test_opcount(0, "No list slice in (caller)[0,1,2,3]",
+                sub { my $x = (caller)[0,1,2,3] },
+                {
+                    lslice => 0,
+                    const  => 0
+                });
+test_opcount(0, "No list slice in (caller)[8,9,10]",
+                sub { my $x = (caller)[8,9,10] },
+                {
+                    lslice => 0,
+                    const  => 0
+                });
+test_opcount(0, "Still a list slice in (caller)[3,4,5,6,7,8]",
+                sub { my $x = (caller)[3,4,5,6,7,8] },
+                {
+                    lslice => 1,
+                    const  => 6
+                });
+
+# OP_REF_SEQ
+test_opcount(0, "(ref \$x eq 'SCALAR') optimizes to OP_REF_SEQ",
+                sub { (ref $_ eq 'SCALAR') and print; },
+                {
+                    const => 0,
+                    ref   => 0,
+                    seq   => 0
+                });
+
+test_opcount(0, "(ref \$x ne 'SCALAR') optimizes to OP_REF_SEQ",
+                sub { (ref $_ eq 'SCALAR') and print; },
+                {
+                    const => 0,
+                    ref   => 0,
+                    seq   => 0
                 });
 
 done_testing();

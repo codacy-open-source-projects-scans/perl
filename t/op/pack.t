@@ -273,7 +273,7 @@ sub list_eq ($$) {
     # Is this a stupid thing to do on VMS, VOS and other unusual platforms?
 
     skip("-- the IEEE infinity model is unavailable in this configuration.", 1)
-       if (($^O eq 'VMS') && !defined($Config{useieee}) || !$Config{d_double_has_inf});
+       if !$Config{d_double_has_inf};
 
     skip("-- $^O has serious fp indigestion on w-packed infinities", 1)
        if $^O =~ /^svr4/ && -f "/etc/issue" && -f "/etc/.relid";  # NCR MP-RAS
@@ -294,7 +294,7 @@ sub list_eq ($$) {
  SKIP: {
 
     skip("-- the full range of an IEEE double may not be available in this configuration.", 3)
-       if (($^O eq 'VMS') && !defined($Config{useieee}) || !$Config{d_double_style_ieee});
+       if !$Config{d_double_style_ieee};
 
     # This should be about the biggest thing possible on an IEEE double
     my $big = eval '2**1023';
@@ -1340,7 +1340,7 @@ is(pack('L<L>', (0x12345678)x2),
 	       # print "# junk='$junk', list=(@list2)\n";
 	       $p = pack "$junk $end", @list2, @end;
 	       my @l = unpack "x[$junk] $end", $p;
-	       is(scalar @l, scalar @end);
+	       is(scalar @l, scalar @end, "unpack 'x[$junk] $end'");
 	       is("@l", "@end", "skipping x[$junk]");
 	     }
            }

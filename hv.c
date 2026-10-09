@@ -469,6 +469,17 @@ compute it.
 =cut
 */
 
+/* sanity check: hash action codes don't clash with G_DISCARD */
+STATIC_ASSERT_DECL(
+    (G_DISCARD & HV_DISABLE_UVAR_XKEY) == 0 &&
+    (G_DISCARD & HV_FETCH_ISSTORE) == 0 &&
+    (G_DISCARD & HV_FETCH_ISEXISTS) == 0 &&
+    (G_DISCARD & HV_FETCH_LVALUE) == 0 &&
+    (G_DISCARD & HV_FETCH_JUST_SV) == 0 &&
+    (G_DISCARD & HV_DELETE) == 0 &&
+    (G_DISCARD & HV_FETCH_EMPTY_HE) == 0
+);
+
 void *
 Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
                int flags, int action, SV *val, U32 hash)
@@ -1003,7 +1014,37 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
        bad API design.  */
     if (LIKELY(HvSHAREKEYS(hv))) {
         entry = new_HE();
-        HeKEY_hek(entry) = share_hek_flags(key, klen, hash, flags);
+        if (keysv_hek) {
+            /* In threaded builds, keysv_hek will almost always be
+             * present in the PL_strtab of the *current* interpreter
+             * instance. It's safe in that scenario to just do:
+             *     HeKEY_hek(entry) = share_hek_hek(keysv_hek);
+             *
+             * However, XS code that is not thread safe might pass in a
+             * HEK that lives in a foreign instance of PL_strtab.
+             *
+             * share_hek_flags() handles this by doing a full HEK
+             * comparison and inserting a fresh HEK into the current
+             * PL_strtab if necessary.
+             *
+             * We attempt a cheaper check here first. */
+             const unsigned char keysv_flags = HEK_FLAGS(keysv_hek);
+             HE *sentry = (HvARRAY(PL_strtab))[hash & (I32)HvMAX(PL_strtab)];
+             for (;sentry; sentry = HeNEXT(sentry)) {
+                 HEK *candidate = HeKEY_hek(sentry);
+                 if (candidate == keysv_hek &&
+                     HEK_FLAGS(candidate) == keysv_flags) {
+                     /* Found it */
+                     HeKEY_hek(entry) = share_hek_hek(keysv_hek);
+                     break;
+                 }
+             }
+             if (UNLIKELY(!sentry)) /* keysv_hek not in this PL_strtab */
+                 goto safe_share;
+        } else {
+          safe_share:
+            HeKEY_hek(entry) = share_hek_flags(key, klen, hash, flags);
+        }
     }
     else if (UNLIKELY(hv == PL_strtab)) {
         /* PL_strtab is usually the only hash without HvSHAREKEYS, so putting
@@ -2447,7 +2488,6 @@ Perl_hv_fill(pTHX_ HV *const hv)
     STRLEN count = 0;
     HE **ents = HvARRAY(hv);
 
-    PERL_UNUSED_CONTEXT;
     /* No keys implies no buckets used.
        One key can only possibly mean one bucket used.  */
     if (HvTOTALKEYS(hv) < 2)
@@ -2679,6 +2719,9 @@ are set.
 
 =cut
 */
+
+/* sanity check: HV_NAME_SETALL doesn't clash with HVhek_UTF8 */
+STATIC_ASSERT_DECL((HV_NAME_SETALL & HVhek_UTF8) == 0);
 
 void
 Perl_hv_name_set(pTHX_ HV *hv, const char *name, U32 len, U32 flags)
@@ -3277,6 +3320,15 @@ Perl_unsharepvn(pTHX_ const char *str, I32 len, U32 hash)
     unshare_hek_or_pvn (NULL, str, len, hash);
 }
 
+/*
+=for apidoc unshare_hek
+
+Decrements the reference count of the given hash key structure. If that was
+the last reference and its count has become zero, it is removed from the
+shared string table and its storage is reclaimed.
+
+=cut
+*/
 
 void
 Perl_unshare_hek(pTHX_ HEK *hek)
@@ -3381,10 +3433,31 @@ S_unshare_hek_or_pvn(pTHX_ const HEK *hek, const char *str, I32 len, U32 hash)
         Safefree(str);
 }
 
-/* get a (constant) string ptr from the global string table
- * string will get added if it is not already there.
- * len and hash must both be valid for str.
- */
+/*
+=for apidoc share_hek
+
+Returns a pointer to the hash key structure entry containing the string given
+by I<str> and I<len>. If the string should be considered as opaque bytes,
+I<len> must be positive. If the string should be considered as a UTF-8 encoded
+sequence of characters, I<len> must be negative. The hash value must have been
+previously computed (using C<PERL_HASH>); do not simply pass zero here.
+
+If the string was already present in the global string table (C<PL_strtab>),
+then its reference count is incremented and the pointer to it is returned. If
+not, it is added and a pointer to the new entry with reference count 1 is
+returned. (I.e. do not think of this as a "newHEK" function; its entire
+purpose is to return shared pointers if possible).
+
+Note that it is possible the returned C<HEK> does not have the C<HEK_UTF8>
+flag set on it, even though a UTF-8 encoded sequence was given here. This
+happens in the case that the codepoints encoded by the sequence fit entirely
+within the range 0 to 255; if this happens, the string is stored as if it was
+plain bytes, but the C<HEK_WASUTF8> flag is set on it instead to indicate
+this.
+
+=cut
+*/
+
 HEK *
 Perl_share_hek(pTHX_ const char *str, SSize_t len, U32 hash)
 {
@@ -3538,7 +3611,6 @@ I32
 Perl_hv_placeholders_get(pTHX_ const HV *hv)
 {
     PERL_ARGS_ASSERT_HV_PLACEHOLDERS_GET;
-    PERL_UNUSED_CONTEXT;
 
     MAGIC * const mg = mg_find((const SV *)hv, PERL_MAGIC_rhash);
 
@@ -4002,7 +4074,6 @@ no action occurs in this case.
 void
 Perl_refcounted_he_free(pTHX_ struct refcounted_he *he) {
     PERL_ARGS_ASSERT_REFCOUNTED_HE_FREE;
-    PERL_UNUSED_CONTEXT;
 
     while (he) {
         struct refcounted_he *copy;
@@ -4040,7 +4111,6 @@ Perl_refcounted_he_inc(pTHX_ struct refcounted_he *he)
 {
     PERL_ARGS_ASSERT_REFCOUNTED_HE_INC;
 
-    PERL_UNUSED_CONTEXT;
     if (he) {
         HINTS_REFCNT_LOCK;
         he->refcounted_he_refcnt++;
@@ -4071,7 +4141,6 @@ const char *
 Perl_cop_fetch_label(pTHX_ COP *const cop, STRLEN *len, U32 *flags)
 {
     PERL_ARGS_ASSERT_COP_FETCH_LABEL;
-    PERL_UNUSED_CONTEXT;
 
     struct refcounted_he *const chain = cop->cop_hints_hash;
 

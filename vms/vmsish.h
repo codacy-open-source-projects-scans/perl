@@ -287,10 +287,8 @@ struct interp_intern {
   (void)fprintf(stderr,"Fatal VMS error (status=%d) at %s, line %d", \
   __ckvms_sts,__FILE__,__LINE__); (void)lib$signal(__ckvms_sts); } } STMT_END
 
-#ifdef VMS_DO_SOCKETS
 #define PERL_SOCK_SYSREAD_IS_RECV
 #define PERL_SOCK_SYSWRITE_IS_SEND
-#endif
 
 #define BIT_BUCKET "/dev/null"
 #define PERL_SYS_INIT_BODY(c,v)	MALLOC_CHECK_TAINT2(*c,*v) vms_image_init((c),(v)); PERLIO_INIT; MALLOC_INIT
@@ -778,17 +776,6 @@ long int lroundl(long double __x);
 }
 #endif
 
-#ifndef VMS_DO_SOCKETS
-/* This relies on tricks in perl.h to pick up that these manifest constants
- * are undefined and set up conversion routines.  It will then redefine
- * these manifest constants, so the actual values will match config.h
- */
-#undef HAS_HTONS
-#undef HAS_NTOHS
-#undef HAS_HTONL
-#undef HAS_NTOHL
-#endif
-
 /* The C RTL manual says to undef the macro for DEC C 5.2 and lower. */
 #if defined(fileno) && defined(__DECC_VER) && __DECC_VER < 50300000
 #  undef fileno 
@@ -806,4 +793,11 @@ long int lroundl(long double __x);
 #ifdef USE_LONG_DOUBLE
 #  define NAN_COMPARE_BROKEN 1
 #endif
+
+/* USE_IEEE is VMS-only and shows up in the compile-time options in -V output. But
+ * it's now somewhat redundant with the platform-agnostic double classification
+ * system, so just track that.
+ */
+#define USE_IEEE DOUBLE_STYLE_IEEE
+
 #endif  /* __vmsish_h_included */

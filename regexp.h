@@ -14,6 +14,9 @@
  * Caveat:  this is V8 regexp(3) [actually, a reimplementation thereof],
  * not the System V one.
  */
+typedef U32 TRIE_JUMP_TYPE;
+#define TRIE_JUMP_TYPE_MAX U32_MAX
+
 #ifndef PLUGGABLE_RE_EXTENSION
 /* we don't want to include this stuff if we are inside of
    an external regex engine based on the core one - like re 'debug'*/
@@ -186,6 +189,8 @@ typedef struct regexp {
     U32 lastparen;           /* highest close paren matched ($+) */
     U32 lastcloseparen;      /* last close paren matched ($^N) */
     regexp_paren_pair *offs; /* Array of offsets for (@-) and (@+) */
+    regexp_paren_pair *offs_spare; /* To minimise allocation churn when this
+                                    * regex was the last successful match */
     char **recurse_locinput; /* used to detect infinite recursion, XXX: move to internal */
 
     /*---------------------------------------------------------------------- */
@@ -196,6 +201,9 @@ typedef struct regexp {
     /* original flags used to compile the pattern, may differ from
      * extflags in various ways */
     PERL_BITFIELD32 compflags:9;
+
+    /* Is offs_spare already in use? */
+    PERL_BITFIELD32 offs_spare_used:1;
 
     /*---------------------------------------------------------------------- */
 
@@ -793,6 +801,7 @@ typedef struct {
     SSize_t pos;        /* the original value of pos() in pos_magic */
     SV   *final_replsv; /* the final value of $^R. */
     U8      pos_flags;  /* flags to be restored; currently only MGf_BYTES*/
+    U8   subbeg_flags;  /* flags describing the original subbeg state */
 } regmatch_info_aux_eval;
 
 
@@ -801,10 +810,11 @@ typedef struct {
  * the regmatch_state stack at the start of execution */
 
 typedef struct {
+    struct regexp_internal *rexi;
     regmatch_info_aux_eval *info_aux_eval;
     struct regmatch_state *old_regmatch_state; /* saved PL_regmatch_state */
     struct regmatch_slab  *old_regmatch_slab;  /* saved PL_regmatch_slab */
-    char *poscache;	/* S-L cache of fail positions of WHILEMs */
+    struct slc_cache_item *slc; /* current super-liner cache array */
 } regmatch_info_aux;
 
 
@@ -830,9 +840,6 @@ typedef struct {
     char *cutpoint;      /* (*COMMIT) position (if any) */
     regmatch_info_aux      *info_aux; /* extra fields that need cleanup */
     regmatch_info_aux_eval *info_aux_eval; /* extra saved state for (?{}) */
-    I32  poscache_maxiter; /* how many whilems todo before S-L cache kicks in */
-    I32  poscache_iter;    /* current countdown from _maxiter to zero */
-    STRLEN poscache_size;  /* size of regmatch_info_aux.poscache */
     bool intuit;    /* re_intuit_start() is the top-level caller */
     bool is_utf8_pat;    /* regex is utf8 */
     bool is_utf8_target; /* string being matched is utf8 */
@@ -970,14 +977,14 @@ typedef struct regmatch_state {
 
             U32         accepted;   /* how many accepting states left */
             bool        longfold;   /* saw a fold with a 1->n char mapping */
-            U16         *jump;      /* positive offsets from me */
+            TRIE_JUMP_TYPE   *jump;      /* positive offsets from me */
             U16         *j_before_paren;
             U16         *j_after_paren;
             regnode     *me;        /* Which node am I - needed for jump tries*/
             U8          *firstpos;  /* pos in string of first trie match */
             U32         firstchars; /* len in chars of firstpos from start */
-            U16         nextword;   /* next word to try */
-            U16         topword;    /* longest accepted word */
+            U32         nextword;   /* next word to try */
+            U32         topword;    /* longest accepted word */
         } trie;
 
         /* special types - these members are used to store state for special
@@ -1030,6 +1037,7 @@ typedef struct regmatch_state {
             CHECKPOINT  cp;         /* see note above "struct branchlike" */
             CHECKPOINT  lastcp;     /* see note above "struct branchlike" */
             bool	minmod;
+            bool        saved_seen_nonregular; /* previous seen_nonregular */
             int         parenfloor; /* how far back to strip paren data */
 
             /* these two are modified by WHILEM */
@@ -1044,8 +1052,9 @@ typedef struct regmatch_state {
             CHECKPOINT  cp;             /* see note above "struct branchlike" */
             CHECKPOINT  lastcp;         /* see note above "struct branchlike" */
             char        *save_lastloc;  /* previous curlyx.lastloc */
-            I32		cache_offset;
-            I32		cache_mask;
+            U8	        *slc_byte;
+            U8		slc_mask;
+            bool        saved_seen_nonregular; /* previous seen_nonregular */
         } whilem;
 
         struct {

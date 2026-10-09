@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use Symbol;
 
-our $VERSION = '3.63';
+our $VERSION = '3.65';
 
 =head1 NAME
 
@@ -1655,6 +1655,14 @@ sub as_code {
 
     # Emit the boot_Foo__Bar() C function / XSUB
 
+    my ($set_file, $reset_file);
+    {
+        (my $module = $pxs->{MODULE_cname}) =~ tr/_/:/;
+        my $fake_file = "$pxs->{out_filename} in $module";
+        $set_file = 'ExtUtils::ParseXS::CountLines'->file_marker($fake_file);
+        $reset_file = 'ExtUtils::ParseXS::CountLines'->end_marker;
+    }
+
     print $self->Q(<<"EOF");
         |#ifdef __cplusplus
         |extern "C" $open_brace
@@ -1665,7 +1673,9 @@ sub as_code {
         |#if PERL_VERSION_LE(5, 21, 5)
         |    dVAR; dXSARGS;
         |#else
+        |$set_file
         |    dVAR; ${\($pxs->{VERSIONCHECK_value} ? 'dXSBOOTARGSXSAPIVERCHK;' : 'dXSBOOTARGSAPIVERCHK;')}
+        |$reset_file
         |#endif
 EOF
 
@@ -1704,10 +1714,12 @@ EOF
     if ($pxs->{VERSIONCHECK_value}) {
         print $self->Q(<<"EOF");
         |#if PERL_VERSION_LE(5, 21, 5)
+        |$set_file
         |    XS_VERSION_BOOTCHECK;
         |#  ifdef XS_APIVERSION_BOOTCHECK
         |    XS_APIVERSION_BOOTCHECK;
         |#  endif
+        |$reset_file
         |#endif
         |
 EOF
@@ -1715,7 +1727,9 @@ EOF
     else {
         print $self->Q(<<"EOF") ;
             |#if PERL_VERSION_LE(5, 21, 5) && defined(XS_APIVERSION_BOOTCHECK)
+            |$set_file
             |  XS_APIVERSION_BOOTCHECK;
+            |$reset_file
             |#endif
             |
 EOF
@@ -1726,11 +1740,15 @@ EOF
     # in particular, when emitting one of:
     #      XSANY.any_i32 = $value;
     #      XSINTERFACE_FUNC_SET(cv, $value);
+    #
+    # It may be that all of the uses are guarded by false conditionals,
+    # so make sure we don't get an unused variable warning.
 
     if ($pxs->{need_boot_cv}) {
         print $self->Q(<<"EOF");
             |    $open_brace
             |        CV * cv;
+            |        PERL_UNUSED_VAR(cv);
             |
 EOF
     }
@@ -4152,10 +4170,13 @@ sub C_func_signature {
                  or $param->{is_length};
 
         my $a = $param->{var};
-        $a = "&$a" if $param->{is_addr} or $io =~ /OUT/;
+        my $t = defined $param->{type} ? $param->{type} : 'void*';
+        if ($param->{is_addr} or $io =~ /OUT/) {
+            $a = "&$a";
+            $t = "$t*";
+        }
         push @args, $a;
-        my $t = $param->{type};
-        push @types, defined $t ? $t : 'void*';
+        push @types, $t;
     }
 
     return \@args, \@types;
@@ -4947,8 +4968,11 @@ sub parse {
             $var =~ s/\s+$//;
             my $param = $ioparams->{names}{$var};
             # 'void*' is a desperate guess if no such parameter
-            push @$types, ($param && defined $param->{type})
+            my $type = $param && defined $param->{type}
                             ? $param->{type} : 'void*';
+            $type .= '*' if $param && $param->{is_addr}
+                || (defined $param->{in_out} && $param->{in_out} =~ /OUT/);
+            push @$types, $type;
         }
         $self->{args}  = $args;
     }

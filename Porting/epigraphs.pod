@@ -17,6 +17,59 @@ Consult your favorite dictionary for details.
 
 =head1 EPIGRAPHS
 
+=head2 v5.45.3 - Jasper Fforde - Shades of Grey                    
+
+L<Announced on 2026-09-24 by Philippe Bruhat (BooK)|https://www.nntp.perl.org/group/perl.perl5.porters/2026/09/msg271247.html>
+
+The safest course was actually the simplest-do nothing at all and hope
+everything turned out for the best. It wasn't a great plan, but it had
+the benefits of simplicity and a long tradition.
+
+=head2 v5.45.2 - Charles F. Kettering
+
+L<Announced on 2026-08-20 by Karen Etheridge|https://www.nntp.perl.org/group/perl.perl5.porters/2026/08/msg271149.html>
+
+My interest is in the future because I am going to spend the rest of my life there.
+
+=head2 v5.45.1 - Mike Oldfield - Far Above The Clouds
+
+L<Announced on 2026-07-22 by Paul Evans|https://www.nntp.perl.org/group/perl.perl5.porters/2026/07/msg271102.html>
+
+  And the man in the rain picked up his bag of secrets, and journeyed
+  up the mountainside, far above the clouds, and nothing was ever heard
+  from him again...
+  ...except for the sound of Tubular Bells.
+
+=head2 v5.44.0 - Frank Herbert - Dune
+
+L<Announced on 2026-07-15 by Leon Timmermans|https://www.nntp.perl.org/group/perl.perl5.porters/2026/07/msg271063.html>
+
+Once men turned their thinking over to machines in the hope that this would set them free.
+But that only permitted other men with machines to enslave them.
+
+=head2 v5.44.0-RC2 - Frank Herbert - Dune Messiah
+
+L<Announced on 2026-07-08 by Leon Timmermans|https://www.nntp.perl.org/group/perl.perl5.porters/2026/07/msg271044.html>
+
+Here lies a toppled god—
+His fall was not a small one.
+We did but build his pedestal,
+A narrow and a tall one.
+
+=head2 v5.44.0-RC1 - Frank Herbert - Dune Messiah
+
+L<Announced on 2026-07-22 by Leon Timmermans|https://www.nntp.perl.org/group/perl.perl5.porters/2026/06/msg271001.html>
+
+Empires do not suffer emptiness of purpose at the time of their creation.
+It is when they have become established that aims are lost and replaced by
+vague ritual.
+
+=head2 v5.43.11 - Isaac Asimov, Foundation
+
+L<Announced on 2026-06-01 by Paul Evans|https://nntp.perl.org/group/perl.perl5.porters/2026/06/msg270960.html>
+
+To succeed, planning alone is insufficient. One must improvise as well.
+
 =head2 v5.43.10 - Jasper Fforde, "One of Our Thursdays Is Missing"
 
 L<Announced on 2026-04-20 by Philippe Bruhat (BooK)|https://www.nntp.perl.org/group/perl.perl5.porters/2026/04/msg270871.html>
@@ -94,6 +147,25 @@ L<Announced on 2025-07-20 by Richard Leach|https://www.nntp.perl.org/group/perl.
   pure crystals of salt. I run my hands through the grains as
   they emerge, surprised for a moment by how hot they are to touch.
     'This is ultra fine,' says Joe. 'It goes into Wotsits.'
+
+=head2 v5.42.3 - Grayson Perry, "The Descent of Man"
+
+L<Announced on 2026-08-02 by Steve Hay|https://www.nntp.perl.org/group/perl.perl5.porters/2026/08/msg271123.html>
+
+For many men, the sort of attention they desire is none at all.  Boys
+are rarely praised for how they look; they learn early that they are the
+ones doing the looking. [...]  It is as if men can hear some distant
+distorted echo of Beau Brummell, the Regency dandy and arbiter of male
+dress codes, who said, 'If people turn to look at you on the street, you
+are not well dressed.'
+
+=head2 v5.42.3-RC1 - Grayson Perry, "The Descent of Man"
+
+L<Announced on 2026-07-22 by Steve Hay|https://www.nntp.perl.org/group/perl.perl5.porters/2026/07/msg271107.html>
+
+The Default Male gaze does not just dominate cinema, it looks down on
+society like the Eye of Sauron in The Lord of the Rings.  Every other
+identity group is 'othered' by it.
 
 =head2 v5.42.2 - Edgar Allan Poe, "The Pit and the Pendulum" (in "Tales of Mystery and Imagination")
 
@@ -282,6 +354,24 @@ L<Announced on 2024-07-02 by Philippe Bruhat (BooK)|https://www.nntp.perl.org/gr
   We find that in research a certain amount of intelligent ignorance
   is essential to progress; for, if you know too much, you won't try
   the thing.
+
+=head2 v5.40.5 - Grayson Perry, "The Descent of Man"
+
+L<Announced on 2026-08-02 by Steve Hay|https://www.nntp.perl.org/group/perl.perl5.porters/2026/08/msg271122.html>
+
+Of course, men who really want to camouflage themselves when getting up
+to nefarious activities wear a grey business suit.  I think a primary
+function of their sober attire is not just to look smart, but to be
+invisible in the same way that burglars often wear hi-vis jackets to
+pass as unremarkable 'workmen'.
+
+=head2 v5.40.5-RC1 - Grayson Perry, "The Descent of Man"
+
+L<Announced on 2026-07-22 by Steve Hay|https://www.nntp.perl.org/group/perl.perl5.porters/2026/07/msg271106.html>
+
+Default Man feels he is the reference point from which all other values
+and cultures are judged.  He might not be aware of it, but Default Man
+thinks he is the zero longitude of identities.
 
 =head2 v5.40.4 - Edgar Allan Poe, "The Masque of the Red Death" (in "Tales of Mystery and Imagination")
 

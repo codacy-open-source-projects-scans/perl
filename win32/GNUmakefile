@@ -6,7 +6,7 @@
 #	MinGW64 with gcc-4.4.3 or later
 #
 # This is set up to build a perl.exe that runs off a shared library
-# (perl543.dll).  Also makes individual DLLs for the XS extensions.
+# (perl545.dll).  Also makes individual DLLs for the XS extensions.
 #
 # The easiest way to customize the build process is to use parameters like this:
 #
@@ -63,7 +63,7 @@ INST_TOP := $(INST_DRV)\perl
 # versioned installation can be obtained by setting INST_TOP above to a
 # path that includes an arbitrary version string.
 #
-#INST_VER	:= \5.43.11
+#INST_VER	:= \5.45.4
 
 #
 # Comment this out if you DON'T want your perl installation to have
@@ -224,7 +224,7 @@ DEFAULT_INC_EXCLUDES_DOT := define
 # set this to additionally provide a statically linked perl-static.exe.
 # Note that dynamic loading will not work with this perl, so you must
 # include required modules statically using the STATIC_EXT or ALL_STATIC
-# variables below. A static library perl543s.lib will also be created.
+# variables below. A static library perl545s.lib will also be created.
 # Ordinary perl.exe is not affected by this option.
 #
 #BUILD_STATIC	:= define
@@ -901,9 +901,9 @@ ifeq ($(CCTYPE),GCC)
 
 CFGSH_TMPL	= config.gc
 CFGH_TMPL	= config_H.gc
-PERLIMPLIB	= $(COREDIR)\libperl543$(a)
-PERLIMPLIBBASE	= libperl543$(a)
-PERLSTATICLIB	= ..\libperl543s$(a)
+PERLIMPLIB	= $(COREDIR)\libperl545$(a)
+PERLIMPLIBBASE	= libperl545$(a)
+PERLSTATICLIB	= ..\libperl545s$(a)
 INT64		= long long
 
 else
@@ -916,12 +916,12 @@ endif
 
 # makedef.pl must be updated if this changes, and this should normally
 # only change when there is an incompatible revision of the public API.
-PERLIMPLIB	?= $(COREDIR)\perl543$(a)
-PERLIMPLIBBASE	?= perl543$(a)
-PERLEXPLIB	?= $(COREDIR)\perl543.exp
-PERLSTATICLIB	?= ..\perl543s$(a)
-PERLDLL		= ..\perl543.dll
-PERLDLLBASE	= perl543.dll
+PERLIMPLIB	?= $(COREDIR)\perl545$(a)
+PERLIMPLIBBASE	?= perl545$(a)
+PERLEXPLIB	?= $(COREDIR)\perl545.exp
+PERLSTATICLIB	?= ..\perl545s$(a)
+PERLDLL		= ..\perl545.dll
+PERLDLLBASE	= perl545.dll
 
 # don't let "gmake -n all" try to run "miniperl.exe make_ext.pl"
 PLMAKE		= gmake
@@ -1006,6 +1006,7 @@ CORE_NOCFG_H	=		\
 		..\hv.h		\
 		..\hv_func.h	\
 		..\iperlsys.h	\
+		..\perl_lock_definitions.h	\
 		..\mg.h		\
 		..\nostdio.h	\
 		..\op.h		\
@@ -1647,7 +1648,7 @@ utils: $(HAVEMINIPERL) ..\utils\Makefile
 	copy ..\README.tw       ..\pod\perltw.pod
 	copy ..\README.vos      ..\pod\perlvos.pod
 	copy ..\README.win32    ..\pod\perlwin32.pod
-	copy ..\pod\perldelta.pod ..\pod\perl54311delta.pod
+	copy ..\pod\perldelta.pod ..\pod\perl5454delta.pod
 	$(MINIPERL) -I..\lib $(PL2BAT) $(UTILS)
 	$(MINIPERL) -I..\lib ..\autodoc.pl -c "win32\$(CONFIG_H)" ..
 	$(MINIPERL) -I..\lib ..\pod\perlmodlib.PL -q ..
@@ -1747,7 +1748,7 @@ distclean: realclean
 	-if exist $(LIBDIR)\Win32API rmdir /s /q $(LIBDIR)\Win32API
 	-if exist $(LIBDIR)\XS rmdir /s /q $(LIBDIR)\XS
 	-cd $(PODDIR) && del /f *.html *.bat roffitall \
-	    perl54311delta.pod perlaix.pod perlamiga.pod perlandroid.pod \
+	    perl5454delta.pod perlaix.pod perlamiga.pod perlandroid.pod \
 	    perlapi.pod perlbs2000.pod perlcn.pod perlcygwin.pod \
 	    perlfreebsd.pod perlhaiku.pod perlhpux.pod perlhurd.pod \
 	    perlintern.pod perlirix.pod perljp.pod perlko.pod perllinux.pod \
@@ -1846,8 +1847,47 @@ test-reonly : reonly utils
 	$(XCOPY) $(GLOBEXE) ..\t\$(NULL)
 	cd ..\t && perl.exe harness $(OPT) -re \bpat\\/ $(EXTRA)
 
+.PHONY: regen regen-headers \
+	regen_keywords regen-keywords regen_invlist regen-invlist \
+	regen_charclass regen-charclass \
+	regen_meta regen-meta regen_all regen-all
+
 regen :
 	cd .. && regen.pl
+
+regen_headers regen-headers :
+	cd .. && regen.pl -v
+
+# Requires Devel::Tokenizer::C 0.05 or newer in the installed Perl.
+regen_keywords regen-keywords :
+	cd .. && perl.exe regen\keywords.pl
+
+regen_invlist regen-invlist :
+	cd .. && perl.exe -Ilib regen\mk_invlists.pl
+
+regen_charclass regen-charclass :
+	cd .. && perl.exe -Ilib regen\regcharclass.pl
+
+regen_meta regen-meta :
+	cd .. && perl.exe -Ilib Porting\makemeta -y
+	cd .. && perl.exe -Ilib Porting\makemeta -j
+
+# regen_perly is omitted here.  It depends on tools only known to be
+# available on Unix-like systems.
+regen_all regen-all :
+	@echo If this fails, run the regeneration steps one at a time:
+	@echo   gmake regen
+	@echo   gmake regen_keywords
+	@echo   gmake regen_invlist
+	@echo   gmake regen_charclass
+	@echo   gmake regen_meta
+	$(PLMAKE)
+	$(PLMAKE) regen
+	$(PLMAKE) regen_keywords
+	$(PLMAKE) regen_invlist
+	$(PLMAKE) regen_charclass
+	$(PLMAKE) regen_meta
+	$(PLMAKE)
 
 test-notty : test-prep
 	set PERL_STATIC_EXT=$(STATIC_EXT) && \

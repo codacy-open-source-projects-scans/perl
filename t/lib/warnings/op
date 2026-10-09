@@ -898,6 +898,62 @@ Parentheses missing around "local" list at - line 3.
 Parentheses missing around "local" list at - line 4.
 Parentheses missing around "local" list at - line 5.
 ########
+# NAME don't warn on 'open/opendir my $x, $y'
+# NOTE GH #4186
+# NOTE 'if (0)' because we only test parsing, not runtime behavior
+use warnings 'parenthesis';
+my $mode = '<';
+my ($file, $fh2, $dir);
+if (0) {
+    pipe my $fh1, $fh2;
+    open my $fh, $mode, $file;
+    opendir my $dh, $dir;
+    CORE::open CORE::my $fh, $mode, $file;
+    CORE::opendir CORE::my $dh, $dir;
+}
+if (0) {
+    pipe our $fh1, $fh2;
+    open our $fh, $mode, $file;
+    opendir our $dh, $dir;
+    CORE::open CORE::our $fh, $mode, $file;
+    CORE::opendir CORE::our $dh, $dir;
+}
+if (0) {
+    pipe local $fh1, $fh2;
+    open local $fh, $mode, $file;
+    opendir local $dh, $dir;
+    CORE::open CORE::local $fh, $mode, $file;
+    CORE::opendir CORE::local $dh, $dir;
+}
+EXPECT
+Parentheses missing around "my" list at - line 5.
+Parentheses missing around "our" list at - line 12.
+Parentheses missing around "local" list at - line 19.
+########
+# NAME don't warn on 'socket/accept my $x, $y'
+# NOTE GH #4186 reprise
+use warnings 'parenthesis';
+my ($domain, $type, $protocol);
+if (0) {
+    socket my $socket, $domain, $type, $protocol;
+    accept my $newsocket, $socket;
+    CORE::socket my $socket, $domain, $type, $protocol;
+    CORE::accept CORE::my $newsocket, $socket;
+}
+if (0) {
+    socket our $socket, $domain, $type, $protocol;
+    accept our $newsocket, $socket;
+    CORE::socket CORE::our $socket, $domain, $type, $protocol;
+    CORE::accept CORE::our $newsocket, $socket;
+}
+if (0) {
+    socket local $socket, $domain, $type, $protocol;
+    accept local $newsocket, $socket;
+    CORE::socket CORE::local $socket, $domain, $type, $protocol;
+    CORE::accept CORE::local $newsocket, $socket;
+}
+EXPECT
+########
 # op.c
 use warnings 'bareword' ;
 print (ABC || 1) ;
@@ -1079,7 +1135,7 @@ Format FRED redefined at - line 5.
 ########
 # op.c
 use warnings 'exec' ;
-exec "$^X -e 1" ; 
+exec "\"$^X\" -e 1" ;
 my $a
 EXPECT
 Statement unlikely to be reached at - line 4.
@@ -1087,7 +1143,7 @@ Statement unlikely to be reached at - line 4.
 ########
 # op.c, no warning if exec isn't a statement.
 use warnings 'exec' ;
-$a || exec "$^X -e 1" ;
+$a || exec "\"$^X\" -e 1" ;
 my $a
 EXPECT
 ########
@@ -1121,7 +1177,7 @@ Can't use 'defined(%hash)' (Maybe you should just omit the defined()?) at - line
 ########
 # op.c
 no warnings 'exec' ;
-exec "$^X -e 1" ; 
+exec "\"$^X\" -e 1" ;
 my $a
 EXPECT
 
@@ -2258,21 +2314,9 @@ d
 b
 ########
 use warnings;
-use v5.12;
-use v5.20;
-EXPECT
-Changing use VERSION while another use VERSION is in scope is deprecated, and will become fatal in Perl 5.46 at - line 3.
-########
-use warnings;
 use v5.8;
 use v5.10;
 EXPECT
-########
-use warnings;
-use v5.10;
-use v5.8;
-EXPECT
-Changing use VERSION while another use VERSION is in scope is deprecated, and will become fatal in Perl 5.46 at - line 3.
 ########
 use warnings;
 use v5.12;

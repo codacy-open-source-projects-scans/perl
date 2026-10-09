@@ -35,6 +35,7 @@ BEGIN {
 }
 
 use warnings;
+no warnings 'experimental::equ';
 use strict;
 use Test::More;
 
@@ -508,6 +509,7 @@ endpwent         0     -
 endservent       0     -
 eof              01    - # also tested specially
 eq               B     -
+equ              B     -
 eval             01    $+
 evalbytes        01    $
 exec             @     p1 # also tested specially
@@ -582,6 +584,7 @@ msgrcv           5     p
 msgsnd           3     p
 my               123   p+ # skip with 0 args, as my() => ()
 ne               B     -
+neu              B     -
 # next handled specially
 # not handled specially
 oct              01    $

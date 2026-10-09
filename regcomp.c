@@ -146,7 +146,7 @@ EXTERN_C const struct regexp_engine wild_reg_engine;
 #include "regcomp_internal.h"
 #include "feature.h"
 
-/* =========================================================
+/* ---------------------------------------------------------
  * BEGIN edit_distance stuff.
  *
  * This calculates how many single character changes of any type are needed to
@@ -289,7 +289,7 @@ S_edit_distance(const UV* src,
 }
 
 /* END of edit_distance() stuff
- * ========================================================= */
+ * --------------------------------------------------------- */
 
 #ifdef PERL_RE_BUILD_AUX
 /* add a data member to the struct reg_data attached to this regex, it should
@@ -882,9 +882,10 @@ static bool
 S_has_runtime_code(pTHX_ RExC_state_t * const pRExC_state,
                     char *pat, STRLEN plen)
 {
+    PERL_ARGS_ASSERT_HAS_RUNTIME_CODE;
+
     int n = 0;
     STRLEN s;
-    PERL_UNUSED_CONTEXT;
 
     for (s = 0; s < plen; s++) {
         if (   pRExC_state->code_blocks
@@ -1699,6 +1700,7 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
     RExC_sawback = false;
 
     RExC_seen = 0;
+    RExC_have_flattened = false;
     RExC_maxlen = 0;
     RExC_in_lookaround = false;
     RExC_seen_zerolen = *exp == '^' ? -1 : 0;
@@ -1708,7 +1710,6 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
     RExC_start = RExC_copy_start_in_constructed = RExC_copy_start_in_input = RExC_precomp = exp;
     RExC_precomp_end = RExC_end = exp + plen;
     RExC_nestroot = 0;
-    RExC_whilem_seen = 0;
     RExC_end_op = NULL;
     RExC_recurse = NULL;
     RExC_study_chunk_recursed = NULL;
@@ -1806,6 +1807,13 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
             flags |= RESTART_PARSE;
         }
 
+        /* Branch flattening and (*THEN) nodes are incompatible. If both have
+         * been seen, trigger a reparse without any branch flattening. */
+        if (UNLIKELY(RExC_have_flattened && !RExC_unsafe_flatten
+               && (RExC_seen & REG_CUTGROUP_SEEN) )) {
+            RExC_unsafe_flatten = true;
+            flags |= RESTART_PARSE;
+        }
         /* We have that number in RExC_npar */
         RExC_total_parens = RExC_npar;
         RExC_logical_total_parens = RExC_logical_npar;
@@ -1893,10 +1901,6 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
 
     RExC_rx->nparens = RExC_total_parens - 1;
     RExC_rx->logical_nparens = RExC_logical_total_parens - 1;
-
-    /* Uses the upper 4 bits of the FLAGS field, so keep within that size */
-    if (RExC_whilem_seen > 15)
-        RExC_whilem_seen = 15;
 
     DEBUG_PARSE_r({
         re_printf(
@@ -2048,8 +2052,10 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
                 RExC_rxi->regstclass = first;
         }
 #ifdef TRIE_STCLASS
+        /* Aho-Corasick consumes the same processed transition stream as the
+         * ordinary trie executor; it is a trie with failure links. */
         else if (REGNODE_TYPE(OP(first)) == TRIE &&
-                ((reg_trie_data *)RExC_rxi->data->data[ ARG1u(first) ])->minlen > 0)
+                ((reg_trie_data *)RExC_rxi->data->data[ TRIE_DATA_SLOT(first) ])->minlen > 0)
         {
             /* this can happen only on restudy
              * Search for "restudy" in this file to find
@@ -2152,7 +2158,6 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
             0, true);
         /* search for "restudy" in this file for a detailed explanation
          * of 'restudied' and SCF_TRIE_DOING_RESTUDY */
-
 
         CHECK_RESTUDY_GOTO_butfirst(LEAVE_with_name("study_chunk"));
 
@@ -3036,6 +3041,201 @@ S_reg_la_OPFAIL(pTHX_ RExC_state_t *pRExC_state, U32 flags,
     RExC_seen |= flags;
     RExC_in_lookaround = true;
     return 0; /* keep parsing! */
+}
+
+/* Helper for S_flatten_inner_branches
+ * Skips over any leading NOTHING/OPTIMIZED nodes.
+ */
+PERL_STATIC_INLINE regnode *
+S_content_head(pTHX_ regnode *wrapper)
+{
+    regnode *node = REGNODE_AFTER(wrapper);
+    while (OP(node) == NOTHING || OP(node) == OPTIMIZED) {
+        regnode *nx = regnext(node);
+        if (UNLIKELY(!nx))
+            break;
+        node = nx;
+    }
+    return node;
+}
+
+/* S_flatten_inner_branches */
+static void
+S_flatten_inner_branches(pTHX_ RExC_state_t *pRExC_state, regnode *first_outer_br,
+                               regnode *ender, U32 depth)
+{
+
+    PERL_UNUSED_VAR(depth); /* Used for DEBUG_PARSE_r output */
+    DECLARE_AND_GET_RE_DEBUG_FLAGS;
+
+    regnode *prev_outer_br = NULL;
+    regnode *outer_br  = first_outer_br;
+
+    while (outer_br && OP(outer_br) == BRANCH) {
+        /* Get next outer BRANCH node - or the tail */
+        regnode *outer_successor = regnext(outer_br);
+        /* Follow REGNODE_AFTER(outer_br) to see what's inside this BRANCH */
+        regnode *first_inner_br = S_content_head(aTHX_ outer_br);
+
+        if (OP(first_inner_br) != BRANCH) { /* Not a nested BRANCH */
+            prev_outer_br = outer_br; outer_br = outer_successor; continue;
+        }
+
+        /* There is a set of inner BRANCH regnodes. Walk them to find the
+         * final one in the chain, checking for conditions (such as empty
+         * branch contents) that could corrupt the regex if flattened. */
+        regnode *last_inner_br = first_inner_br;
+         /* Note: This loop could check if flattening has a good chance of
+         * building bigger tries, or would result in offsets > U16_MAX, but
+         * with the anticipated move to 32 bit offsets, it shouldn't matter.
+         * If this code does create oversized offsets in the meantime, the
+         * surrounding code will reparse using BRANCHJ. */
+        bool unsafe = false;
+        while (1) {
+            regnode *inner_content = S_content_head(aTHX_ last_inner_br);
+            const U8 type = REGNODE_TYPE(OP(inner_content));
+            if (type == NOTHING) { /* Note: OPTIMIZED also has type == NOTHING */
+                unsafe = true; break;
+            }
+
+            if (OP(regnext(last_inner_br)) != BRANCH)
+                break;
+            last_inner_br = regnext(last_inner_br);
+        }
+        if (unsafe) {
+            prev_outer_br = outer_br; outer_br = outer_successor; continue;
+        }
+
+        /* It may not be safe to flatten if the regnode following the final
+         * inner BRANCH isn't a TAIL. Flattening is definitely not safe if
+         * the tail doesn't point to the expected outer TAIL. */
+        regnode *inner_ender = regnext(last_inner_br);
+        if (UNLIKELY(OP(inner_ender) != TAIL) || regnext(inner_ender) != ender) {
+            prev_outer_br = outer_br; outer_br = outer_successor; continue;
+        }
+
+        /* By this point, there is an inner BRANCH and it seems safe to
+         * flatten it. This is done by manipulating regnode offsets. */
+        const regnode_offset last_inner_off      = REGNODE_OFFSET(last_inner_br);
+        const regnode_offset outer_successor_off = REGNODE_OFFSET(outer_successor);
+        const regnode_offset first_inner_br_off  = REGNODE_OFFSET(first_inner_br);
+        const regnode_offset prev_outer_br_off = (prev_outer_br) ? REGNODE_OFFSET(prev_outer_br) : 0;
+
+        /* However, we cannot reliably tell if there is an outer *THEN yet to
+         * be parsed, in which case flattening could mess up the matching logic.
+         * If REG_CUTGROUP_SEEN was set during parsing, Perl_op_re_compile will
+         * check if RExC_have_flattened was also set, and if so, it triggers a
+         * reparse with no flattening. */
+        RExC_have_flattened = true;
+
+#ifdef DEBUGGING
+        UV my_nalt = 0;
+        SV *debug_string = NULL;
+
+        DEBUG_PARSE_r({
+            debug_string = newSV_type(SVt_PV);
+        });
+#endif
+        /* Walk the inner BRANCH regnodes in turn. */
+        for (regnode *inner_br = first_inner_br; OP(inner_br) == BRANCH; inner_br = regnext(inner_br)) {
+            regnode *content_tail = S_content_head(aTHX_ inner_br);
+            assert(content_tail);
+#ifdef DEBUGGING
+            regnode *content_head = content_tail;
+#endif
+            /* Walk the regnodes within a single inner BRANCH to
+             * find the local tail (content_tail). */
+            regnode *nx = regnext(content_tail);
+            while (nx && nx != inner_ender && content_tail != ender) {
+                content_tail = nx;
+                nx = regnext(content_tail);
+            }
+            /* The inner tail shouldn't be an outer regnode. */
+            assert(content_tail != ender);
+
+            /* Flatten this inner BRANCH by effectively hoisting the
+             * contents to the level of the outer BRANCH. */
+            if (nx == inner_ender) {
+                const regnode_offset tail_off  = REGNODE_OFFSET(content_tail);
+                const regnode_offset ender_off = REGNODE_OFFSET(ender);
+
+                DEBUG_PARSE_r({
+                    if (my_nalt == 1) sv_catpvs(debug_string, "|");
+                    /* Not trying exhaustively to find an EXACT to report */
+                    U8 first_op = OP(content_head);
+                    regnode *lbl = (REGNODE_TYPE(first_op) == EXACT) ? content_head : NULL;
+
+                    DEBUG_PARSE_MSG("fltn");
+                    if (lbl) {
+                        re_printf("~ EXACT <%.*s> (brnc %" UVuf ") "
+                            "attach to TAIL (%" UVuf ")\n",
+                            (int) STR_LEN(lbl), STRING(lbl),
+                            (UV) REGNODE_OFFSET(lbl), (UV) ender_off);
+                        if (my_nalt < 2) {
+                            sv_catpvn(debug_string, STRING(lbl), STR_LEN(lbl));
+                        }
+                    } else {
+                        regprop(RExC_rx, RExC_mysv1, content_tail, NULL, pRExC_state);
+                        re_printf(" ~ route %s tail (%" UVuf
+                            ") to ender (%" UVuf ")\n",
+                            SvPV_nolen_const(RExC_mysv1),
+                            (UV) tail_off, (UV) ender_off);
+                        if (my_nalt < 2) {
+                            sv_catsv(debug_string, RExC_mysv1);
+                        }
+                    }
+                    /* my_nalt is a debugging indicator, shouldn't matter
+                     * if it tops out at UV_MAX */
+                    if (my_nalt < UV_MAX) my_nalt++;
+                });
+                /* Point the final regnode within the inner BRANCH to the
+                 * common outer TAIL regnode. */
+                NEXT_OFF_set(content_tail, ender_off - tail_off);
+            }
+        }
+
+        DEBUG_PARSE_r({
+            if (my_nalt > 2)
+                sv_catpvs(debug_string, "|...");
+            DEBUG_PARSE_MSG("fltn");
+            re_printf("~ %" UVuf " inner brnc%s (%" SVf ") lifted\n",
+                  my_nalt, (my_nalt == 1 ? "" : "s"), debug_string);
+
+            SvREFCNT_dec(debug_string);
+        });
+
+        /* Ensure that BRANCH takes up 2 units of space, as the
+         * following OP fixups assume that to be the case. */
+        assert(REGNODE_AFTER(outer_br) == outer_br + 2);
+
+        /* Fix up the relevant outer BRANCH regnode */
+        if (prev_outer_br) {
+            NEXT_OFF_set(prev_outer_br, first_inner_br_off - prev_outer_br_off);
+            OP(outer_br) = OPTIMIZED;
+            NEXT_OFF_set(outer_br, 0);
+        } else {
+            OP(outer_br) = NOTHING;
+
+            const regnode_offset outer_br_off = REGNODE_OFFSET(outer_br);
+            assert(first_inner_br_off >= outer_br_off);
+            NEXT_OFF_set(outer_br, first_inner_br_off - outer_br_off);
+        }
+
+        regnode *detritus = outer_br + NODE_STEP_REGNODE;
+        OP(detritus) = OPTIMIZED;
+        NEXT_OFF_set(detritus, 0);
+
+        /* Fix up the inner branch. */
+        NEXT_OFF_set(last_inner_br, outer_successor_off - last_inner_off);
+
+        /* .. and the inner content tail. */
+        OP(inner_ender) = OPTIMIZED; /* inner_ender was likely a TAIL node */
+        NEXT_OFF_set(inner_ender, 0);
+
+        /* Ready to go round again. */
+        outer_br = first_inner_br;
+        continue;
+    }
 }
 
 /* Below are the main parsing routines.
@@ -4448,6 +4648,25 @@ S_reg(pTHX_ RExC_state_t *pRExC_state, I32 paren, I32 *flagp, U32 depth)
                         is_nothing = 0;
                 }
             }
+
+            /* Note: the difference betweem BRANCH and BRANCHJ may disappear
+             * if/when the regex engine uses 32 bit offsets everywhere. */
+            if (! RExC_use_BRANCHJ
+                && ! RExC_unsafe_flatten
+                && (
+                    OP(REGNODE_p(ender)) == TAIL
+                 || OP(REGNODE_p(ender)) == END))
+            {
+                assert(OP(REGNODE_p(ret)) == BRANCH);
+                /* If there is a nested branch that can be safely hoisted
+                 * up to this branch's level, do so to flatten the pattern.
+                 * This will hopefully allow make_trie to fold in more
+                 * alternations and otherwise avoid the need to deepen the
+                 * state stack. */
+                (void) S_flatten_inner_branches(aTHX_ pRExC_state,
+                               REGNODE_p(ret), REGNODE_p(ender), depth);
+            }
+
             if (is_nothing) {
                 regnode * ret_as_regnode = REGNODE_p(ret);
                 br = REGNODE_TYPE(OP(ret_as_regnode)) != BRANCH
@@ -4604,6 +4823,17 @@ S_regbranch(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, I32 first, U32 depth)
             }
         }
         chain = latest;
+        if (UNLIKELY(chain > U16_MAX && ! RExC_use_BRANCHJ)) {
+            /* A later link from an early node can overflow once the emitted
+             * program has grown this large.  Switch formats now, instead of
+             * finishing this (potentially very large) compilation pass only
+             * to discover the overflow while joining the branches. */
+            RExC_use_BRANCHJ = 1;
+            if (! IN_PARENS_PASS) {
+                *flagp |= RESTART_PARSE;
+                return 0;
+            }
+        }
         c++;
     }
     if (chain == 0) {	/* Loop ran zero times. */
@@ -4978,7 +5208,6 @@ S_regpiece(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth)
         {
             REQUIRE_BRANCHJ(flagp, 0);
         }
-        RExC_whilem_seen++;
         MARK_NAUGHTY_EXP(1, 4);     /* compound interest */
     }
 
@@ -6790,13 +7019,18 @@ S_regatom(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth)
                      * things */
                     maybe_exactfu = false;
 
-                    /* Although these two characters have folds that are
+                    /* Although these characters have folds that are
                      * locale-problematic, they also have folds to above Latin1
                      * that aren't a problem.  Doing these now helps at
                      * runtime. */
-                    if (UNLIKELY(   ender == GREEK_CAPITAL_LETTER_MU
-                                 || ender == LATIN_CAPITAL_LETTER_SHARP_S))
-                    {
+                    if (   UNLIKELY(ender == GREEK_CAPITAL_LETTER_MU)
+#ifdef LATIN_CAPITAL_LETTER_SHARP_S
+                        || UNLIKELY(ender == LATIN_CAPITAL_LETTER_SHARP_S)
+#endif
+#ifdef SURSOLIDUM
+                        || UNLIKELY(ender == SURSOLIDUM)
+#endif
+                    ) {
                         goto fold_anyway;
                     }
 
@@ -8677,8 +8911,8 @@ redo_curchar:
 
 #ifdef ENABLE_REGEX_SETS_DEBUGGING
                     /* Enable with -Accflags=-DENABLE_REGEX_SETS_DEBUGGING */
-        DEBUG_U(dump_regex_sets_structures(pRExC_state,
-                                           stack, fence, fence_stack));
+        DEBUG_U(dump_regex_sets_structures(pRExC_state, stack, fence,
+                                           fence_stack,__LINE__));
 #endif
 
         top_index = av_tindex_skip_len_mg(stack);
@@ -9213,9 +9447,11 @@ redo_curchar:
             OP(REGNODE_p(node)) = ANYOFL;
             ANYOF_FLAGS(REGNODE_p(node)) |= ANYOFL_UTF8_LOCALE_REQD;
         }
+
+        /* Now able to advance to prepare for the next construct. */
+        nextchar(pRExC_state);
     }
 
-    nextchar(pRExC_state);
     return node;
 
   regclass_failed:
@@ -9227,7 +9463,8 @@ redo_curchar:
 
 static void
 S_dump_regex_sets_structures(pTHX_ RExC_state_t *pRExC_state,
-                             AV * stack, const IV fence, AV * fence_stack)
+                             AV * stack, const IV fence, AV * fence_stack,
+                             line_t line_number)
 {   /* Dumps the stacks in handle_regex_sets() */
 
     const SSize_t stack_top = av_tindex_skip_len_mg(stack);
@@ -9237,6 +9474,9 @@ S_dump_regex_sets_structures(pTHX_ RExC_state_t *pRExC_state,
     PERL_ARGS_ASSERT_DUMP_REGEX_SETS_STRUCTURES;
 
     PerlIO_printf(Perl_debug_log, "\nParse position is:%s\n", RExC_parse);
+    PerlIO_printf(Perl_debug_log, "    Called from line %" LINE_Tf "\n",
+                                  line_number);
+    PerlIO_printf(Perl_debug_log, "\nDepth is: %zu\n", RExC_sets_depth);
 
     if (stack_top < 0) {
         PerlIO_printf(Perl_debug_log, "Nothing on stack\n");
@@ -10270,9 +10510,7 @@ S_regclass(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth,
                 break;
             }   /* End of switch on char following backslash */
         } /* end of handling backslash escape sequences */
-        else if (   generic_isCC_(value, CC_VERTSPACE_)
-                 || is_VERTWS_cp_high(value))
-        {
+        else if (isVERTWS_uvchr(value)) {
             if (strict && ! skip_white) {
                 vFAIL("Literal vertical space in [] is illegal except"
                       " under /x");
@@ -11999,14 +12237,24 @@ S_optimize_regclass(pTHX_
             {
                 U8 ANYOFM_mask;
 
-                op = ANYOFM + inverted;
+                if (inverted && full_cp_count == 1) {
+                    /* Single excluded invariant byte -> NEXACTb.
+                     * This is common enough (searching for the first byte
+                     * after a long repeating prefix, searching for
+                     * "not a closing delimiter" that it's worth
+                     * specializing for. */
+                    op = NEXACTb;
+                    *ret = reg1node(pRExC_state, op, lowest_cp);
+                } else {
+                    op = ANYOFM + inverted;
 
-                /* We need to make the bits that differ be 0's */
-                ANYOFM_mask = ~ bits_differing; /* This goes into FLAGS */
+                    /* We need to make the bits that differ be 0's */
+                    ANYOFM_mask = ~ bits_differing; /* This goes into FLAGS */
 
-                /* The argument is the lowest code point */
-                *ret = reg1node(pRExC_state, op, lowest_cp);
-                FLAGS(REGNODE_p(*ret)) = ANYOFM_mask;
+                    /* The argument is the lowest code point */
+                    *ret = reg1node(pRExC_state, op, lowest_cp);
+                    FLAGS(REGNODE_p(*ret)) = ANYOFM_mask;
+                }
             }
 
           done_anyofm:
@@ -13136,7 +13384,6 @@ S_reginsert(pTHX_ RExC_state_t *pRExC_state, const U8 op,
     const int size = NODE_STEP_REGNODE + offset;
     DECLARE_AND_GET_RE_DEBUG_FLAGS;
 
-    PERL_UNUSED_CONTEXT;
     PERL_UNUSED_ARG(depth);
     DEBUG_PARSE_FMT("inst"," - %s", REGNODE_NAME(op));
     assert(!RExC_study_started); /* I believe we should never use reginsert once we have started
@@ -13416,7 +13663,6 @@ Perl_re_intuit_string(pTHX_ REGEXP * const r)
     DECLARE_AND_GET_RE_DEBUG_FLAGS;
 
     PERL_ARGS_ASSERT_RE_INTUIT_STRING;
-    PERL_UNUSED_CONTEXT;
 
     DEBUG_COMPILE_r(
         {
@@ -13491,6 +13737,8 @@ Perl_pregfree2(pTHX_ REGEXP *rx)
     SvREFCNT_dec(r->saved_copy);
 #endif
     Safefree(RXp_OFFSp(r));
+    if (r->offs_spare)
+        Safefree(r->offs_spare);
     if (r->logical_to_parno) {
         Safefree(r->logical_to_parno);
         Safefree(r->parno_to_logical);
@@ -13601,6 +13849,11 @@ Perl_reg_temp_copy(pTHX_ REGEXP *dsv, REGEXP *ssv)
         const I32 npar = srx->nparens+1;
         NewCopy(RXp_OFFSp(srx), RXp_OFFSp(drx), npar, regexp_paren_pair);
     }
+
+    /* If the copy needs offs_spare, it will lazily allocate it.*/
+    drx->offs_spare = NULL;
+    drx->offs_spare_used = FALSE;
+
     if (srx->substrs) {
         int i;
         Newx(drx->substrs, 1, struct reg_substr_data);
@@ -13739,11 +13992,8 @@ Perl_regfree_internal(pTHX_ REGEXP * const rx)
                     refcount = --trie->refcount;
                     OP_REFCNT_UNLOCK;
                     if ( !refcount ) {
-                        PerlMemShared_free(trie->charmap);
                         PerlMemShared_free(trie->states);
                         PerlMemShared_free(trie->trans);
-                        if (trie->bitmap)
-                            PerlMemShared_free(trie->bitmap);
                         if (trie->jump)
                             PerlMemShared_free(trie->jump);
                         if (trie->j_before_paren)
@@ -13769,6 +14019,14 @@ Perl_regfree_internal(pTHX_ REGEXP * const rx)
         }
         Safefree(ri->data->what);
         Safefree(ri->data);
+    }
+
+    if (ri->slc) {
+#ifdef DEBUGGING
+        for (U8 i = 0; i < ri->slc_whilem_seen; i++)
+            assert(!ri->slc[i].slc_bitmap);
+#endif
+        Safefree(ri->slc);
     }
 
     Safefree(ri);
@@ -13805,6 +14063,10 @@ Perl_re_dup_guts(pTHX_ const REGEXP *sstr, REGEXP *dstr, CLONE_PARAMS *param)
 
     npar = r->nparens+1;
     NewCopy(RXp_OFFSp(r), RXp_OFFSp(ret), npar, regexp_paren_pair);
+
+    /* If the clone needs offs_spare, it will lazily allocate it.*/
+    ret->offs_spare = NULL;
+    ret->offs_spare_used = FALSE;
 
     if (ret->substrs) {
         /* Do it this way to avoid reading from *r after the StructCopy().
@@ -14031,6 +14293,9 @@ Perl_regdupe_internal(pTHX_ REGEXP * const rx, CLONE_PARAMS *param)
 
 
     reti->name_list_idx = ri->name_list_idx;
+    reti->slc_whilem_seen = ri->slc_whilem_seen;
+    reti->slc             = NULL; /* will be alloced if/when needed */
+    reti->depth           = 0;
 
     SetProgLen(reti, len);
 

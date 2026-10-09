@@ -127,11 +127,9 @@ __UNDEF_NOT_PROVIDED__ inRANGE(c, l, u)                                        \
     : (sizeof(c) == sizeof(U32)) ? withinCOUNT(((U32) (c)), (l), ((u) - (l)))  \
     : (withinCOUNT(((WIDEST_UTYPE) (c)), (l), ((u) - (l)))))
 
-/* The '| 0' part ensures a compiler error if c is not integer (like e.g., a
- * pointer) */
 #undef FITS_IN_8_BITS   /* handy.h version uses a core-only constant */
-__UNDEF_NOT_PROVIDED__ FITS_IN_8_BITS(c) (   (sizeof(c) == 1)               \
-                                    || !(((WIDEST_UTYPE)((c) | 0)) & ~0xFF))
+__UNDEF_NOT_PROVIDED__ FITS_IN_8_BITS(c)                                    \
+                    ((sizeof(c) == 1) || ((WIDEST_UTYPE)(c) == ((U8)(c))))
 
 /* Create the macro for "is'macro'_utf8_safe(s, e)".  For code points below
  * 256, it calls the equivalent _L1 macro by converting the UTF-8 to code
@@ -320,6 +318,7 @@ __REDEFINE__ STMT_END    while (0)
 #endif
 
 __UNDEFINED__  boolSV(b)    ((b) ? &PL_sv_yes : &PL_sv_no)
+__UNDEFINED__  newSVbool(value) newSVsv(boolSV(value))
 
 /* DEFSV appears first in 5.004_56 */
 __UNDEFINED__  DEFSV        GvSV(PL_defgv)
@@ -1355,6 +1354,13 @@ boolSV(value)
                 RETVAL = newSVsv(boolSV(value));
         OUTPUT:
                 RETVAL
+
+SV*
+newSVbool(bool arg)
+		CODE:
+				RETVAL = newSVbool(arg);
+		OUTPUT:
+				RETVAL
 
 SV*
 DEFSV()
@@ -2614,12 +2620,15 @@ mark_max()
         OUTPUT:
                 RETVAL
 
-=tests plan => 26829
+=tests plan => 26831
 
 use vars qw($my_sv @my_av %my_hv);
 
 ok(&Devel::PPPort::boolSV(1), "Verify boolSV(1) is true");
 ok(!&Devel::PPPort::boolSV(0), "Verify boolSV(0) is false");
+
+ok(&Devel::PPPort::newSVbool(1), "Verify newSVbool(1) is true");
+ok(!&Devel::PPPort::newSVbool(0), "Verify newSVbool(0) is false");
 
 $_ = "Fred";
 is(&Devel::PPPort::DEFSV(), "Fred", '$_ is FRED; Verify DEFSV is FRED');

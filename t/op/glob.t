@@ -6,7 +6,7 @@ BEGIN {
     set_up_inc( qw(. ../lib) );
 }
 
-plan( tests => 18 );
+use Config;
 
 @oops = @ops = <op/*>;
 
@@ -120,7 +120,6 @@ SKIP: {
 ######## glob() bug Mon, 01 Sep 2003 02:25:41 -0700 <200309010925.h819Pf0X011457@smtp3.ActiveState.com>
 
 SKIP: {
-    use Config;
     skip("glob() works when cross-compiling, but this test doesn't", 1)
         if $Config{usecrosscompile};
 
@@ -150,3 +149,18 @@ SKIP: {
     }
 EOP
 }
+
+SKIP: {
+    skip "Debugging builds on Linux and Cygwin still problematic: GH 16869", 1
+        if (
+            ($Config{osname} eq 'linux' or $Config{osname} eq 'cygwin') and
+            Config::DEBUGGING
+        );
+    fresh_perl(<<~'HERE', {});
+        my $glob = ("0" x 4094) . "?";
+        glob $glob;
+        HERE
+    is($?, 0, 'No assertion failure; GH 16869');
+}
+
+done_testing();

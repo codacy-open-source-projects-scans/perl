@@ -1,20 +1,17 @@
 
 package IO::Uncompress::Gunzip ;
-
-require 5.006 ;
-
 # for RFC1952
 
 use strict ;
 use warnings;
 use bytes;
 
-use IO::Uncompress::RawInflate 2.219 ;
+use IO::Uncompress::RawInflate 2.224 ;
 
-use Compress::Raw::Zlib 2.218 () ;
-use IO::Compress::Base::Common 2.219 qw(:Status );
-use IO::Compress::Gzip::Constants 2.219 ;
-use IO::Compress::Zlib::Extra 2.219 ;
+use Compress::Raw::Zlib 2.224 () ;
+use IO::Compress::Base::Common 2.224 qw(:Status );
+use IO::Compress::Gzip::Constants 2.224 ;
+use IO::Compress::Zlib::Extra 2.224 ;
 
 require Exporter ;
 
@@ -28,7 +25,7 @@ Exporter::export_ok_tags('all');
 
 $GunzipError = '';
 
-$VERSION = '2.219';
+$VERSION = '2.224';
 
 sub new
 {

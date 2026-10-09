@@ -76,7 +76,7 @@ use Symbol;
 
 our $VERSION;
 BEGIN {
-  $VERSION = '3.63';
+  $VERSION = '3.65';
   require ExtUtils::ParseXS::Constants; ExtUtils::ParseXS::Constants->VERSION($VERSION);
   require ExtUtils::ParseXS::CountLines; ExtUtils::ParseXS::CountLines->VERSION($VERSION);
   require ExtUtils::ParseXS::Node; ExtUtils::ParseXS::Node->VERSION($VERSION);
@@ -147,6 +147,8 @@ BEGIN {
   'lastline',           # The contents of the line most recently read in
                         # but not yet processed.
   'lastline_no',        # The line number of lastline.
+
+  'out_filename',       # The name of the output file.
 
 
   # File-scoped configuration state:
@@ -363,22 +365,19 @@ sub process_file {
   chdir($self->{dir});
   my $pwd = cwd();
 
-  if ($self->{config_WantLineNumbers}) {
-    my $csuffix = $Options{csuffix};
-    my $cfile;
-    if ( $Options{outfile} ) {
-      $cfile = $Options{outfile};
-    }
-    else {
-      $cfile = $Options{filename};
-      $cfile =~ s/\.xs$/$csuffix/i or $cfile .= $csuffix;
-    }
-    tie(*PSEUDO_STDOUT, 'ExtUtils::ParseXS::CountLines', $cfile, $Options{output});
-    select PSEUDO_STDOUT;
+  my $cfile;
+  if ( $Options{outfile} ) {
+    $cfile = $Options{outfile};
   }
   else {
-    select $Options{output};
+    my $csuffix = $Options{csuffix};
+    $cfile = $Options{filename};
+    $cfile =~ s/\.xs$/$csuffix/i or $cfile .= $csuffix;
   }
+  $self->{out_filename} = $cfile;
+
+  tie(*PSEUDO_STDOUT, 'ExtUtils::ParseXS::CountLines', $cfile, $Options{output});
+  select PSEUDO_STDOUT;
 
   $self->{typemaps_object} = process_typemaps( $Options{typemap}, $pwd );
 
@@ -406,7 +405,7 @@ sub process_file {
 
   chdir($orig_cwd);
   select($orig_fh);
-  untie *PSEUDO_STDOUT if tied *PSEUDO_STDOUT;
+  untie *PSEUDO_STDOUT;
   close $self->{in_fh};
 
   return 1;
@@ -590,8 +589,9 @@ sub Q {
 #             like a C preprocessor directive,
 #
 # TYPEMAP:    Return the typemap 'heredoc' lines as a paragraph, but with
-#             the final line (e.g. "EOF") missing. Line continuations,
-#             i.e. '\' aren't processed.
+#             the final line (e.g. "EOF") missing. POD, comments and line
+#             continuations, i.e. '\' within the paragraph aren't
+#             processed.
 #
 # BOOT:       BOOT is NOT handled specially; the normal rules for ending
 #             a paragraph will determine where the BOOT code ends.

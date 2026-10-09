@@ -709,10 +709,11 @@ sub _quote_args {
     my ($runperl, $args) = @_;
 
     foreach (@$args) {
-	# In VMS protect with doublequotes because otherwise
-	# DCL will lowercase -- unless already doublequoted.
-       $_ = q(").$_.q(") if $is_vms && !/^\"/ && length($_) > 0;
-       $runperl = $runperl . ' ' . $_;
+        my $arg = $_;
+        # In VMS protect with doublequotes because otherwise
+        # DCL will lowercase -- unless already doublequoted.
+        $arg = q(").$arg.q(") if ($is_vms || $arg =~ /\s/) && $arg !~ /^\"/ && length($arg) > 0;
+        $runperl = $runperl . ' ' . $arg;
     }
     return $runperl;
 }
@@ -723,6 +724,7 @@ sub _create_runperl { # Create the string to qx in runperl().
     if ($runperl =~ m/\s/) {
         $runperl = qq{"$runperl"};
     }
+    my $perl_exe = $runperl;
     #- this allows, for example, to set PERL_RUNPERL_DEBUG=/usr/bin/valgrind
     if ($ENV{PERL_RUNPERL_DEBUG}) {
 	$runperl = "$ENV{PERL_RUNPERL_DEBUG} $runperl";
@@ -779,11 +781,11 @@ sub _create_runperl { # Create the string to qx in runperl().
 	$args{stdin} =~ s/\r/\\r/g;
 
 	if ($is_mswin || $is_vms) {
-	    $runperl = qq{$Perl -e "print qq(} .
+	    $runperl = qq{$perl_exe -e "print qq(} .
 		$args{stdin} . q{)" | } . $runperl;
 	}
 	else {
-	    $runperl = qq{$Perl -e 'print qq(} .
+	    $runperl = qq{$perl_exe -e 'print qq(} .
 		$args{stdin} . q{)' | } . $runperl;
 	}
     } elsif (exists $args{stdin}) {

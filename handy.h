@@ -15,19 +15,26 @@
 #define PERL_HANDY_H_
 
 #ifndef PERL_CORE
+
+/*
+=for apidoc_section $casting
+=for apidoc BCmnU|type|Null|type
+
+Null pointer of type C<type>
+
+=cut
+*/
 #  define Null(type) ((type)NULL)
 
 /*
 =for apidoc_section $string
-=for apidoc AmnU||Nullch
+=for apidoc ABmnU||Nullch
 Null character pointer.  (No longer available when C<PERL_CORE> is
 defined.)
 
 =for apidoc_section $SV
-=for apidoc AmnU||Nullsv
+=for apidoc ABmnU||Nullsv
 Null SV pointer.  (No longer available when C<PERL_CORE> is defined.)
-
-=cut
 
 Below are signatures of functions from config.h which can't easily be gleaned
 from it, and are very unlikely to change
@@ -55,6 +62,17 @@ from it, and are very unlikely to change
 #  define Nullsv Null(SV*)
 #endif
 
+/*
+=for apidoc ABmn|bool|TRUE
+This is a synonym for the C symbol C<true>, introduced in C99.  Perl now
+requires C99, so using this synonym is no longer needed.
+
+=for apidoc ABmn|bool|FALSE
+This is a synonym for the C symbol C<false>, introduced in C99.  Perl now
+requires C99, so using this synonym is no longer needed.
+
+=cut
+*/
 #ifdef TRUE
 #undef TRUE
 #endif
@@ -140,7 +158,7 @@ definitely a reference SV that refers to an SV of the right type.
 
 /*
 =for apidoc_section $casting
-=for apidoc Am|bool|cBOOL|bool expr
+=for apidoc ABm|bool|cBOOL|bool expr
 
 Cast-to-bool.  When Perl was able to be compiled on pre-C99 compilers, a
 C<(bool)> cast didn't necessarily do the right thing, so this macro was
@@ -619,26 +637,53 @@ parameter indicates the number of bytes to compare.  Returns true or false.  (A
 wrapper for C<strncmp>).
 
 =for apidoc Am|bool|memEQ|char* s1|char* s2|STRLEN len
-Test two buffers (which may contain embedded C<NUL> characters, to see if they
-are equal.  The C<len> parameter indicates the number of bytes to compare.
-Returns true or false.  It is undefined behavior if either of the buffers
-doesn't contain at least C<len> bytes.
+Test two buffers (which may contain embedded C<NUL> characters) to see if they
+are equal for exactly C<len> bytes.  Returns true or false.  It is undefined
+behavior if either buffer does not contain at least C<len> bytes.
+
+Use this when both operands are buffers and the caller has already established
+the length to compare.  This macro does not check that the overall lengths of
+the two strings are equal; if C<len> comes from only one operand, it can return
+true for two unequal-length strings that merely share the same first C<len>
+bytes.
+
+If one operand is a C<ptr>/length pair and the other is a string literal, use
+C<memEQs()> instead.
 
 =for apidoc Am|bool|memEQs|char* s1|STRLEN l1|"s2"
-Like L</memEQ>, but the second string is a literal enclosed in double quotes,
-C<l1> gives the number of bytes in C<s1>.
-Returns true or false.
+Test whether the buffer C<s1>, whose length is C<l1>, exactly matches the
+string literal C<s2>.  The second operand must be a literal enclosed in double
+quotes.  Returns false if C<l1> is not equal to the length of C<s2>; otherwise
+returns whether the bytes are equal.
+
+Use this when comparing a C<ptr>/length pair against a string constant.  Unlike
+C<memEQ()>, this macro includes the length-equality check, so no separate guard
+is needed to avoid accepting a matching prefix of a longer or shorter string.
 
 =for apidoc Am|bool|memNE|char* s1|char* s2|STRLEN len
-Test two buffers (which may contain embedded C<NUL> characters, to see if they
-are not equal.  The C<len> parameter indicates the number of bytes to compare.
-Returns true or false.  It is undefined behavior if either of the buffers
-doesn't contain at least C<len> bytes.
+Test two buffers (which may contain embedded C<NUL> characters) to see if they
+are not equal within the first C<len> bytes.  Returns true or false.  It is
+undefined behavior if either buffer does not contain at least C<len> bytes.
+
+Use this when both operands are buffers and the caller has already established
+the length to compare.  This macro does not check that the overall lengths of
+the two strings are equal; if C<len> comes from only one operand, it can return
+false for two unequal-length strings that merely share the same first C<len>
+bytes.
+
+If one operand is a C<ptr>/length pair and the other is a string literal, use
+C<memNEs()> instead.
 
 =for apidoc Am|bool|memNEs|char* s1|STRLEN l1|"s2"
-Like L</memNE>, but the second string is a literal enclosed in double quotes,
-C<l1> gives the number of bytes in C<s1>.
-Returns true or false.
+Test whether the buffer C<s1>, whose length is C<l1>, does not exactly match
+the string literal C<s2>.  The second operand must be a literal enclosed in
+double quotes.  Returns true if C<l1> is not equal to the length of C<s2>;
+otherwise returns whether the bytes differ.
+
+Use this when comparing a C<ptr>/length pair against a string constant.  Unlike
+C<memNE()>, this macro includes the length-equality check, so no separate guard
+is needed to avoid treating a matching prefix of a longer or shorter string as
+equal.
 
 =for apidoc Am|bool|memCHRs|"list"|char c
 Returns the position of the first occurrence of the byte C<c> in the literal
@@ -906,6 +951,10 @@ UTF-8 or not), C<isASCII> will give the correct results when called with any
 byte in any string encoded or not in UTF-8.  And similarly C<isASCII_utf8> and
 C<isASCII_utf8_safe> will work properly on any string encoded or not in UTF-8.
 
+These macros are often wrongly used to see if the input occupies a single byte.
+For that purpose, you should use C<L</UVCHR_IS_INVARIANT>>, as these do not
+give the correct result in all cases.
+
 =for apidoc Am|bool|isBLANK|UV ch
 =for apidoc_item ||isBLANK_A|UV ch
 =for apidoc_item ||isBLANK_LC|UV ch
@@ -1101,7 +1150,7 @@ C<isWORDCHAR_LC>, C<isWORDCHAR_LC_uvchr>, C<isWORDCHAR_LC_utf8>, and
 C<isWORDCHAR_LC_utf8_safe> are also as described there, but additionally
 include the platform's native underscore.
 
-=for apidoc Am|bool|isALNUM         |UV ch
+=for apidoc ABm|bool|isALNUM         |UV ch
 =for apidoc_item  ||isALNUM_A       |UV ch
 =for apidoc_item  ||isALNUM_LC      |UV ch
 =for apidoc_item  ||isALNUM_LC_uvchr|UV ch
@@ -1570,9 +1619,16 @@ C<x>.
 
 #  define HIGHEST_REGCOMP_DOT_H_SYNC_ CC_VERTSPACE_
 
-/* The members of the third group below do not need to be coordinated with data
- * structures in regcomp.[ch] and regexec.c. */
-#  define CC_IDFIRST_                  16
+/* These three follow immediately after the final function that has a version
+ * defined by C, like isascii(), so they overlap with anything else.  They are
+ * used in the 'PL_libc_char_fcns' data structure, along with the ones above
+ * them */
+# define CC_IDFIRST_  16
+# define CC_TOLOWER_  (CC_IDFIRST_ + 1)
+# define CC_TOUPPER_  (CC_TOLOWER_ + 1)
+
+/* The members of the fourth group below do not need to be coordinated with
+ * data structures in regcomp.[ch] and regexec.c. */
 #  define CC_CHARNAME_CONT_            17
 #  define CC_NONLATIN1_FOLD_           18
 #  define CC_NONLATIN1_SIMPLE_FOLD_    19
@@ -1944,6 +2000,58 @@ C<L</CC_mask_>>.
 #define toUPPER_LATIN1_MOD(c) ((! FITS_IN_8_BITS(c))                       \
                                ? (c)                                       \
                                : PL_mod_latin1_uc[ (U8) (c) ])
+/*
+=for apidoc_section $locale_scn
+=for apidoc  Amn|bool|IN_UTF8_CTYPE_LOCALE
+=for apidoc_item|bool|IN_UTF8_TURKIC_LOCALE
+
+C<IN_UTF8_CTYPE_LOCALE> returns C<true> if the current underlying locale of the
+C<LC_CTYPE> category of the C program executing the Perl interpreter is a UTF-8
+locale.  
+
+Otherwise it returns C<false>.
+
+C<LC_CTYPE> affects what characters are considered, say, C<\w> versus
+punctuation, for example; as well as what characters are the upper/lower-case
+equivalents of other characters.
+Other locale categories also have strings that are affected by the locale.  For
+example, L<strftime(3)> is controlled by C<LC_TIME>, expressing weekday and
+month names in its current locale.   Implementations vary as to if you can get
+mojibake or not if C<LC_CTYPE> and C<LC_TIME> are set to different locales.
+Perl tries to shield you from this, temporarily switching C<LC_CTYPE> to be in
+sync with C<LC_TIME> when needed during function calls where we think it might
+matter.
+
+C<IN_UTF8_TURKIC_LOCALE> is like C<IN_UTF8_CTYPE_LOCALE>, but additionally
+requires the C<LC_CTYPE> locale to be a turkic one before returning C<true>.
+This is because Turkic languages have two characters that other locales using
+the Latin script do not:
+
+=over 4
+
+=item ı  U+131  LATIN SMALL LETTER DOTLESS I
+
+The uppercase of this is the ASCII C<I>.
+
+=item İ  U+130  LATIN CAPITAL LETTER I WITH DOT ABOVE
+
+The lowercase of this is the ASCII C<i>.
+
+=back
+
+These have different casing rules than in any other latin script locales, so
+require their own locale.
+
+Note that pure perl programs don't pay any attention to the underlying C locale
+unless operating in the scope of a C<use locale>.  C<L</IN_LOCALE>> returns
+C<true> if so.  Nor do most calls to functions in the L<POSIX> module, unless
+otherwise documented.
+
+For more information, see L<perllocale>.
+
+=cut
+*/
+
 #ifdef USE_LOCALE_CTYPE
 #  define IN_UTF8_CTYPE_LOCALE   PL_in_utf8_CTYPE_locale
 #  define IN_UTF8_TURKIC_LOCALE  PL_in_utf8_turkic_locale
@@ -2071,7 +2179,7 @@ C<L</CC_mask_>>.
 #  define is_posix_XDIGIT(c)        isxdigit((U8) (c))
 #endif
 
-/* Below is the next level up, which currently expands to nothing more
+/* Below is the next level up, which on most platforms expands to nothing more
  * than the previous layer.  These are the macros to use if you really need
  * something whose input domain is a byte, and the locale isn't UTF-8; that is,
  * where you normally would have to use things like bare isalnum().
@@ -2083,7 +2191,13 @@ C<L</CC_mask_>>.
  * (Note, proper general operation of the bare libc functions requires you to
  * cast to U8.  These do that for you automatically.) */
 
+/* In this one circumstance, the macro is implemented with a lock; otherwise it
+ * expands to just the layer below */
+#ifdef EMULATE_THREAD_SAFE_LOCALES
+#  define WRAP_U8_LC_(c, classnum, posix)  posix_LC_foo((c), (classnum))
+#else
 #  define WRAP_U8_LC_(c, classnum, posix)  posix(c)
+#endif
 
 #define isU8_ALPHANUMERIC_LC(c)                                                \
               WRAP_U8_LC_((c), CC_ALPHANUMERIC_, is_posix_ALPHANUMERIC)
@@ -2831,7 +2945,12 @@ These each call C<PoisonWith(0xEF)> for catching access to freed memory.
 
 =cut */
 
-/* Maintained for backwards-compatibility only. Use newSV() instead. */
+/*
+=for apidoc ABm|SV*|NEWSV|type x|STRLEN len
+Use newSV() instead.
+
+=cut
+ */
 #ifndef PERL_CORE
 #define NEWSV(x,len)	newSV(len)
 #endif
@@ -2973,7 +3092,17 @@ enum mem_log_type {
 #define Newxz(v,n,t)	(v = (MEM_WRAP_CHECK_(n,t) (t*)MEM_LOG_ALLOC(n,t,safecalloc((n),sizeof(t)))))
 
 #ifndef PERL_CORE
-/* pre 5.9.x compatibility */
+/*
+=for apidoc      ABm|void|New|type x|void* ptr|int nitems|type
+=for apidoc_item    |void|Newc|type x|void* ptr|int nitems|type
+=for apidoc_item    |void|Newz|type x|void* ptr|int nitems|type
+
+Use respectively C<L</Newx>>, C<L</Newxc>>, and C<L</Newxz>>.
+
+=cut
+
+    pre 5.9.x compatibility
+*/
 #define New(x,v,n,t)	Newx(v,n,t)
 #define Newc(x,v,n,t,c)	Newxc(v,n,t,c)
 #define Newz(x,v,n,t)	Newxz(v,n,t)
@@ -3078,21 +3207,64 @@ last-inclusive range.
 # endif
 #endif
 
-/* convenience debug macros */
+/*
+=for apidoc_section $debugging
+=for apidoc AmnU  |const char *|pTHX_FORMAT
+=for apidoc_item              ||pTHX_FORMAT_
+=for apidoc_item BU           ||pTHX__FORMAT
+=for apidoc_item              ||p_THX_FORMAT_
+=for apidoc_item              ||p_THX_FORMAT
+=for apidoc_item              ||pTHX_VALUE_
+=for apidoc_item              ||pTHX_VALUE
+=for apidoc_item              ||p_THX_VALUE_
+=for apidoc_item              ||p_THX_VALUE
+=for apidoc_item BU           ||pTHX__VALUE_
+=for apidoc_item BU           ||pTHX__VALUE
+
+Use these to display, typically in a warning or debugging statement, the
+current thread's value in a threaded perl, and nothing at all in an unthreaded
+one, without your code needing to know which type it is running in.
+
+The forms containing the string "FORMAT" go in the format string,
+and the ones containing "VALUE" are to be correspondingly positioned in the
+argument list.
+
+The forms containing the string "FORMAT" expand to use the term "Perl
+interpreter".
+
+The various underscore permutations allow for leading and/or trailing commas.
+Two underscores in a row are technically illegal in C, reserved for the
+implementation, so they should not be used in new code.
+
+=cut
+*/
 #ifdef USE_ITHREADS
-#define pTHX_FORMAT  "Perl interpreter: 0x%p"
-#define pTHX__FORMAT ", Perl interpreter: 0x%p"
-#define pTHX_VALUE_   (void *)my_perl,
-#define pTHX_VALUE    (void *)my_perl
-#define pTHX__VALUE_ ,(void *)my_perl,
-#define pTHX__VALUE  ,(void *)my_perl
+#  define pTHX_FORMAT_    "Perl interpreter: 0x%p,"
+#  define pTHX_FORMAT     "Perl interpreter: 0x%p"
+#  define p_THX_FORMAT_ ", Perl interpreter: 0x%p,"
+#  define p_THX_FORMAT  ", Perl interpreter: 0x%p"
+
+#  define pTHX__FORMAT  ", Perl interpreter: 0x%p"
+
+#  define pTHX_VALUE_    (void *)my_perl,
+#  define pTHX_VALUE     (void *)my_perl
+#  define p_THX_VALUE_  ,(void *)my_perl,
+#  define p_THX_VALUE   ,(void *)my_perl
+
+#  define pTHX__VALUE_  ,(void *)my_perl,
+#  define pTHX__VALUE   ,(void *)my_perl
 #else
-#define pTHX_FORMAT
-#define pTHX__FORMAT
-#define pTHX_VALUE_
-#define pTHX_VALUE
-#define pTHX__VALUE_
-#define pTHX__VALUE
+#  define pTHX_FORMAT_
+#  define pTHX_FORMAT
+#  define p_THX_FORMAT_
+#  define p_THX_FORMAT
+#  define pTHX__FORMAT
+#  define pTHX_VALUE_
+#  define pTHX_VALUE
+#  define p_THX_VALUE_
+#  define p_THX_VALUE
+#  define pTHX__VALUE_ 
+#  define pTHX__VALUE
 #endif /* USE_ITHREADS */
 
 /*

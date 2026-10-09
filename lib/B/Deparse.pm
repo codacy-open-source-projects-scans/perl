@@ -7,7 +7,7 @@
 # This is based on the module of the same name by Malcolm Beattie,
 # but essentially none of his code remains.
 
-package B::Deparse 1.89;
+package B::Deparse 1.92;
 use strict;
 use builtin qw( true false );
 use Carp;
@@ -23,11 +23,15 @@ use B qw(class main_root main_start main_cv svref_2object opnumber perlstring
 	 OPpSORT_REVERSE OPpMULTIDEREF_EXISTS OPpMULTIDEREF_DELETE
          OPpSPLIT_ASSIGN OPpSPLIT_LEX
          OPpPADHV_ISKEYS OPpRV2HV_ISKEYS
-         OPpCONCAT_NESTED
+         OPpCONCAT_NESTED OPpOFFBYONE OPpMATCH_JUST_COUNT
          OPpMULTICONCAT_APPEND OPpMULTICONCAT_STRINGIFY OPpMULTICONCAT_FAKE
          OPpTRUEBOOL OPpINDEX_BOOLNEG OPpDEFER_FINALLY
          OPpARG_IF_UNDEF OPpARG_IF_FALSE
          OPpPARAM_IF_UNDEF OPpPARAM_IF_FALSE
+         OPpREF_CMP_MASK OPpREF_CMP_REGEXP_PKG OPpREF_CMP_EMPTYSTR
+         OPpREF_CMP_L2R OPpREF_CMP_SKIPLOGOP OPpREF_CMP_AND OPpREF_CMP_NE
+         OPpCALLER_PKG OPpCALLER_FILE OPpCALLER_LINE OPpCALLER_SUB
+         OPpCALLER_HINTS OPpCALLER_BITS OPpCALLER_HINTH         
 	 SVf_IOK SVf_NOK SVf_ROK SVf_POK SVf_FAKE SVs_RMG SVs_SMG
 	 SVs_PADTMP
          CVf_NOWARN_AMBIGUOUS CVf_LVALUE CVf_IsMETHOD
@@ -57,6 +61,9 @@ use B qw(class main_root main_start main_cv svref_2object opnumber perlstring
         MDEREF_MASK
         MDEREF_SHIFT
         OPpSTATEMENT
+        SVrt_SCALAR SVrt_VSTRING SVrt_REF SVrt_GLOB SVrt_LVALUE
+        SVrt_REGEXP SVrt_ARRAY SVrt_HASH SVrt_CODE SVrt_FORMAT
+        SVrt_IO SVrt_OBJECT SVrt_INVLIST
     );
 
 our $AUTOLOAD;
@@ -2761,6 +2768,37 @@ sub pp_undef {
 }
 sub pp_study { unop(@_, "study") }
 sub pp_ref { unop(@_, "ref") }
+sub pp_ref_cmp { 
+    my ($self, $op, $cx) = @_;
+    my $e = ($op->private & OPpREF_CMP_NE) ? 'ne' : 'eq';
+
+    my $l;
+    my $id = $op->private & OPpREF_CMP_MASK;
+    my $enum = $B::Op_private::bits{ref_cmp}{0}{enum};
+    for my ($ix, $name, $label) (@$enum) {
+        if ($id == $ix) {
+            $l = $label;
+        }
+    }
+
+    my $quoted = $self->{'use_dumper'}
+                     ? $self->const_dumper(B::svref_2object(\$l), 0)
+                     : $self->quoted_const_str($l);
+
+    if ($op->flags & OPf_SPECIAL) { # reftype, but it's not a keyword
+        if ($op->private & OPpREF_CMP_L2R) {
+            return "$quoted $e ".$self->builtin1($op, $cx, 'reftype');
+        } else {
+            return $self->builtin1($op, $cx, 'reftype')." $e $quoted";
+        }
+    } else { # ref
+        if ($op->private & OPpREF_CMP_L2R) {
+            return "$quoted $e ".$self->unop($op, $cx, "ref");
+        } else {
+            return $self->unop($op, $cx, "ref")." $e $quoted";
+        }
+    }
+}
 sub pp_pos { maybe_local(@_, unop(@_, "pos")) }
 
 sub pp_sin { maybe_targmy(@_, \&unop, "sin") }
@@ -2793,7 +2831,25 @@ sub pp_akeys { unop(@_, "keys") }
 sub pp_pop { unop(@_, "pop") }
 sub pp_shift { unop(@_, "shift") }
 
-sub pp_caller { unop(@_, "caller") }
+sub pp_caller {
+    my $private = $_[1]->private;
+    my ($pre, $post) = ('', '');
+    if ($private && $private != OPpOFFBYONE) {
+        # A list slice was optimized away.
+        $pre = '(';
+
+        # Bits:       0,1,2,3,4,5,6 map to
+        # Subscripts: 0,1,2,3,8,9,10
+        my $bits = join ',',
+                   map { $_ < 4 ? $_ : $_ + 4 }
+                   grep { $private & (1 << $_) }
+                   (0,1,2,3,4,5,6);
+
+        $post = ")[$bits]";
+    }
+    $pre . unop(@_, "caller") . $post;
+
+}
 sub pp_reset { unop(@_, "reset") }
 sub pp_exit { unop(@_, "exit") }
 sub pp_prototype { unop(@_, "prototype") }
@@ -3383,6 +3439,11 @@ sub pp_i_ge { binop(@_, ">=", 15) }
 sub pp_i_le { binop(@_, "<=", 15) }
 sub pp_i_ncmp { maybe_targmy(@_, \&binop, "<=>", 14) }
 
+sub pp_equ { binop(@_, "===", 14) }
+sub pp_neu { binop(@_, "!==", 14) }
+sub pp_i_equ { binop(@_, "===", 14) }
+sub pp_i_neu { binop(@_, "!==", 14) }
+
 sub pp_seq { binop(@_, "eq", 14) }
 sub pp_sne { binop(@_, "ne", 14) }
 sub pp_slt { binop(@_, "lt", 15) }
@@ -3390,6 +3451,9 @@ sub pp_sgt { binop(@_, "gt", 15) }
 sub pp_sge { binop(@_, "ge", 15) }
 sub pp_sle { binop(@_, "le", 15) }
 sub pp_scmp { maybe_targmy(@_, \&binop, "cmp", 14) }
+
+sub pp_sequ { binop(@_, "equ", 14) }
+sub pp_sneu { binop(@_, "neu", 14) }
 
 sub pp_isa { binop(@_, "isa", 15) }
 
@@ -3889,7 +3953,13 @@ sub indirop {
 	$indir = '{$b cmp $a} ';
     }
     for (; !null($kid); $kid = $kid->sibling) {
-	$expr = $self->deparse($kid, !$indir && $kid == $firstkid && $name eq "sort" && $firstkid->name eq "entersub" ? 16 : 6);
+        my $is_first = !$indir && $kid == $firstkid;
+        $expr = $self->deparse($kid, $is_first && $name eq "sort" && $firstkid->name eq "entersub" ? 16 : 6);
+
+        # Disambiguate anonhash from block
+        # e.g. sort +{ $_ => 1 }, @array;
+        $expr = '+'.$expr if $is_first && $expr =~ /^{/;
+
 	push @exprs, $expr;
     }
     my $name2;
@@ -3947,6 +4017,9 @@ sub mapop {
 	$code = "{" . $self->deparse($code, 0) . "} ";
     } else {
 	$code = $self->deparse($code, 24);
+        # Disambiguate anonhash from a block
+        # e.g. map +{ $_ => 1 }, @array
+        $code = '+'.$code if $code =~ /^{/;
 	$code .= ", " if !null($kid->sibling);
     }
     $kid = $kid->sibling;
@@ -6845,7 +6918,12 @@ sub matchop {
     }
 }
 
-sub pp_match { matchop(@_, "m", "/") }
+sub pp_match {
+    my $fixup = ($_[1]->private & OPpMATCH_JUST_COUNT)
+              ? '() = '
+              : '' ;
+    $fixup.matchop(@_, "m", "/");
+}
 sub pp_qr { matchop(@_, "qr", "") }
 
 sub pp_runcv { unop(@_, "__SUB__"); }

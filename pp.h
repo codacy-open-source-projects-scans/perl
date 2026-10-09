@@ -79,7 +79,7 @@ L<perlcall>.
 Declares a local copy of perl's stack pointer for the XSUB, available via
 the C<SP> macro.  See C<L</SP>>.
 
-=for apidoc mn;||djSP
+=for apidoc Bmn;||djSP
 
 Declare Just C<SP>.  This is actually identical to C<dSP>, and declares
 a local copy of perl's stack pointer, available via the C<SP> macro.
@@ -483,7 +483,7 @@ Does not use C<TARG>.  See also C<L</XPUSHu>>, C<L</mPUSHu>> and C<L</PUSHu>>.
         IV TARGi_iv = i;                                                \
         if (LIKELY(                                                     \
               ((SvFLAGS(TARG) & (SVTYPEMASK|SVf_THINKFIRST|SVf_IVisUV)) == SVt_IV) \
-            & (do_taint ? !TAINT_get : 1)))                             \
+            & (do_taint ? !TAINT_get : 1) && !(PL_valuemagic_annotations && SvMAGICAL(PL_valuemagic_annotations)))) \
         {                                                               \
             /* Cheap SvIOK_only().                                      \
              * Assert that flags which SvIOK_only() would test or       \
@@ -505,7 +505,7 @@ Does not use C<TARG>.  See also C<L</XPUSHu>>, C<L</mPUSHu>> and C<L</PUSHu>>.
         UV TARGu_uv = u;                                                \
         if (LIKELY(                                                     \
               ((SvFLAGS(TARG) & (SVTYPEMASK|SVf_THINKFIRST|SVf_IVisUV)) == SVt_IV) \
-            & (do_taint ? !TAINT_get : 1)                               \
+            & (do_taint ? !TAINT_get : 1) && !(PL_valuemagic_annotations && SvMAGICAL(PL_valuemagic_annotations)) \
             & (TARGu_uv <= (UV)IV_MAX)))                                \
         {                                                               \
             /* Cheap SvIOK_only().                                      \
@@ -528,7 +528,7 @@ Does not use C<TARG>.  See also C<L</XPUSHu>>, C<L</mPUSHu>> and C<L</PUSHu>>.
         NV TARGn_nv = n;                                                \
         if (LIKELY(                                                     \
               ((SvFLAGS(TARG) & (SVTYPEMASK|SVf_THINKFIRST)) == SVt_NV) \
-            & (do_taint ? !TAINT_get : 1)))                             \
+            & (do_taint ? !TAINT_get : 1) && !(PL_valuemagic_annotations && SvMAGICAL(PL_valuemagic_annotations)))) \
         {                                                               \
             /* Cheap SvNOK_only().                                      \
              * Assert that flags which SvNOK_only() would test or       \
@@ -663,6 +663,7 @@ Does not use C<TARG>.  See also C<L</XPUSHu>>, C<L</mPUSHu>> and C<L</PUSHu>>.
 #define AMGf_numarg	  0x0080
 #define AMGf_force_scalar 0x0100
 #define AMGf_force_overload SV_FORCE_OVERLOAD /* ignore HINTS_NO_AMAGIC */
+#define AMGf_no_GETMAGIC  0x0200
 
 
 /* do SvGETMAGIC on the stack args before checking for overload */

@@ -669,6 +669,45 @@ between the variants.
 
 This variable was added in Perl 5.003.
 
+=item ${^RE_SUPERLINEAR_CACHE_DELAY}
+
+Added in Perl 5.46.0.
+
+This integer-valued variable allows the initial countdown delay in the
+regex engine's super-linear cache mechanism to be adjusted for testing and
+debugging purposes. It is not intended for production code, and its
+semantics may change without notice.
+
+When matching a complex pattern with much backtracking, after a certain
+number of iterations a cache is allocated to detect backtracks to the same
+position and state. The countdown is intended so that the cache isn't
+wastefully allocated for every match, but instead only for matches which
+seem to be backtracking too much. Normally the initial countdown is
+proportional to the length of the string being matched.
+
+This variable's value has the following meanings:
+
+=over
+
+=item 0
+
+Use the default delay countdown value.
+
+=item 1+
+
+Use the specified number of countdown iterations (1 implies no delay).
+
+=item -1
+
+Disable the cache completely.
+
+=item -N (other than -1)
+
+Scale the normal delay count by C<N / 1E6> (so for example -500000 causes
+half as many countdown iterations as normal).
+
+=back
+
 =item %SIG
 X<%SIG>
 
@@ -1294,7 +1333,7 @@ X<@+> X<@LAST_MATCH_END>
 
 This array holds the offsets of the ends of the last successful
 match and any matching capture buffers that the pattern contains.
-(See L</Scoping Rules of Regex Variables>)
+(See L</Scoping Rules of Regex Variables>.)
 
 The number of elements it contains will be one more than the number
 of capture buffers in the pattern, regardless of which capture buffers
@@ -2562,10 +2601,11 @@ This variable was added in Perl v5.8.0.
 =item ${^SAFE_LOCALES}
 X<${^SAFE_LOCALES}>
 
-Reflects if safe locale operations are available to this perl (when the
-value is 1) or not (the value is 0).  This variable is always 1 if the
-perl has been compiled without threads.  It is also 1 if this perl is
-using thread-safe locale operations.  Note that an individual thread may
+Reflects if safe locale operations are available to this perl or not.
+This variable is always 1 if the perl has been compiled without threads.
+It is also 1 if this perl is using thread-safe locale operations.  And
+it is 2 if this perl is emulating thread-safe locale operations.  Note
+that an individual thread may
 choose to use the global locale (generally unsafe) by calling
 L<perlapi/switch_to_global_locale>.  This variable currently is still
 set to 1 in such threads.

@@ -7,6 +7,13 @@
  *
  */
 
+/*
+ *      Any sufficiently advanced technology is indistinguishable from magic.
+ *              --Arthur C. Clarke
+ *
+ *     [_Profiles of the Future_]
+ */
+
 /* This file contains the code that implements functions in perl's "builtin::"
  * namespace
  */
@@ -35,42 +42,6 @@ static void S_warn_experimental_builtin(pTHX_ const char *name)
     /* diag_listed_as: Built-in function '%s' is experimental */
     ck_warner_d(packWARN(WARN_EXPERIMENTAL__BUILTIN),
                 "Built-in function 'builtin::%s' is experimental", name);
-}
-
-/* These three utilities might want to live elsewhere to be reused from other
- * code sometime
- */
-void
-Perl_prepare_export_lexical(pTHX)
-{
-    PERL_ARGS_ASSERT_PREPARE_EXPORT_LEXICAL;
-
-    assert(PL_compcv);
-
-    /* We need to have PL_comppad / PL_curpad set correctly for lexical importing */
-    ENTER;
-    SAVESPTR(PL_comppad_name); PL_comppad_name = PadlistNAMES(CvPADLIST(PL_compcv));
-    SAVECOMPPAD();
-    PL_comppad      = PadlistARRAY(CvPADLIST(PL_compcv))[1];
-    PL_curpad       = PadARRAY(PL_comppad);
-}
-
-#define export_lexical(name, sv)  S_export_lexical(aTHX_ name, sv)
-static void S_export_lexical(pTHX_ SV *name, SV *sv)
-{
-    PADOFFSET off = pad_add_name_sv(name, padadd_STATE, 0, 0);
-    SvREFCNT_dec(PL_curpad[off]);
-    PL_curpad[off] = SvREFCNT_inc(sv);
-}
-
-void
-Perl_finish_export_lexical(pTHX)
-{
-    PERL_ARGS_ASSERT_FINISH_EXPORT_LEXICAL;
-
-    intro_my();
-
-    LEAVE;
 }
 
 
@@ -499,7 +470,7 @@ Perl_XS_builtin_indexed(pTHX_ CV *cv)
     PERL_ARGS_ASSERT_XS_BUILTIN_INDEXED;
 
     dXSARGS;
-    PERL_UNUSED_VAR(cv);
+    PERL_UNUSED_ARG(cv);
 
     switch(GIMME_V) {
         case G_VOID:
@@ -559,8 +530,10 @@ PP(pp_refaddr)
 
     if(SvROK(arg))
         sv_setuv_mg(TARG, PTR2UV(SvRV(arg)));
-    else
-        sv_setsv(TARG, &PL_sv_undef);
+    else {
+        sv_set_undef(TARG);
+        SvSETMAGIC(TARG);
+    }
 
     rpp_replace_1_1_NN(TARG);
     return NORMAL;
@@ -575,8 +548,10 @@ PP(pp_reftype)
 
     if(SvROK(arg))
         sv_setpv_mg(TARG, sv_reftype(SvRV(arg), FALSE));
-    else
-        sv_setsv(TARG, &PL_sv_undef);
+    else {
+        sv_set_undef(TARG);
+        SvSETMAGIC(TARG);
+    }
 
     rpp_replace_1_1_NN(TARG);
     return NORMAL;

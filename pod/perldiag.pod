@@ -737,6 +737,11 @@ not a scalar (i.e. an array or hash).  At the present version, these are only
 permitted on scalar fields.  You will have to manually create a writer
 accessor method yourself.
 
+=item Cannot apply magicfuncs shape %d to SV type %d
+
+(F) An XS module attempted to attach a Magic v2 structure to an SV, but the
+value of its C<shape> field is not compatible with the type of the SV.
+
 =item Cannot assign :param(%s) to field %s because that name is already in use
 
 (F) An attempt was made to apply a parameter name to a field, when the name
@@ -910,6 +915,19 @@ not permitted.
 
 (F) Similar to above, but involving a C<finally> block at the end of a
 C<try>/C<catch> construction rather than a C<defer> block.
+
+=item Can't assign reference to %s into a GLOB
+
+(F) An attempt was made to assign a reference to something into a GLOB, but
+the thing being referred to by that reference is not something that can be
+stored in a GLOB.  Typically this is because you attempted to store an object
+(as created by C<use feature 'class'>) directly in the GLOB, rather than
+storing a scalar containing a reference to the object.
+
+  *xyz = My::Object::Class->new;   # incorrect, will cause this error
+
+  *xyz = \My::Object::Class->new;  # correct, $xyz will now store the
+                                   # object reference
 
 =item Can't bless an object reference
 
@@ -1790,12 +1808,11 @@ The required syntax is
     try { ... }
     catch ($var) { ... }
 
-=item Changing use VERSION while another use VERSION is in scope is now deprecated
+=item Changing use VERSION while another use VERSION is in scope is not permitted
 
-(W deprecated) Once you have a C<use VERSION> statement in scope, any
-C<use VERSION> statement that requests a different version is now deprecated,
-due to the increasing complexity of swapping from one prevailing version to
-another.
+(F) Once you have a C<use VERSION> statement in scope, any C<use VERSION>
+statement that requests a different version is not permitted, due to the
+increasing complexity of swapping from one prevailing version to another.
 
 It is suggested that you do not try to mix multiple different version
 declarations within the same file as it leads to complex behaviours about the
@@ -3776,8 +3793,20 @@ does when displayed.
 
 (P) A dynamic loading library C<.so> or C<.dll> was being loaded into the
 process that was built against a different build of perl than the
-said library was compiled against.  Reinstalling the XS module will
-likely fix this error.  This error is a less commonly seen subset of
+said library was compiled against.
+
+Reinstalling the XS module will likely fix this error.  But it may be
+that the XS module's Makefile wrongly discards the default compilation
+flags.  In this case, notify the module's maintainer.  You can tell if
+this is the case by inspecting its Makefile looking for lines of the
+form
+
+ CCFLAGS => foo
+
+The module's Makefile is broken if "foo" doesn't look like
+S<C<CCFLAGS => "$Config::Config{ccflags} ...>>
+
+This error is a less commonly seen subset of
 L<"Perl API version %s of %s does not match %s"|perldiag/"Perl API version %s of %s does not match %s">
 error.
 
@@ -5160,6 +5189,12 @@ mixed-case attribute name, instead.  See L<attributes>.
 (F) You can't specify a repeat count so large that it overflows your
 signed integers.  See L<perlfunc/pack>.
 
+=item Pack template structure size is too large
+
+(F) You called C<pack> or C<unpack> to operate on a structure, whose
+computed size is too large to fit in memory.  This usually happens as a
+result of embedding a large number as the repeat count for an item.
+
 =item page overflow
 
 (W io) A single call to write() produced more lines than can fit on a
@@ -6447,6 +6482,13 @@ so there can't be any left to fill later parameters.
 overload it: Perl refuses to use the object's underlying structure
 for the smart match.
 
+=item Socket address truncated in %s()
+
+(W io) The operating system reported a socket address length larger than
+Perl's supplied buffer for the C<%s()> call.  Perl truncated the address
+to the buffer size to avoid reading or writing past the end of that
+buffer.
+
 =item Sorry, hash keys must be smaller than 2**31 bytes
 
 (F) You tried to create a hash containing a very large key, where "very
@@ -6760,6 +6802,12 @@ think the U.S. Government thinks it's a secret, or at least that they
 will continue to pretend that it is.  And if you quote me on that, I
 will deny it.
 
+=item The 'equ' operator is experimental
+
+(S experimental::equ) This warning is emitted if you use the C<equ>
+undef-aware equality operator.  This operator is currently experimental
+and its behaviour may change in future releases of Perl.
+
 =item The experimental declared_refs feature is not enabled
 
 (F) To declare references to variables, as in C<my \%x>, you must first enable
@@ -6772,6 +6820,24 @@ the feature:
 
 (F) The function indicated isn't implemented on this architecture,
 according to the probings of Configure.
+
+=item The 'neu' operator is experimental
+
+(S experimental::equ) This warning is emitted if you use the C<neu>
+undef-aware equality operator.  This operator is currently experimental
+and its behaviour may change in future releases of Perl.
+
+=item The '===' operator is experimental
+
+(S experimental::equ) This warning is emitted if you use the C<===>
+undef-aware equality operator.  This operator is currently experimental
+and its behaviour may change in future releases of Perl.
+
+=item The '!==' operator is experimental
+
+(S experimental::equ) This warning is emitted if you use the C<!==>
+undef-aware equality operator.  This operator is currently experimental
+and its behaviour may change in future releases of Perl.
 
 =item The private_use feature is experimental
 
@@ -7592,6 +7658,12 @@ whereabouts in the regular expression the escape was discovered.
 (F) You attempted to add a named attribute to a C<field> definition, but
 perl does not recognise the name of the requested attribute.
 
+=item Unrecognized magicfuncs->shape value %d
+
+(F) An XS module attempted to attach a Magic v2 structure to an SV, but the
+value of its C<shape> field is not one of the recognised constants. This must
+take one of the C<MGv2s_*> values listed in L<perlapi>.
+
 =item Unrecognized named parameter '%s' to subroutine '%s'
 
 =item Unrecognized named parameters '%s' to subroutine '%s'
@@ -7644,6 +7716,16 @@ At least, Configure doesn't think so.
 Note that under some systems, like OS/2, there may be different flavors
 of Perl executables, some of which may support fork, some not.  Try
 changing the name you call Perl by to C<perl_>, C<perl__>, and so on.
+
+=item Unsupported MagicFunctions->ver value of %u
+
+(F) An XS module attempted to attach a Magic v2 structure to an SV, but the
+value of its C<ver> field is not supported as a valid version.
+
+If the reported value is zero, it is likely the author forgot to initialise
+that field of the structure. If the number is larger than 2, it likely means
+the XS module is written for a later version of Magic than this version of
+perl can support.
 
 =item Unsupported script encoding %s
 
@@ -8496,7 +8578,7 @@ indicates that incorrect results are being obtained.  You should examine
 your code to determine how a wide character is getting to an operation
 that doesn't handle them.
 
-=item Wide character (U+%X) in %s
+=item Wide character (U+%X) in %s under a non-UTF-8 locale
 
 (W locale) While in a single-byte locale (I<i.e.>, a non-UTF-8
 one), a multi-byte character was encountered.   Perl considers this

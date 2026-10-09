@@ -71,7 +71,7 @@ print $h <<EOF;
  * the Perl interpreter.  This is done automatically for the perl core and
  * extensions, but not generally for XS modules unless they
  *    #define PERL_REENTRANT
- * See L<perlxs/Thread-aware system interfaces>.
+ * See L<perlxs/XS code in Embedded and Threaded Systems>
  *
  * For a function 'foo', use the compile-time directive
  *    #ifdef PERL_REENTR_USING_FOO_R
@@ -96,7 +96,7 @@ print $h <<EOF;
 #ifdef USE_THREAD_SAFE_LOCALE
 #   undef HAS_SETLOCALE_R
 #endif
- 
+
 /* Deprecations: some platforms have the said reentrant interfaces
  * but they are declared obsolete and are not to be used.  Often this
  * means that the platform has threadsafed the interfaces (hopefully).
@@ -132,9 +132,9 @@ print $h <<EOF;
  * memzero out certain structures before calling the functions.
  */
 #  if defined(__OpenBSD__)
-#    define REENTR_MEMZERO(a,b) memzero(a,b)
+#    define PERL_REENTR_MEMZERO(a,b) memzero(a,b)
 #  else
-#    define REENTR_MEMZERO(a,b) 0
+#    define PERL_REENTR_MEMZERO(a,b) 0
 #  endif
 
 #  ifdef NETDB_R_OBSOLETE
@@ -158,6 +158,7 @@ print $h <<EOF;
 #    undef HAS_SETNETENT_R
 #    undef HAS_SETPROTOENT_R
 #    undef HAS_SETSERVENT_R
+#    undef NETDB_R_OBSOLETE     /* Has now already served its purpose */
 #  endif
 
 #  ifdef I_PWD
@@ -359,7 +360,7 @@ close DATA;
     }
 }
 
-my @struct; # REENTR struct members
+my @struct; # PERL_REENTR struct members
 my @size;   # struct member buffer size initialization code
 my @init;   # struct member buffer initialization (malloc) code
 my @free;   # struct member buffer release (free) code
@@ -431,6 +432,10 @@ EOF
 #  endif
 
 EOF
+    # The elements of this array existed only to decide the contents of the
+    # "USE_foo" macro just above.  #undef them so as to not pollute the name
+    # space
+    push @define, map { "#  undef $_\n" } @H;
 }
 
 define('BUFFER',  'B',
@@ -674,7 +679,7 @@ EOF
 EOF
 
         # Write out what we have learned.
-        
+
         my @v = 'a'..'z';
         my $v = join(", ", @v[0..$seenu{$func}-1]);
         for my $p (@p) {
@@ -733,7 +738,11 @@ EOF
             my $memzero = '';
             if($p =~ /D$/ &&
                 ($genfunc eq 'protoent' || $genfunc eq 'servent')) {
-                $memzero = 'REENTR_MEMZERO(&PL_reentrant_buffer->_' . $genfunc . '_data, sizeof(PL_reentrant_buffer->_' . $genfunc . '_data)),';
+                $memzero = 'PERL_REENTR_MEMZERO(&PL_reentrant_buffer->_'
+		         . $genfunc
+		         . '_data, sizeof(PL_reentrant_buffer->_'
+		         . $genfunc
+		         . '_data)),';
             }
             push @wrap, <<EOF;
 #      if !defined($func) && ${FUNC}_R_PROTO == REENTRANT_PROTO_$p
@@ -790,7 +799,7 @@ typedef struct {
 
 @struct
     int dummy; /* cannot have empty structs */
-} REENTR;
+} PERL_REENTR;
 
 /* The wrappers. */
 
@@ -847,7 +856,6 @@ print $c <<"EOF";
 void
 Perl_reentrant_size(pTHX) {
         PERL_ARGS_ASSERT_REENTRANT_SIZE;
-        PERL_UNUSED_CONTEXT;
 
         /* Set the sizes of the reentrant buffers */
 
@@ -863,13 +871,12 @@ Perl_reentrant_size(pTHX) {
 void
 Perl_reentrant_init(pTHX) {
         PERL_ARGS_ASSERT_REENTRANT_INIT;
-        PERL_UNUSED_CONTEXT;
 
         /* Initialize the whole thing */
 
 #ifdef USE_REENTRANT_API
 
-        Newx(PL_reentrant_buffer, 1, REENTR);
+        Newx(PL_reentrant_buffer, 1, PERL_REENTR);
         Perl_reentrant_size(aTHX);
 
 @init
@@ -880,7 +887,6 @@ Perl_reentrant_init(pTHX) {
 void
 Perl_reentrant_free(pTHX) {
         PERL_ARGS_ASSERT_REENTRANT_FREE;
-        PERL_UNUSED_CONTEXT;
 
         /* Tear down */
 

@@ -227,6 +227,7 @@ typedef struct hek HEK;
         HE**	svu_hash;		\
         GP*	svu_gp;			\
         PerlIO *svu_fp;			\
+        SV**    svu_fields;             \
     }	sv_u				\
     SV_HEAD_DEBUG_
 
@@ -435,7 +436,8 @@ These guys don't need the curly blocks
 #define SVp_IOK		0x00001000  /* has valid non-public integer value */
 #define SVp_NOK		0x00002000  /* has valid non-public numeric value */
 #define SVp_POK		0x00004000  /* has valid non-public pointer value */
-#define SVp_SCREAM	0x00008000  /* currently unused on plain scalars */
+#define SVp_SCREAM	0x00008000  /* has various meanings depending on SV type */
+#define SVs_VMG         SVp_SCREAM  /* Scalar SV has value magic */
 #define SVphv_CLONEABLE	SVp_SCREAM  /* PVHV (stashes) clone its objects */
 #define SVpgv_GP	SVp_SCREAM  /* GV has a valid GP */
 
@@ -491,16 +493,11 @@ These guys don't need the curly blocks
 
 #define SVf_OK		(SVf_IOK|SVf_NOK|SVf_POK|SVf_ROK| \
                          SVp_IOK|SVp_NOK|SVp_POK|SVpgv_GP)
+#define SVf_OK_no_VMG   (SVf_OK & ~SVs_VMG)
 
 #define PRIVSHIFT 4	/* (SVp_?OK >> PRIVSHIFT) == SVf_?OK */
 
-/* SVf_AMAGIC means that the stash *may* have overload methods. It's
- * set each time a function is compiled into a stash, and is reset by the
- * overload code when called for the first time and finds that there are
- * no overload methods. Note that this used to be set on the object; but
- * is now only set on stashes.
- */
-#define SVf_AMAGIC	0x10000000  /* has magical overloaded methods */
+#define SVphv_OVERLOAD  0x10000000  /* stash has magical overloaded methods */
 #define SVf_IsCOW	0x10000000  /* copy on write (shared hash key if
                                        SvLEN == 0) */
 
@@ -723,12 +720,11 @@ struct xobject {
     union xmgu_ xmg_u;
     SSize_t     xobject_maxfield;
     SSize_t     xobject_iter_sv_at; /* this is only used by Perl_sv_clear() */
-    SV**        xobject_fields;
 };
 
+#define ObjectFIELDS(inst)    ((inst)->sv_u.svu_fields)
 #define ObjectMAXFIELD(inst)  ((XPVOBJ *)SvANY(inst))->xobject_maxfield
 #define ObjectITERSVAT(inst)  ((XPVOBJ *)SvANY(inst))->xobject_iter_sv_at
-#define ObjectFIELDS(inst)    ((XPVOBJ *)SvANY(inst))->xobject_fields
 
 /* The following macros define implementation-independent predicates on SVs. */
 
@@ -1002,11 +998,11 @@ Set the size of the string buffer for the SV. See C<L</SvLEN>>.
 
 #define SvOK(sv)		(SvFLAGS(sv) & SVf_OK)
 #define SvOK_off(sv)		(assert_not_ROK(sv) assert_not_glob(sv)	\
-                                 SvFLAGS(sv) &=	~(SVf_OK|		\
+                                 SvFLAGS(sv) &=	~(SVf_OK_no_VMG|	\
                                                   SVf_IVisUV|SVf_UTF8),	\
                                                         SvOOK_off(sv))
 #define SvOK_off_exc_UV(sv)	(assert_not_ROK(sv)			\
-                                 SvFLAGS(sv) &=	~(SVf_OK|		\
+                                 SvFLAGS(sv) &=	~(SVf_OK_no_VMG|	\
                                                   SVf_UTF8),		\
                                                         SvOOK_off(sv))
 
@@ -1096,11 +1092,11 @@ in gv.h: */
                                  SvFLAGS(sv) |= (SVf_POK|SVp_POK))
 #define SvPOK_off(sv)		(SvFLAGS(sv) &= ~(SVf_POK|SVp_POK))
 #define SvPOK_only(sv)		(assert_not_ROK(sv) assert_not_glob(sv)	\
-                                 SvFLAGS(sv) &= ~(SVf_OK|		\
+                                 SvFLAGS(sv) &= ~(SVf_OK_no_VMG|	\
                                                   SVf_IVisUV|SVf_UTF8),	\
                                     SvFLAGS(sv) |= (SVf_POK|SVp_POK))
 #define SvPOK_only_UTF8(sv)	(assert_not_ROK(sv) assert_not_glob(sv)	\
-                                 SvFLAGS(sv) &= ~(SVf_OK|		\
+                                 SvFLAGS(sv) &= ~(SVf_OK_no_VMG|	\
                                                   SVf_IVisUV),		\
                                     SvFLAGS(sv) |= (SVf_POK|SVp_POK))
 
@@ -1196,6 +1192,18 @@ magic. Refer to L<perltie> for some examples of other magical methods.
 #define SvRMAGICAL_on(sv)	(SvFLAGS(sv) |= SVs_RMG)
 #define SvRMAGICAL_off(sv)	(SvFLAGS(sv) &= ~SVs_RMG)
 
+/* This flag is only meaningful on SvTYPE <= SVt_PVMG. Do not use these macros
+ * on other SV types as they will get confused with the SVpgv_GP flag */
+#define SvVMAGICAL(sv)          (assert(SvTYPE(sv) <= SVt_PVMG), \
+                                    SvFLAGS(sv) & SVs_VMG)
+#define SvVMAGICAL_on(sv)       (assert(SvTYPE(sv) <= SVt_PVMG), \
+                                    SvFLAGS(sv) |= SVs_VMG)
+#define SvVMAGICAL_off(sv)      STMT_START {                      \
+                                    SV *_sv = (sv);               \
+                                    if (SvTYPE(_sv) <= SVt_PVMG)  \
+                                        SvFLAGS(_sv) &= ~SVs_VMG; \
+                                } STMT_END
+
 /*
 =for apidoc Am|bool|SvAMAGIC|SV * sv
 
@@ -1208,12 +1216,55 @@ Note: A GET magic check should be performed prior to an active magic check.
 */
 
 #define SvAMAGIC(sv)		(SvROK(sv) && SvOBJECT(SvRV(sv)) &&	\
-                                 HvAMAGIC(SvSTASH(SvRV(sv))))
+                                 HvOVERLOAD(SvSTASH(SvRV(sv))))
 
 /* To be used on the stashes themselves: */
-#define HvAMAGIC(hv)		(SvFLAGS(hv) & SVf_AMAGIC)
-#define HvAMAGIC_on(hv)		(SvFLAGS(hv) |= SVf_AMAGIC)
-#define HvAMAGIC_off(hv)	(SvFLAGS(hv) &=~ SVf_AMAGIC)
+#define perl_assert_HV_(sv)          assert_(SvTYPE(sv) == SVt_PVHV)
+
+/*
+=for apidoc Am|bool|HvOVERLOAD|HV *hv
+
+Returns a boolean as to whether the stash C<hv> has overloaded methods defined
+on it.
+
+=for apidoc      Am|void|HvOVERLOAD_on|HV *hv
+=for apidoc_item       ||HvOVERLOAD_off|HV *hv
+
+Turns on or off the L</HvOVERLOAD> flag.
+
+=cut
+*/
+
+#define HvOVERLOAD(hv)          (SvFLAGS(hv) & SVphv_OVERLOAD)
+#define HvOVERLOAD_on(hv)       (perl_assert_HV_(hv) SvFLAGS(hv) |= SVphv_OVERLOAD)
+#define HvOVERLOAD_off(hv)      (perl_assert_HV_(hv) SvFLAGS(hv) &=~ SVphv_OVERLOAD)
+#ifndef PERL_CORE
+/*
+=for apidoc ABmn|U32|SVf_AMAGIC
+
+Use C<SVphv_OVERLOAD> instead.
+"AMAGIC" is short for "active magic"; a rather vague description of what we
+now call operator overloading.
+
+=for apidoc   ABm|bool|HvAMAGIC|HV * hv
+=for apidoc_item ||HvAMAGIC_on|HV * hv
+=for apidoc_item || HvAMAGIC_off|HV * hv
+
+Use, respectively,
+C<L</HvOVERLOAD>>,
+C<L</HvOVERLOAD_on>>,
+and C<L</HvOVERLOAD_off>> instead.
+"AMAGIC" is short for "active magic"; a rather vague description of what we
+now call operator overloading.
+
+=cut
+*/
+
+#  define SVf_AMAGIC            SVphv_OVERLOAD
+#  define HvAMAGIC              HvOVERLOAD
+#  define HvAMAGIC_on           HvOVERLOAD_on
+#  define HvAMAGIC_off          HvOVERLOAD_off
+#endif
 
 
 /* "nog" means "doesn't have get magic" */
@@ -1272,7 +1323,7 @@ the scalar's value cannot change unless written to.
 #define Gv_AMG(stash) \
         (HvNAME(stash) && Gv_AMupdate(stash,FALSE) \
             ? 1					    \
-            : (HvAMAGIC_off(stash), 0))
+            : (HvOVERLOAD_off(stash), 0))
 
 #define SvWEAKREF(sv)		((SvFLAGS(sv) & (SVf_ROK|SVprv_WEAKREF)) \
                                   == (SVf_ROK|SVprv_WEAKREF))
@@ -1313,6 +1364,13 @@ C<sv_force_normal> does nothing.
 #define SVs_PADMY		0
 #define SvPADMY(sv)		(!(SvFLAGS(sv) & SVs_PADTMP))
 #ifndef PERL_CORE
+/*
+=for apidoc ABm||SvPADMY_on|SV * sv
+Use C<SvPADTMP_off> instead.  (Yes, the original is C<on> and the replacement
+is C<off>.)
+
+=cut
+*/
 # define SvPADMY_on(sv)		SvPADTMP_off(sv)
 #endif
 
@@ -1357,11 +1415,19 @@ object type. Exposed to perl code via Internals::SvREADONLY().
 # define SvREADONLY_off(sv)	(SvFLAGS(sv) &= ~SVf_READONLY)
 #endif
 
-#define SvSCREAM(sv) ((SvFLAGS(sv) & (SVp_SCREAM|SVp_POK)) == (SVp_SCREAM|SVp_POK))
-#define SvSCREAM_on(sv)		(SvFLAGS(sv) |= SVp_SCREAM)
-#define SvSCREAM_off(sv)	(SvFLAGS(sv) &= ~SVp_SCREAM)
-
 #ifndef PERL_CORE
+/*
+=for apidoc ABm|bool|SvCOMPILED|SV* sv
+
+Now always returns C<false>.
+
+=for apidoc  ABm||SvCOMPILED_on|SV* sv
+=for apidoc_item||SvCOMPILED_off|SV* sv
+Now are no-ops
+
+=cut
+*/
+
 #  define SvCOMPILED(sv)	0
 #  define SvCOMPILED_on(sv)
 #  define SvCOMPILED_off(sv)
@@ -1660,7 +1726,13 @@ L</C<SV_CHECK_THINKFIRST_COW_DROP>> before calling this.
 =for apidoc Am|void|SvPV_free|SV * sv
 
 Frees the PV buffer in C<sv>, leaving things in a precarious state, so should
-only be used as part of a larger operation
+only be used as part of a larger operation.
+
+A C<SvTHINKFIRST> check of some kind must have been performed on the sv prior
+to using C<SvPV_free>, as it is not COW aware.
+
+C<SvCUR> and C<SvLEN> are left unchanged. It is the caller's responsibility
+to set them to values appropriate to the task in hand.
 
 =cut
 */
@@ -1695,10 +1767,24 @@ only be used as part of a larger operation
 #endif
 
 #ifndef PERL_CORE
+/*
+=for apidoc_section $string
+=for apidoc ABm|U32|BmFLAGS|SV* sv
+
+=cut
+*/
 #  define BmFLAGS(sv)		(SvTAIL(sv) ? FBMcf_TAIL : 0)
 #endif
 
 #if defined (DEBUGGING) && defined(PERL_USE_GCC_BRACE_GROUPS)
+/*
+=for apidoc_section $string
+=for apidoc Qm|IV|BmUSEFUL|SV* sv
+Used by regexec.c to help determine if using Boyers-Moore could speed up
+pattern matching of the string contained in C<sv>.
+
+=cut
+*/
 #  define BmUSEFUL(sv)							\
         (*({ SV *const bmuseful_ = MUTABLE_SV(sv);			\
             assert(SvTYPE(bmuseful_) >= SVt_PVIV);			\
@@ -1712,6 +1798,15 @@ only be used as part of a larger operation
 #endif
 
 #ifndef PERL_CORE
+/*
+=for apidoc_section $string
+=for apidoc   ABm|U32|BmRARE|SV* sv
+=for apidoc_item |U32|BmPREVIOUS|SV* sv
+
+These both now return 0
+
+=cut
+*/
 # define BmRARE(sv)	0
 # define BmPREVIOUS(sv)	0
 #endif
@@ -1803,6 +1898,7 @@ Taint an SV.  Use C<SvTAINTED_on> instead.
         assert(TAINTING_get || !TAINT_get); \
         if (UNLIKELY(TAINT_get))	\
             SvTAINTED_on(sv);	        \
+        VALUEMAGIC_APPLYTO(sv);         \
     } STMT_END
 
 /*
@@ -2771,7 +2867,7 @@ Create a new IO, setting the reference count to 1.
 
 =cut
 */
-#define newIO()	MUTABLE_IO(newSV_type(SVt_PVIO))
+#define newIO()	MUTABLE_IO(newSV_type_generic(SVt_PVIO))
 
 #if defined(PERL_CORE) || defined(PERL_EXT)
 
@@ -2894,6 +2990,20 @@ macro family.
 */
 
 #define SvVSTRING(sv, len)  (sv_vstring_get(sv, &(len)))
+
+/* These next two declarations, and the matching pieces in sv.c, were
+ * added for use by Perl_sv_reftype and pp_ref_cmp.
+ *
+ * If external visibility is required in the future, it should be
+ * via a new function rather than directly. */
+#ifdef PERL_CORE
+typedef struct {
+    const char * str;
+    STRLEN len;
+} sv_reftype_entry;
+#define PL_sv_reftype_lookup_MAX 14
+extern const sv_reftype_entry PL_sv_reftype_lookup[PL_sv_reftype_lookup_MAX];
+#endif
 
 /*
  * ex: set ts=8 sts=4 sw=4 et:

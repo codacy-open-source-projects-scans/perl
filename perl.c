@@ -103,6 +103,22 @@ S_init_tls_and_interp(PerlInterpreter *my_perl)
     }
 }
 
+static void
+S_init_native_octet_utf8(pTHX)
+{
+    U32 i;
+
+    /* The table is process-global, but initializing it here is harmless when
+     * another interpreter is constructed.  It depends only on the character
+     * set selected at compile time. */
+    for (i = 0; i < 256; i++) {
+        U8 * const end = uv_to_utf8_flags(
+            PL_native_octet_utf8[i].bytes, i, 0);
+        PL_native_octet_utf8[i].len = (U8)(end -
+                                          PL_native_octet_utf8[i].bytes);
+    }
+}
+
 
 #ifndef PLATFORM_SYS_INIT_
 #  define PLATFORM_SYS_INIT_  NOOP
@@ -247,6 +263,7 @@ perl_construct(pTHXx)
 #endif
 
     init_constants();
+    S_init_native_octet_utf8(aTHX);
 
     SvREADONLY_on(&PL_sv_placeholder);
     SvREFCNT(&PL_sv_placeholder) = SvREFCNT_IMMORTAL;
@@ -462,6 +479,8 @@ perl_construct(pTHXx)
     /* Start with 1 bucket, for DFS.  It's unlikely we'll need more.  */
     HvMAX(PL_registered_mros) = 0;
 
+    PL_valuemagic_annotations = NULL;
+
     ENTER;
     init_i18nl10n(1);
 }
@@ -479,7 +498,6 @@ int
 Perl_nothreadhook(pTHX)
 {
     PERL_ARGS_ASSERT_NOTHREADHOOK;
-    PERL_UNUSED_CONTEXT;
 
     return 0;
 }
@@ -945,6 +963,9 @@ perl_destruct(pTHXx)
      */
     sv_clean_objs();
 
+    SvREFCNT_dec(PL_valuemagic_annotations);
+    PL_valuemagic_annotations = NULL;
+
     /* unhook hooks which will soon be, or use, destroyed data */
     SvREFCNT_dec(PL_warnhook);
     PL_warnhook = NULL;
@@ -1144,6 +1165,12 @@ perl_destruct(pTHXx)
     for (i = 0; i < (int) C_ARRAY_LENGTH(PL_curlocales); i++) {
         Safefree(PL_curlocales[i]);
         PL_curlocales[i] = NULL;
+    }
+#endif
+#if defined(EMULATE_THREAD_SAFE_LOCALES)
+    for (i = 0; i < (int) C_ARRAY_LENGTH(PL_restore_locale); i++) {
+        Safefree(PL_restore_locale[i]);
+        PL_restore_locale[i] = NULL;
     }
 #endif
 #if defined(USE_POSIX_2008_LOCALE) && defined(MULTIPLICITY)
@@ -1507,13 +1534,14 @@ perl_destruct(pTHXx)
     free_tied_hv_pool();
     Safefree(PL_op_mask);
     Safefree(PL_psig_name);
-    PL_psig_name = (SV**)NULL;
-    PL_psig_ptr = (SV**)NULL;
+    PL_psig_name = NULL;
+    Safefree(PL_psig_ptr);
+    PL_psig_ptr = NULL;
     {
         /* We need to NULL PL_psig_pend first, so that
            signal handlers know not to use it */
-        int *psig_save = PL_psig_pend;
-        PL_psig_pend = (int*)NULL;
+        PERL_ATOMIC(int) *psig_save = PL_psig_pend;
+        PL_psig_pend = NULL;
         Safefree(psig_save);
     }
     nuke_stacks();
@@ -2062,8 +2090,14 @@ S_Internals_V(pTHX_ CV *cv)
 #  ifdef PERL_RC_STACK
                              " PERL_RC_STACK"
 #  endif
+#  ifdef PERL_REGEX_OCTET_TRIE
+                             " PERL_REGEX_OCTET_TRIE"
+#  endif
 #  ifdef PERL_RELOCATABLE_INCPUSH
                              " PERL_RELOCATABLE_INCPUSH"
+#  endif
+#  ifdef PERL_USE_ATOMIC
+                             " PERL_USE_ATOMIC"
 #  endif
 #  ifdef PERL_USE_DEVEL
                              " PERL_USE_DEVEL"
@@ -2075,14 +2109,14 @@ S_Internals_V(pTHX_ CV *cv)
 #  ifdef PERL_USE_UNSHARED_KEYS_IN_LARGE_HASHES
                              " PERL_USE_UNSHARED_KEYS_IN_LARGE_HASHES"
 #  endif
+#  ifdef PERL_USE_VALUEMAGIC
+                             " PERL_USE_VALUEMAGIC"
+#  endif
 #  ifdef SILENT_NO_TAINT_SUPPORT
                              " SILENT_NO_TAINT_SUPPORT"
 #  endif
 #  ifdef UNLINK_ALL_VERSIONS
                              " UNLINK_ALL_VERSIONS"
-#  endif
-#  ifdef USE_ATTRIBUTES_FOR_PERLIO
-                             " USE_ATTRIBUTES_FOR_PERLIO"
 #  endif
 #  ifdef USE_FAST_STDIO
                              " USE_FAST_STDIO"
@@ -2727,6 +2761,16 @@ S_parse_body(pTHX_ char **env, XSINIT_t xsinit)
         s = PerlEnv_getenv("PERL_DEBUG_MSTATS");
         if (s && grok_atoUV(s, &uv, NULL) && uv >= 2)
             dump_mstats("after compilation:");
+    }
+#endif
+
+#ifdef PERL_RE_SUPERLINEAR_CACHE_DELAY
+    {
+        const char *s = PerlEnv_getenv("PERL_RE_SUPERLINEAR_CACHE_DELAY");
+        if (s) {
+            SV *var = get_sv("\022E_SUPERLINEAR_CACHE_DELAY", GV_ADD);
+            sv_setpv_mg(var, s);
+        }
     }
 #endif
 
@@ -3634,6 +3678,8 @@ Perl_get_debug_opts(pTHX_ const char **s, bool givehelp)
       "  y  trace y///, tr/// compilation and execution\n",
       "  h  Show (h)ash randomization debug output"
                 " (changes to PL_hash_rand_bits)\n",
+      "  K  trace mutex locking (requires Configure to be passed"
+                " -Accflags=DPERL_DEBUG_MUTEXES)\n",
       NULL
     };
     UV uv = 0;
@@ -3654,7 +3700,7 @@ Perl_get_debug_opts(pTHX_ const char **s, bool givehelp)
          * impacting the definitions of all the other flags in perl.h
          * However because the logic is guarded by isWORDCHAR we can
          * fill in holes with non-wordchar characters instead. */
-        static const char debopts[] = "psltocPmfrxuUhXDSTRJvCAqMBLiy";
+        static const char debopts[] = "psltocPmfrxuUhXDSTRJvCAqMBLiyK";
 
         for (; isWORDCHAR(**s); (*s)++) {
             const char * const d = strchr(debopts,**s);
@@ -4102,7 +4148,6 @@ Perl_my_unexec(pTHX)
     /* unexec prints msg to stderr in case of failure */
     PerlProc_exit(status);
 #else
-    PERL_UNUSED_CONTEXT;
 #  ifdef VMS
      lib$signal(SS$_DEBUG);  /* ssdef.h #included from vmsish.h */
 #  elif defined(WIN32) || defined(__CYGWIN__)
@@ -4405,8 +4450,6 @@ S_init_ids(pTHX)
     const Gid_t my_gid = PerlProc_getgid();
     const Gid_t my_egid = PerlProc_getegid();
 
-    PERL_UNUSED_CONTEXT;
-
     /* Should not happen: */
     CHECK_MALLOC_TAINT(my_uid && (my_euid != my_uid || my_egid != my_gid));
     TAINTING_set( TAINTING_get | (my_uid && (my_euid != my_uid || my_egid != my_gid)) );
@@ -4475,7 +4518,6 @@ S_forbid_setid(pTHX_ const char flag, const bool suidscript) /* g */
     char string[3] = "-x";
     const char *message = "program input from stdin";
 
-    PERL_UNUSED_CONTEXT;
     if (flag) {
         string[1] = flag;
         message = string;

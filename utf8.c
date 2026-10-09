@@ -1618,8 +1618,8 @@ described in C<L</utf8_to_uv_flags>>.  No array element is generated for
 malformations that are "allowed" by the input flags, in contrast to the
 bitmap returned in a non-NULL C<*errors>.
 
-Each element of the C<msgs> AV array is an anonymous hash with the following
-three key-value pairs:
+Each element of the C<msgs> AV array is a reference to an anonymous hash
+with the following three key-value pairs:
 
 =over 4
 
@@ -2420,10 +2420,16 @@ Perl_utf8_to_uv_msgs_helper_(const U8 * const s0,
 
                 /* The code above should have guaranteed that we don't get here
                  * with conditions other than these */
+#ifndef EBCDIC
+                /* But it turns out it can get here with a too-short
+                 * malformation on EBCDIC.  This was discovered so close to
+                 * 5.44, that this temporary solution was made, so as to avoid
+                 * any possible effect on any ASCII platform.  GH #24481 */
                 assert (! (orig_problems & ~( UTF8_GOT_LONG
                                              |UTF8_GOT_LONG_WITH_VALUE
                                              |UTF8_GOT_PERL_EXTENDED
                                              |UTF8_GOT_NONCHAR)));
+#endif
                 message = form(nonchar_cp_format, input_uv);
                 break;
 
@@ -2620,8 +2626,9 @@ Perl_utf8_to_uv_msgs_helper_(const U8 * const s0,
 =for apidoc utf8_length
 
 Returns the number of characters in the sequence of UTF-8-encoded bytes starting
-at C<s> and ending at the byte just before C<e>.  If <s> and <e> point to the
-same place, it returns 0 with no warning raised.
+at C<s> (which must be positioned at the start of a character) and ending at
+the byte just before C<e>.  If <s> and <e> point to the same place, it returns
+0 with no warning raised.
 
 If C<e E<lt> s> or if the scan would end up past C<e>, it raises a UTF8 warning
 and returns the number of valid characters.
@@ -2644,6 +2651,7 @@ STRLEN
 Perl_utf8_length(pTHX_ const U8 * const s0, const U8 * const e)
 {
     PERL_ARGS_ASSERT_UTF8_LENGTH;
+    assert(s0 == e || ! UTF8_IS_CONTINUATION(*s0));
 
     STRLEN continuations = 0;
     STRLEN len = 0;
@@ -3346,7 +3354,6 @@ Perl_bytes_to_utf8_free_me(pTHX_ const U8 *s, Size_t *lenp,
                                  void ** free_me_ptr)
 {
     PERL_ARGS_ASSERT_BYTES_TO_UTF8_FREE_ME;
-    PERL_UNUSED_CONTEXT;
 
     const U8 * const send = s + (*lenp);
     const Size_t variant_count = variant_under_utf8_count(s, send);
@@ -4525,12 +4532,14 @@ Perl_to_utf8_fold_flags_(pTHX_ const U8 *p,
 
         if (flags & FOLD_FLAGS_LOCALE) {
 
-#           define LONG_S_T      LATIN_SMALL_LIGATURE_LONG_S_T_UTF8
+#         define LONG_S_T      LATIN_SMALL_LIGATURE_LONG_S_T_UTF8
 #         ifdef LATIN_CAPITAL_LETTER_SHARP_S_UTF8
 #           define CAP_SHARP_S   LATIN_CAPITAL_LETTER_SHARP_S_UTF8
+#         endif
+#ifdef CAP_SHARP_S
 
-            /* Special case these two characters, as what normally gets
-             * returned under locale doesn't work */
+            /* Special case these characters, as what normally gets returned
+             * under locale doesn't work */
             if (memBEGINs((char *) p, e - p, CAP_SHARP_S))
             {
                 /* diag_listed_as: Can't do %s("%s") on non-UTF-8 locale; resolved to "%s". */
@@ -4539,10 +4548,19 @@ Perl_to_utf8_fold_flags_(pTHX_ const U8 *p,
                           "resolved to \"\\x{17F}\\x{17F}\".");
                 goto return_long_s;
             }
-            else
+
+#  ifdef SURSOLIDUM
+
+            if (memBEGINs((char *) p, e - p, LATIN_SMALL_LIGATURE_LONG_S_WITH_DESCENDER_S_UTF8)) {
+                /* diag_listed_as: Can't do %s("%s") on non-UTF-8 locale; resolved to "%s". */
+                ck_warner(packWARN(WARN_LOCALE),
+                          "Can't do fc(\"\\x{1DF95}\") on non-UTF-8 locale; "
+                          "resolved to \"\\x{17F}\\x{17F}\".");
+                goto return_long_s;
+            }
+#  endif
 #endif
-                 if (memBEGINs((char *) p, e - p, LONG_S_T))
-            {
+            if (memBEGINs((char *) p, e - p, LONG_S_T)) {
                 /* diag_listed_as: Can't do %s("%s") on non-UTF-8 locale; resolved to "%s". */
                 ck_warner(packWARN(WARN_LOCALE),
                           "Can't do fc(\"\\x{FB05}\") on non-UTF-8 locale; "
@@ -4560,7 +4578,7 @@ Perl_to_utf8_fold_flags_(pTHX_ const U8 *p,
              * 255/256 boundary which is forbidden under /l, and so the code
              * wouldn't catch that they are equivalent (which they are only in
              * this release) */
-            else if (memBEGINs((char *) p, e - p, DOTTED_I)) {
+            if (memBEGINs((char *) p, e - p, DOTTED_I)) {
                 /* diag_listed_as: Can't do %s("%s") on non-UTF-8 locale; resolved to "%s". */
                 ck_warner(packWARN(WARN_LOCALE),
                           "Can't do fc(\"\\x{0130}\") on non-UTF-8 locale; "
@@ -4595,6 +4613,9 @@ Perl_to_utf8_fold_flags_(pTHX_ const U8 *p,
                     if (original == LATIN_SMALL_LETTER_SHARP_S
 #ifdef LATIN_CAPITAL_LETTER_SHARP_S /* not defined in early Unicode releases */
                         || original == LATIN_CAPITAL_LETTER_SHARP_S
+#endif
+#ifdef SURSOLIDUM   /* not defined in early Unicode releases */
+                        || original == SURSOLIDUM
 #endif
                     ) {
                         goto return_long_s;

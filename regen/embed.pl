@@ -131,6 +131,9 @@ my $names_reserved_for_perl_use_re =
                             | ( _ | \b ) CPERL (arg | scope) ( _ | \b )
 
                             | _ (?: pl | PL) _ \b
+
+                              # Cast OP* arguments
+                            | \b c [A-Z_]+ [ox]? (?: _ [a-z]+ )? \b
                           /x;
 
 # This program looks at C preprocessor conditional expressions.  It turns out
@@ -145,6 +148,8 @@ my $names_reserved_for_perl_use_re =
 # as ones that turn on a special debugging mode.
 my %per_file_definitions = (
         'perl.h'             => { 'H_PERL' => 0 },
+        'win32/config_H.gc'  => { '_config_h_' => 0 },
+        'win32/config_H.vc'  => { '_config_h_' => 0 },
 );
 
 # This is a list of symbols that are:
@@ -156,8 +161,42 @@ my %per_file_definitions = (
 #
 # Strive to make this list empty.
 #
-# Symbols in class 2) above should instead be placed in
-# @undocumented_always_visible.
+# In almost all cases, it is best to document the symbol by using a
+#   =for apidoc
+# line for it (described in embed.fnc).  That line includes its visibility.
+# Then simply remove the symbol from the list.
+#
+# Nevertheless, there are cases where that isn't really desirable, or at least
+# currently feasible.  Such cases would legitimately include
+#   1) symbols whose meaning is clear from similarly named symbols.  For
+#      example we needn't document more than one of the many DEBUG_x-type
+#      macros.  One suffices.
+#   2) symbols that we'd like to have kept hidden, but one or two CPAN modules
+#      have dsicovered them, but we don't want to encourage further use.
+#   3) symbols where anyone who might want to use it would have to be quite
+#      familiar with that area of core, so could be presumed to be able to
+#      easily figure things out.
+#   4) there are probably other valid cases
+#
+# For such cases, the possible dispositions are:
+#
+# 1) If the decision is that the symbol should not be visible outside core,
+#    move it to @undocumented_always_hidden.
+#
+# 2) If the decision is that the symbol needs to be visible outside core,
+#    move it to one of:
+#       a) %needed_by_ext_re, if needed only by the 're' module
+#       b) %needed_by_ext, if needed only by any other perl extension
+#       c) @undocumented_always_visible if you don't think we really need to
+#          document the symbol
+#       d) @pending_documentation_symbols, otherwise.  This includes cases
+#          where you want to put off deciding if it ever ought to be
+#          documented.
+#
+# 4) If we're not confident about the decision, but think there is a good
+#    possibility that it should not be visible, move it to
+#    @undocumented_potentially_always_hidden.  That will quickly document our
+#    current thinking to future maintainers.
 #
 # The list does not include symbols that we have documented as being reserved
 # for perl's use, namely those that match the pattern just above.
@@ -168,16 +207,11 @@ my %per_file_definitions = (
 #
 # For all modules that aren't deliberately using particular names, all the
 # other symbols on it are namespace pollutants.
-my @unresolved_visibility_overrides = qw(
-    _
+my %unresolved_visibility_overrides = map { $_ => 1 } qw(
     ABORT
     ABS_IV_MIN
     ALIGNED_TYPE
-    ALIGNED_TYPE_NAME
     ALLOC_THREAD_KEY
-    ALL_PARENS_COUNTED
-    ALWAYS_WARN_SUPER
-    AMG_CALLun
     AMGfallNEVER
     AMGfallNO
     AMGfallYES
@@ -196,15 +230,11 @@ my @unresolved_visibility_overrides = qw(
     ARABIC_DECIMAL_SEPARATOR_UTF8_FIRST_BYTE_s
     ARABIC_DECIMAL_SEPARATOR_UTF8_TAIL
     ARGTARG
-    ASCII_FOLD_RESTRICTED
     ASCII_MORE_RESTRICT_PAT_MODS
     ASCII_PLATFORM_UTF8_MAXBYTES
-    ASCII_RESTRICTED
     ASCII_RESTRICT_PAT_MOD
     ASCII_RESTRICT_PAT_MODS
     ASCII_TO_NATIVE
-    ASCTIME_LOCK
-    ASCTIME_UNLOCK
     ASSERT_CURPAD_ACTIVE
     ASSERT_CURPAD_LEGAL
     ASSERT_IS_LITERAL
@@ -212,25 +242,15 @@ my @unresolved_visibility_overrides = qw(
     assert_not_glob
     ASSERT_NOT_PTR
     assert_not_ROK
-    aTHXa
-    aTHXo
-    aTHXx
-    AT_LEAST_ASCII_RESTRICTED
-    AT_LEAST_UNI_SEMANTICS
     Atoul
     AvARYLEN
-    AvMAX
-    AvREAL
     AvREALISH
-    AvREAL_off
     AvREAL_on
     AvREAL_only
     AvREIFY
     AvREIFY_off
     AvREIFY_on
     AvREIFY_only
-    av_tindex_skip_len_mg
-    av_top_index_skip_len_mg
     BADVERSION
     BASEOP
     BhkENTRY
@@ -241,37 +261,16 @@ my @unresolved_visibility_overrides = qw(
     BhkFLAGS
     BIT_BUCKET
     BIT_DIGITS
-    blk_eval
-    blk_format
-    blk_gimme
-    blk_givwhen
-    blk_loop
-    blk_oldcop
-    blk_oldmarksp
-    blk_oldpm
-    blk_oldsaveix
-    blk_oldscopesp
-    blk_oldsp
-    blk_old_tmpsfloor
-    blk_sub
-    blk_u16
-    BmFLAGS
-    BmPREVIOUS
-    BmRARE
-    BmUSEFUL
     BOM_UTF8_FIRST_BYTE
     BOM_UTF8_TAIL
     BSD_GETPGRP
     BSDish
     BSD_SETPGRP
-    BYTEORDER
     CALL_BLOCK_HOOKS
-    CALL_FPTR
     CALLREGCOMP
     CALLREGCOMP_ENG
     CALLREGDUPE
     CALLREGDUPE_PVT
-    CALLREGEXEC
     CALLREGFREE
     CALLREGFREE_PVT
     CALLREG_INTUIT_START
@@ -290,82 +289,27 @@ my @unresolved_visibility_overrides = qw(
     CALLREG_NUMBUF_LENGTH
     CALLREG_NUMBUF_STORE
     CALLREG_PACKAGE
-    CALLRUNOPS
-    CAN64BITHASH
     CAN_COW_FLAGS
     CAN_COW_MASK
-    CAN_PROTOTYPE
     CASE_STD_PMMOD_FLAGS_PARSE_SET
-    CATCH_GET
-    CATCH_SET
-    cBINOP
-    cBINOPo
-    cBINOPx
-    cCOP
-    cCOPo
-    cCOPx
     C_FAC_POSIX
-    cGVOP_gv
-    cGVOPo_gv
-    cGVOPx_gv
     CHANGE_MULTICALL_FLAGS
     CHARSET_PAT_MODS
     CHECK_MALLOC_TAINT
     CHECK_MALLOC_TOO_LATE_FOR
     child_offset_bits
-    CHR_SVLEN
     ckDEAD
-    ckWARN2_non_literal_string
-    ckWARN2reg
-    ckWARN2reg_d
-    ckWARN3reg
-    ckWARN4reg
-    ckWARNdep
-    ckWARNexperimental
-    ckWARNexperimental_with_arg
-    ckWARNreg
-    ckWARNregdep
-    CLANG_DIAG_IGNORE
     CLANG_DIAG_IGNORE_DECL
-    CLANG_DIAG_IGNORE_STMT
     CLANG_DIAG_PRAGMA
-    CLANG_DIAG_RESTORE
     CLANG_DIAG_RESTORE_DECL
     CLANG_DIAG_RESTORE_STMT
-    classnum_to_namedclass
     CLEAR_ARGARRAY
-    CLEAR_OPTSTART
-    cLISTOP
-    cLISTOPo
-    cLISTOPx
-    cLOGOP
-    cLOGOPo
-    cLOGOPx
-    CLONEf_JOIN_IN
-    cLOOP
-    cLOOPo
-    cLOOPx
     CLUMP_2IV
     CLUMP_2UV
-    cMETHOP
-    cMETHOP_meth
-    cMETHOPo
-    cMETHOPo_meth
-    cMETHOPo_rclass
-    cMETHOP_rclass
-    cMETHOPx
-    cMETHOPx_meth
-    cMETHOPx_rclass
     COMBINING_DOT_ABOVE_UTF8
     COMBINING_GRAVE_ACCENT_UTF8
     COMBINING_GREEK_YPOGEGRAMMENI_UTF8
-    COND_BROADCAST
-    COND_DESTROY
-    COND_INIT
-    COND_SIGNAL
-    COND_WAIT
     CONTINUE_PAT_MOD
-    COP_FEATURE_SIZE
     CopFEATURES_setfrom
     CopFILEAVx
     CopFILE_copy_x
@@ -374,7 +318,6 @@ my @unresolved_visibility_overrides = qw(
     CopFILE_setn_x
     CopFILE_set_x
     COPHH_EXISTS
-    CopHINTHASH_get
     CopHINTHASH_set
     CopHINTS_get
     CopHINTS_set
@@ -383,57 +326,22 @@ my @unresolved_visibility_overrides = qw(
     CopLINE_inc
     CopLINE_set
     COP_SEQMAX_INC
-    COP_SEQ_RANGE_HIGH
-    COP_SEQ_RANGE_LOW
     CopSTASH_ne
     copy_length
     CowREFCNT
-    cPADOP
-    cPADOPo
-    cPADOPx
-    cPMOP
-    cPMOPo
-    cPMOPx
-    cPVOP
-    cPVOPo
-    cPVOPx
     CR_NATIVE
-    cSVOP
-    cSVOPo
-    cSVOPo_sv
-    cSVOP_sv
-    cSVOPx
-    cSVOPx_sv
-    cSVOPx_svp
-    CTIME_LOCK
-    CTIME_UNLOCK
     Ctl
     CTYPE256
-    cUNOP
-    cUNOP_AUX
-    cUNOP_AUXo
-    cUNOP_AUXx
-    cUNOPo
-    cUNOPx
-    CvANON
-    CvANONCONST
-    CvANONCONST_off
-    CvANONCONST_on
-    CvANON_off
     CvANON_on
     CvAUTOLOAD
     CvAUTOLOAD_off
     CvAUTOLOAD_on
-    cv_ckproto
     CvCLONE
-    CvCLONED
     CvCLONED_off
     CvCLONED_on
     CvCLONE_off
     CvCLONE_on
-    CvCONST
     CvCONST_off
-    CvCONST_on
     CvCVGV_RC
     CvCVGV_RC_off
     CvCVGV_RC_on
@@ -463,43 +371,28 @@ my @unresolved_visibility_overrides = qw(
     CvFILE_set_from_cop
     CVf_IsMETHOD
     CVf_ISXSUB
-    CvFLAGS
-    CVf_LEXICAL
-    CVf_LVALUE
-    CVf_METHOD
-    CVf_NAMED
     CVf_NODEBUG
-    CVf_NOWARN_AMBIGUOUS
     CVf_REFCOUNTED_ANYSV
     CVf_SIGNATURE
     CVf_UNIQUE
     CVf_WEAKOUTSIDE
     CVf_XS_RCSTACK
-    CvGvNAME_HEK
-    CvGV_set
     CvHASEVAL
     CvHASEVAL_off
     CvHASEVAL_on
-    CvHASGV
-    CvHSCXT
     CvIsMETHOD
     CvIsMETHOD_off
     CvIsMETHOD_on
-    CvISXSUB
     CvISXSUB_off
     CvISXSUB_on
     CvLEXICAL
     CvLEXICAL_off
     CvLEXICAL_on
-    CvLVALUE
     CvLVALUE_off
-    CvLVALUE_on
     CvMETHOD
     CvMETHOD_off
     CvMETHOD_on
-    CvNAMED
-    CvNAMED_off
-    CvNAMED_on
+    CvNAME_HEK_clear
     CvNAME_HEK_set
     CvNODEBUG
     CvNODEBUG_off
@@ -512,9 +405,7 @@ my @unresolved_visibility_overrides = qw(
     CvPADLIST_set
     CvPROTO
     CvPROTOLEN
-    CvREFCOUNTED_ANYSV
     CvREFCOUNTED_ANYSV_off
-    CvREFCOUNTED_ANYSV_on
     CvSIGNATURE
     CvSIGNATURE_off
     CvSIGNATURE_on
@@ -529,10 +420,6 @@ my @unresolved_visibility_overrides = qw(
     CvWEAKOUTSIDE_off
     CvWEAKOUTSIDE_on
     CvXS_RCSTACK
-    CvXS_RCSTACK_off
-    CvXS_RCSTACK_on
-    CvXSUB
-    CvXSUBANY
     CX_CURPAD_SAVE
     CX_CURPAD_SV
     CX_DEBUG
@@ -567,11 +454,9 @@ my @unresolved_visibility_overrides = qw(
     CXp_TRYBLOCK
     CX_PUSHSUB_GET_LVALUE_MASK
     CxREALEVAL
-    cxstack_max
     CXt_DEFER
     CxTRY
     CxTRYBLOCK
-    CxTYPE
     CxTYPE_is_LOOP
     CXTYPEMASK
     dATARGET
@@ -581,29 +466,20 @@ my @unresolved_visibility_overrides = qw(
     DBVARMG_TRACE
     DEBUG_DB_RECURSE_FLAG
     DEBUG_MASK
-    DEBUG_PEEP
     DEBUG_POST_STMTS
     DEBUG_PRE_STMTS
-    DEBUG_RExC_seen
     DEBUG_SBOX32_HASH
     DEBUG_SCOPE
-    DEBUG_SHOW_STUDY_FLAG
-    DEBUG_STUDYDATA
     DEBUG_TOP_FLAG
     DEBUG_ZAPHOD32_HASH
     DEFAULT_PAT_MOD
-    DEFERRED_COULD_BE_OFFICIAL_MARKERc
-    DEFERRED_COULD_BE_OFFICIAL_MARKERs
-    DEFERRED_USER_DEFINED_INDEX
     del_body_by_type
     DEL_NATIVE
     DEPENDS_PAT_MOD
     DEPENDS_PAT_MODS
-    DEPENDS_SEMANTICS
     DETACH
     DIE
     DISABLE_LC_NUMERIC_CHANGES
-    dJMPENV
     djSP
     DM_ARRAY_ISA
     DM_DELAY
@@ -613,13 +489,8 @@ my @unresolved_visibility_overrides = qw(
     DM_RGID
     DM_RUID
     DM_UID
-    dMY_CXT_INTERP
     do_exec
-    DOSISH
     DOUBLE_BIG_ENDIAN
-    DOUBLE_HAS_INF
-    DOUBLE_HAS_NAN
-    DOUBLE_IS_IEEE_FORMAT
     DOUBLE_IS_VAX_FLOAT
     DOUBLE_LITTLE_ENDIAN
     DOUBLE_MIX_ENDIAN
@@ -642,38 +513,27 @@ my @unresolved_visibility_overrides = qw(
     dPOPXiirl_ul_nomg
     dPOPXnnrl
     dPOPXssrl
-    DPTR2FPTR
     dSAVEDERRNO
     dSAVE_ERRNO
     dSS_ADD
     dTARG
     dTARGETSTACKED
     dTHX_DEBUGGING
-    dTHXo
     dTHXs
-    dTHXx
     dTOPiv
     dTOPnv
     dTOPss
     dTOPuv
-    DUMPUNTIL
     DUP_WARNINGS
     dXSUB_SYS
-    eC
-    eI
     EIGHT_BIT_UTF8_TO_NATIVE
     EMBEDMYMALLOC
-    ENDGRENT_R_HAS_FPTR
-    ENDPWENT_R_HAS_FPTR
     ENV_INIT
     ENV_LOCK
     ENV_READ_LOCK
     ENV_READ_UNLOCK
-    ENVr_LOCALEr_LOCK
-    ENVr_LOCALEr_UNLOCK
     ENV_TERM
     ENV_UNLOCK
-    ESC_NATIVE
     EVAL_INEVAL
     EVAL_INREQUIRE
     EVAL_KEEPERR
@@ -683,29 +543,20 @@ my @unresolved_visibility_overrides = qw(
     EXEC_ARGV_CAST
     EXEC_PAT_MOD
     EXEC_PAT_MODS
-    EXPECT
-    EXPERIMENTAL_INPLACESCAN
     EXTEND_HWM_SET
     EXTEND_MORTAL
     EXTEND_SKIP
     EXT_MGVTBL
     EXT_PAT_MODS
-    FAIL
-    FAIL2
-    FAIL3
     FAKE_BIT_BUCKET
     FAKE_DEFAULT_SIGNAL_HANDLERS
     FAKE_PERSISTENT_SIGNAL_HANDLERS
-    FALSE
-    F_atan2_amg
     FBMcf_TAIL
     FBMcf_TAIL_DOLLAR
     FBMcf_TAIL_DOLLARM
     FBMcf_TAIL_z
     FBMcf_TAIL_Z
     FBMrf_MULTILINE
-    F_cos_amg
-    F_exp_amg
     FF_0DECIMAL
     FF_BLANK
     FF_CHECKCHOP
@@ -720,154 +571,53 @@ my @unresolved_visibility_overrides = qw(
     FF_LINEMARK
     FF_LINESNGL
     FF_LITERAL
-    Fflush
     FF_MORE
     FF_NEWLINE
     FF_SKIP
     FF_SPACE
-    FILTER_DATA
     FILTER_ISREADER
-    FILTER_READ
     FIT_ARENA
     FIT_ARENA0
     FIT_ARENAn
     FITS_IN_8_BITS
-    F_log_amg
-    FmLINES
-    FOLD
     FOLD_FLAGS_FULL
     FOLD_FLAGS_LOCALE
     FOLD_FLAGS_NOMIX_ASCII
-    F_pow_amg
     FP_PINF
     FP_QNAN
-    FPTR2DPTR
     free_and_set_cop_warnings
     free_c_backtrace
-    FreeOp
     FREE_THREAD_KEY
     FSEEKSIZE
-    F_sin_amg
-    F_sqrt_amg
-    Fstat
-    FULL_TRIE_STUDY
     fwrite1
-    G_ARRAY
-    GCC_DIAG_IGNORE
     GCC_DIAG_IGNORE_DECL
-    GCC_DIAG_IGNORE_STMT
     GCC_DIAG_PRAGMA
     GCC_DIAG_RESTORE
     GCC_DIAG_RESTORE_DECL
-    GCC_DIAG_RESTORE_STMT
     GETATARGET
-    GETENV_LOCK
-    GETENV_UNLOCK
     get_extended_os_errno
-    GETGRENT_R_HAS_BUFFER
-    GETGRENT_R_HAS_FPTR
-    GETGRENT_R_HAS_PTR
-    GETGRGID_R_HAS_BUFFER
-    GETGRGID_R_HAS_PTR
-    GETGRNAM_R_HAS_BUFFER
-    GETGRNAM_R_HAS_PTR
-    GETHOSTBYADDR_LOCK
-    GETHOSTBYADDR_R_HAS_BUFFER
-    GETHOSTBYADDR_R_HAS_ERRNO
-    GETHOSTBYADDR_R_HAS_PTR
-    GETHOSTBYADDR_UNLOCK
-    GETHOSTBYNAME_LOCK
-    GETHOSTBYNAME_R_HAS_BUFFER
-    GETHOSTBYNAME_R_HAS_ERRNO
-    GETHOSTBYNAME_R_HAS_PTR
-    GETHOSTBYNAME_UNLOCK
-    GETHOSTENT_R_HAS_BUFFER
-    GETHOSTENT_R_HAS_ERRNO
-    GETHOSTENT_R_HAS_PTR
-    GETNETBYADDR_LOCK
-    GETNETBYADDR_R_HAS_BUFFER
-    GETNETBYADDR_R_HAS_ERRNO
-    GETNETBYADDR_R_HAS_PTR
-    GETNETBYADDR_UNLOCK
-    GETNETBYNAME_LOCK
-    GETNETBYNAME_R_HAS_BUFFER
-    GETNETBYNAME_R_HAS_ERRNO
-    GETNETBYNAME_R_HAS_PTR
-    GETNETBYNAME_UNLOCK
-    GETNETENT_R_HAS_BUFFER
-    GETNETENT_R_HAS_ERRNO
-    GETNETENT_R_HAS_PTR
-    GETPROTOBYNAME_LOCK
-    GETPROTOBYNAME_R_HAS_BUFFER
-    GETPROTOBYNAME_R_HAS_PTR
-    GETPROTOBYNAME_UNLOCK
-    GETPROTOBYNUMBER_LOCK
-    GETPROTOBYNUMBER_R_HAS_BUFFER
-    GETPROTOBYNUMBER_R_HAS_PTR
-    GETPROTOBYNUMBER_UNLOCK
-    GETPROTOENT_LOCK
-    GETPROTOENT_R_HAS_BUFFER
-    GETPROTOENT_R_HAS_PTR
-    GETPROTOENT_UNLOCK
-    GETPWENT_R_HAS_BUFFER
-    GETPWENT_R_HAS_FPTR
-    GETPWENT_R_HAS_PTR
-    GETPWNAM_LOCK
-    GETPWNAM_R_HAS_BUFFER
-    GETPWNAM_R_HAS_PTR
-    GETPWNAM_UNLOCK
-    GETPWUID_LOCK
-    GETPWUID_R_HAS_PTR
-    GETPWUID_UNLOCK
-    GETSERVBYNAME_LOCK
-    GETSERVBYNAME_R_HAS_BUFFER
-    GETSERVBYNAME_R_HAS_PTR
-    GETSERVBYNAME_UNLOCK
-    GETSERVBYPORT_LOCK
-    GETSERVBYPORT_R_HAS_BUFFER
-    GETSERVBYPORT_R_HAS_PTR
-    GETSERVBYPORT_UNLOCK
-    GETSERVENT_LOCK
-    GETSERVENT_R_HAS_BUFFER
-    GETSERVENT_R_HAS_PTR
-    GETSERVENT_UNLOCK
-    GETSPNAM_LOCK
-    GETSPNAM_R_HAS_BUFFER
-    GETSPNAM_R_HAS_PTR
-    GETSPNAM_UNLOCK
     GETTARGET
     GETTARGETSTACKED
     G_FAKINGEVAL
     GLOBAL_PAT_MOD
-    GMTIME_LOCK
-    GMTIME_UNLOCK
-    G_NODEBUG
     GREEK_CAPITAL_LETTER_MU
     GREEK_SMALL_LETTER_MU
     G_RE_REPARSING
     G_UNDEF_FILL
-    Gv_AMG
     GvASSUMECV
     GvASSUMECV_off
     GvASSUMECV_on
     GV_AUTOLOAD
-    GvAVn
     GV_CROAK
-    GvCVGEN
     GvCV_set
-    GvCVu
     GvEGV
     GvEGVx
     GvENAME
     GvENAME_HEK
     GvENAMELEN
     GvENAMEUTF8
-    GvESTASH
     GVf_ASSUMECV
-    gv_fetchmethod_flags
     GvFILE
-    GvFILEGV
-    GvFILE_HEK
     GvFILEx
     GVf_IMPORTED
     GVf_IMPORTED_AV
@@ -875,16 +625,11 @@ my @unresolved_visibility_overrides = qw(
     GVf_IMPORTED_HV
     GVf_IMPORTED_SV
     GVf_INTRO
-    GvFLAGS
-    GVf_MULTI
     GVF_NOADD
     GVf_ONCE_FATAL
     GvFORM
     GVf_RESERVED
-    GvGP
-    GvGPFLAGS
     GvGP_set
-    GvHVn
     GvIMPORTED
     GvIMPORTED_AV
     GvIMPORTED_AV_off
@@ -900,39 +645,25 @@ my @unresolved_visibility_overrides = qw(
     GvIMPORTED_SV
     GvIMPORTED_SV_off
     GvIMPORTED_SV_on
-    GvIN_PAD
-    GvIN_PAD_off
-    GvIN_PAD_on
     GvINTRO
     GvINTRO_off
     GvINTRO_on
-    GvIO
     GvIOn
-    GvIOp
-    GvLINE
     gv_method_changed
     GvMULTI
     GvMULTI_off
     GvMULTI_on
-    GvNAME
     GvNAME_get
-    GvNAME_HEK
-    GvNAMELEN
     GvNAMELEN_get
-    GvNAMEUTF8
     GV_NOADD_MASK
     GvONCE_FATAL
     GvONCE_FATAL_off
     GvONCE_FATAL_on
-    GvREFCNT
-    GvSTASH
     GvXPVGV
-    G_WANT
     G_WARN_ALL_MASK
     G_WARN_ALL_OFF
     G_WARN_ALL_ON
     G_WARN_OFF
-    G_WARN_ON
     G_WARN_ONCE
     gwENVr_LOCALEr_LOCK
     gwENVr_LOCALEr_UNLOCK
@@ -943,77 +674,42 @@ my @unresolved_visibility_overrides = qw(
     G_WRITING_TO_STDERR
     HADNV
     HASARENA
-    HASATTRIBUTE_ALWAYS_INLINE
-    HASATTRIBUTE_DEPRECATED
-    HASATTRIBUTE_FORMAT
-    HASATTRIBUTE_MALLOC
-    HASATTRIBUTE_NONNULL
-    HASATTRIBUTE_NORETURN
-    HASATTRIBUTE_PURE
-    HASATTRIBUTE_UNUSED
-    HASATTRIBUTE_VISIBILITY
-    HASATTRIBUTE_WARN_UNUSED_RESULT
     HAS_BUILTIN_UNREACHABLE
     HAS_C99
-    HAS_CHOWN
     HAS_EXTENDED_OS_ERRNO
     HAS_EXTRA_LONG_UTF8
-    HAS_GETPGRP
     HAS_GROUP
-    HAS_HTONL
-    HAS_HTONS
     HAS_IOCTL
     HAS_KILL
     HAS_NONLATIN1_FOLD_CLOSURE
-    HAS_NTOHL
-    HAS_NTOHS
-    HAS_PASSWD
     HAS_POSIX_2008_LOCALE
     HAS_PTHREAD_UNCHECKED_GETSPECIFIC_NP
-    HAS_SETPGRP
-    HAS_SETREGID
-    HAS_SETREUID
     HAS_UTIME
     HAS_WAIT
     hasWARNBIT
-    HASWIDTH
     HEK_BASESIZE
-    HeKEY_hek
     HeKEY_sv
-    HEKf
     HEKf256
     HEKf256_QUOTEDPREFIX
-    HEKfARG
     HeKFLAGS
-    HEK_FLAGS
     HEKf_QUOTEDPREFIX
-    HEK_HASH
-    HEK_KEY
-    HEK_LEN
     HeKLEN_UTF8
-    HeKUTF8
-    HEK_UTF8
     HEK_UTF8_off
     HEK_UTF8_on
     HeKWASUTF8
-    HEK_WASUTF8
     HEK_WASUTF8_off
     HEK_WASUTF8_on
-    HeNEXT
     HINT_ALL_STRICT
     HINT_ASCII_ENCODING
-    HINT_BLOCK_SCOPE
     HINT_BYTES
     HINT_EXPLICIT_STRICT_REFS
     HINT_EXPLICIT_STRICT_SUBS
     HINT_EXPLICIT_STRICT_VARS
     HINT_FEATURE_MASK
     HINT_FILETEST_ACCESS
-    HINT_INTEGER
     HINT_LEXICAL_IO_IN
     HINT_LEXICAL_IO_OUT
     HINT_LOCALE
-    HINT_LOCALIZE_HH
     HINT_NEW_BINARY
     HINT_NEW_FLOAT
     HINT_NEW_INTEGER
@@ -1026,13 +722,11 @@ my @unresolved_visibility_overrides = qw(
     HINTS_DEFAULT
     HINTS_REFCNT_INIT
     HINTS_REFCNT_TERM
-    HINT_STRICT_REFS
     HINT_STRICT_SUBS
     HINT_STRICT_VARS
     HINT_UNI_8_BIT
     HINT_UTF8
     HS_APIVERLEN_MAX
-    HS_CXT
     HSf_IMP_CXT
     HSf_NOCHK
     HSf_POPMARK
@@ -1041,7 +735,6 @@ my @unresolved_visibility_overrides = qw(
     HS_GETINTERPSIZE
     HS_GETXSVERLEN
     HS_KEY
-    HS_KEYp
     HSm_APIVERLEN
     HSm_INTRPSIZE
     HSm_KEY_MATCH
@@ -1050,33 +743,19 @@ my @unresolved_visibility_overrides = qw(
     htoni
     htovl
     htovs
-    HvAMAGIC
-    HvAMAGIC_off
-    HvAMAGIC_on
-    HvARRAY
-    HvAUX
     HvAUXf_IS_CLASS
     HvAUXf_NO_DEREF
     HvAUXf_SCAN_STASH
-    HvCLASS_IS_SEALED
     HvCLASSf_SEALED
-    HV_DELETE
+    HvCLASS_IS_SEALED
     HV_DISABLE_UVAR_XKEY
     HvEITER
-    HvEITER_get
-    HvEITER_set
     HvENAME_get
-    HvENAME_HEK
     HvENAME_HEK_NN
     HvENAMELEN_get
-    HV_FETCH_EMPTY_HE
     HV_FETCH_ISEXISTS
-    HV_FETCH_ISSTORE
     HV_FETCH_JUST_SV
-    HV_FETCH_LVALUE
-    HvHasENAME
     HvHasENAME_HEK
-    HvHASKFLAGS
     HvHASKFLAGS_off
     HvHASKFLAGS_on
     HvHasNAME
@@ -1084,74 +763,41 @@ my @unresolved_visibility_overrides = qw(
     HVhek_FREEKEY
     HVhek_KEYCANONICAL
     HVhek_NOTSHARED
-    HVhek_PLACEHOLD
-    HVhek_UTF8
-    HVhek_WASUTF8
-    HvKEYS
     HvLASTRAND_get
     HvLAZYDEL
     HvLAZYDEL_off
     HvLAZYDEL_on
-    HvMAX
-    HvNAME_HEK
     HvNAME_HEK_NN
-    HvPLACEHOLDERS
-    HvPLACEHOLDERS_get
     HvPLACEHOLDERS_set
-    HvRAND_get
-    HvRITER
-    HvRITER_get
-    HvRITER_set
     HvSHAREKEYS
-    HvSHAREKEYS_off
-    HvSHAREKEYS_on
     HvSTASH_IS_CLASS
-    HvTOTALKEYS
-    HvUSEDKEYS
     HYPHEN_UTF8
     I16_MAX
     I16_MIN
-    I32_MAX
     I32_MAX_P1
-    I32_MIN
     I8_TO_NATIVE
-    I8_TO_NATIVE_UTF8
     IGNORE_PAT_MOD
-    I_LIMITS
     ILLEGAL_UTF8_BYTE
     IN_BYTES
     INCLUDE_PROTOTYPES
     INCMARK
-    INCPUSH_APPLLIB_EXP
-    INCPUSH_APPLLIB_OLD_EXP
-    INCPUSH_ARCHLIB_EXP
-    INCPUSH_PRIVLIB_EXP
-    INCPUSH_SITEARCH_EXP
-    INCPUSH_SITELIB_EXP
-    INCPUSH_SITELIB_STEM
     INFNAN_NV_U8_DECL
     INFNAN_U8_NV_DECL
     init_os_extras
     INIT_THREADS
     INIT_TRACK_MEMPOOL
-    IN_LC
     IN_LC_ALL_COMPILETIME
     IN_LC_ALL_RUNTIME
     IN_LC_COMPILETIME
     IN_LC_PARTIAL_COMPILETIME
     IN_LC_PARTIAL_RUNTIME
     IN_LC_RUNTIME
-    IN_PARENS_PASS
-    inRANGE
     IN_SOME_LOCALE_FORM
     IN_SOME_LOCALE_FORM_COMPILETIME
     IN_SOME_LOCALE_FORM_RUNTIME
     INT_64_T
     INT_PAT_MODS
     IN_UNI_8_BIT
-    IN_UTF8_CTYPE_LOCALE
-    IN_UTF8_TURKIC_LOCALE
-    INVLIST_INDEX
     IoANY
     IOCPARM_LEN
     IOf_ARGV
@@ -1178,43 +824,31 @@ my @unresolved_visibility_overrides = qw(
     isALNUM_LC_utf8
     isALNUM_LC_utf8_safe
     isALNUMU
-    isALNUM_uni
     isALNUM_utf8
     isALNUM_utf8_safe
     isALPHA_FOLD_EQ
     isALPHA_FOLD_NE
     isALPHA_LC_utf8
     isALPHANUMERIC_LC_utf8
-    isALPHANUMERIC_uni
     isALPHAU
-    isALPHA_uni
     isASCII_LC_utf8
-    isASCII_uni
     ISA_VERSION_OBJ
-    isBACKSLASHED_PUNCT
     isBLANK_LC_uni
     isBLANK_LC_utf8
-    isBLANK_uni
     isCASED_LC
     isCHARNAME_CONT
     isCNTRL_LC_utf8
-    isCNTRL_uni
     isDIGIT_LC_utf8
-    isDIGIT_uni
     is_FOLDS_TO_MULTI_utf8
     isGRAPH_LC_utf8
-    isGRAPH_uni
-    isGV
     isGV_with_GP_off
     isGV_with_GP_on
     is_HANGUL_ED_utf8_safe
     is_HORIZWS_cp_high
     is_HORIZWS_high
     isIDCONT_LC_utf8
-    isIDCONT_uni
     isIDFIRST_lazy_if_safe
     isIDFIRST_LC_utf8
-    isIDFIRST_uni
     is_LARGER_NON_CHARS_utf8
     is_LAX_VERSION
     isLEXWARN_off
@@ -1223,14 +857,10 @@ my @unresolved_visibility_overrides = qw(
     is_LNBREAK_safe
     is_LNBREAK_utf8_safe
     isLOWER_LC_utf8
-    isLOWER_uni
     is_MULTI_CHAR_FOLD_latin1_safe
     is_MULTI_CHAR_FOLD_utf8_safe
-    isNON_BRACE_QUANTIFIER
     is_NONCHAR_utf8_safe
     IS_NUMERIC_RADIX
-    IS_PADCONST
-    IS_PADGV
     is_PATWS_safe
     is_posix_ALPHA
     is_posix_ALPHANUMERIC
@@ -1249,27 +879,19 @@ my @unresolved_visibility_overrides = qw(
     is_posix_WORDCHAR
     is_posix_XDIGIT
     isPRINT_LC_utf8
-    isPRINT_uni
     is_PROBLEMATIC_LOCALE_FOLD_cp
     is_PROBLEMATIC_LOCALE_FOLDEDS_START_cp
     is_PROBLEMATIC_LOCALE_FOLDEDS_START_utf8
     is_PROBLEMATIC_LOCALE_FOLD_utf8
     isPSXSPC_LC_utf8
-    isPSXSPC_uni
     isPUNCT_LC_utf8
-    isPUNCT_uni
-    isQUANTIFIER
     is_QUOTEMETA_high
-    isREGEXP
-    IS_SAFE_PATHNAME
     is_SHORTER_NON_CHARS_utf8
     isSPACE_LC_utf8
-    isSPACE_uni
     is_SPACE_utf8_safe_backwards
     is_STRICT_VERSION
     is_SURROGATE_utf8
     is_SURROGATE_utf8_safe
-    I_STDARG
     is_THREE_CHAR_FOLD_HEAD_latin1_safe
     is_THREE_CHAR_FOLD_HEAD_utf8_safe
     is_THREE_CHAR_FOLD_latin1_safe
@@ -1292,25 +914,17 @@ my @unresolved_visibility_overrides = qw(
     isU8_XDIGIT_LC
     isUNICODE_POSSIBLY_PROBLEMATIC
     isUPPER_LC_utf8
-    isUPPER_uni
-    IS_UTF8_CHAR
-    isUTF8_POSSIBLY_PROBLEMATIC
     is_VERTWS_cp_high
     is_VERTWS_high
-    isVERTWS_uni
     isVERTWS_utf8
-    isVERTWS_utf8_safe
-    isVERTWS_uvchr
     isWARNf_on
     isWARN_on
     isWARN_ONCE
     isWORDCHAR_lazy_if_safe
     isWORDCHAR_LC_utf8
-    isWORDCHAR_uni
     is_XDIGIT_cp_high
     is_XDIGIT_high
     isXDIGIT_LC_utf8
-    isXDIGIT_uni
     is_XPERLSPACE_cp_high
     is_XPERLSPACE_high
     IV_MAX_P1
@@ -1318,282 +932,17 @@ my @unresolved_visibility_overrides = qw(
     JE_OLD_STACK_HWM_save
     JE_OLD_STACK_HWM_zero
     JMPENV_BOOTSTRAP
-    JMPENV_POP
     JOIN
     kBINOP
     kCOP
     KEEPCOPY_PAT_MOD
     KEEPCOPY_PAT_MODS
     KELVIN_SIGN
-    KEY_abs
-    KEY_accept
-    KEY_ADJUST
-    KEY_alarm
-    KEY_all
-    KEY_and
-    KEY_any
-    KEY_atan2
-    KEY_AUTOLOAD
-    KEY_BEGIN
-    KEY_bind
-    KEY_binmode
-    KEY_bless
-    KEY_break
-    KEY_caller
-    KEY_catch
-    KEY_chdir
-    KEY_CHECK
-    KEY_chmod
-    KEY_chomp
-    KEY_chop
-    KEY_chown
-    KEY_chr
-    KEY_chroot
-    KEY_class
-    KEY_close
-    KEY_closedir
-    KEY_cmp
-    KEY_connect
-    KEY_continue
-    KEY_cos
-    KEY_crypt
-    KEY_dbmclose
-    KEY_dbmopen
-    KEY_default
-    KEY_defer
-    KEY_defined
-    KEY_delete
-    KEY_DESTROY
-    KEY_die
-    KEY_do
-    KEY_dump
-    KEY_each
-    KEY_else
-    KEY_elsif
-    KEY_END
-    KEY_endgrent
-    KEY_endhostent
-    KEY_endnetent
-    KEY_endprotoent
-    KEY_endpwent
-    KEY_endservent
-    KEY_eof
-    KEY_eq
-    KEY_eval
-    KEY_evalbytes
-    KEY_exec
-    KEY_exists
-    KEY_exit
-    KEY_exp
-    KEY_fc
-    KEY_fcntl
-    KEY_field
-    KEY_fileno
-    KEY_finally
-    KEY_flock
-    KEY_for
-    KEY_foreach
-    KEY_fork
-    KEY_format
-    KEY_formline
-    KEY_ge
-    KEY_getc
-    KEY_getgrent
-    KEY_getgrgid
-    KEY_getgrnam
-    KEY_gethostbyaddr
-    KEY_gethostbyname
-    KEY_gethostent
-    KEY_getlogin
-    KEY_getnetbyaddr
-    KEY_getnetbyname
-    KEY_getnetent
-    KEY_getpeername
-    KEY_getpgrp
-    KEY_getppid
-    KEY_getpriority
-    KEY_getprotobyname
-    KEY_getprotobynumber
-    KEY_getprotoent
-    KEY_getpwent
-    KEY_getpwnam
-    KEY_getpwuid
-    KEY_getservbyname
-    KEY_getservbyport
-    KEY_getservent
-    KEY_getsockname
-    KEY_getsockopt
-    KEY_getspnam
-    KEY_given
-    KEY_glob
-    KEY_gmtime
-    KEY_goto
-    KEY_grep
-    KEY_gt
-    KEY_hex
-    KEY_if
-    KEY_index
-    KEY_INIT
-    KEY_int
-    KEY_ioctl
-    KEY_isa
-    KEY_join
-    KEY_keys
-    KEY_kill
-    KEY_last
-    KEY_lc
-    KEY_lcfirst
-    KEY_le
-    KEY_length
-    KEY_link
-    KEY_listen
-    KEY_local
-    KEY_localtime
-    KEY_lock
-    KEY_log
-    KEY_lstat
-    KEY_lt
-    KEY_m
-    KEY_map
-    KEY_method
-    KEY_mkdir
-    KEY_msgctl
-    KEY_msgget
-    KEY_msgrcv
-    KEY_msgsnd
-    KEY_my
-    KEY_ne
-    KEY_next
-    KEY_no
-    KEY_not
-    KEY_NULL
-    KEY_oct
-    KEY_open
-    KEY_opendir
-    KEY_or
-    KEY_ord
-    KEY_our
-    KEY_pack
-    KEY_package
-    KEY_pipe
-    KEY_pop
-    KEY_pos
-    KEY_print
-    KEY_printf
-    KEY_prototype
-    KEY_push
-    KEY_q
-    KEY_qq
-    KEY_qr
-    KEY_quotemeta
-    KEY_qw
-    KEY_qx
-    KEY_rand
-    KEY_read
-    KEY_readdir
-    KEY_readline
-    KEY_readlink
-    KEY_readpipe
-    KEY_recv
-    KEY_redo
-    KEY_ref
-    KEY_rename
-    KEY_require
-    KEY_reset
-    KEY_return
-    KEY_reverse
-    KEY_rewinddir
-    KEY_rindex
-    KEY_rmdir
-    KEY_s
-    KEY_say
-    KEY_scalar
-    KEY_seek
-    KEY_seekdir
-    KEY_select
-    KEY_semctl
-    KEY_semget
-    KEY_semop
-    KEY_send
-    KEY_setgrent
-    KEY_sethostent
-    KEY_setnetent
-    KEY_setpgrp
-    KEY_setpriority
-    KEY_setprotoent
-    KEY_setpwent
-    KEY_setservent
-    KEY_setsockopt
-    KEY_shift
-    KEY_shmctl
-    KEY_shmget
-    KEY_shmread
-    KEY_shmwrite
-    KEY_shutdown
-    KEY_sigvar
-    KEY_sin
-    KEY_sleep
-    KEY_socket
-    KEY_socketpair
-    KEY_sort
-    KEY_splice
-    KEY_split
-    KEY_sprintf
-    KEY_sqrt
-    KEY_srand
-    KEY_stat
-    KEY_state
-    KEY_study
-    KEY_sub
-    KEY_substr
-    KEY_symlink
-    KEY_syscall
-    KEY_sysopen
-    KEY_sysread
-    KEY_sysseek
-    KEY_system
-    KEY_syswrite
-    KEY_tell
-    KEY_telldir
-    KEY_tie
-    KEY_tied
-    KEY_time
-    KEY_times
-    KEY_tr
-    KEY_truncate
-    KEY_try
-    KEY_uc
-    KEY_ucfirst
-    KEY_umask
-    KEY_undef
-    KEY_UNITCHECK
-    KEY_unless
-    KEY_unlink
-    KEY_unpack
-    KEY_unshift
-    KEY_untie
-    KEY_until
-    KEY_use
-    KEY_utime
-    KEY_values
-    KEY_vec
-    KEY_wait
-    KEY_waitpid
-    KEY_wantarray
-    KEY_warn
-    KEY_when
-    KEY_while
     KEYWORD_PLUGIN_DECLINE
-    KEYWORD_PLUGIN_EXPR
     KEYWORD_PLUGIN_MUTEX_INIT
     KEYWORD_PLUGIN_MUTEX_LOCK
     KEYWORD_PLUGIN_MUTEX_TERM
     KEYWORD_PLUGIN_MUTEX_UNLOCK
-    KEYWORD_PLUGIN_STMT
-    KEY_write
-    KEY_x
-    KEY_xor
-    KEY_y
     kGVOP_gv
     kLISTOP
     kLOGOP
@@ -1604,7 +953,6 @@ my @unresolved_visibility_overrides = qw(
     kPVOP
     kSVOP
     kSVOP_sv
-    kUNOP
     kUNOP_AUX
     LARGE_HASH_HEURISTIC
     LATIN_CAPITAL_LETTER_A_WITH_RING_ABOVE
@@ -1629,16 +977,10 @@ my @unresolved_visibility_overrides = qw(
     LATIN_SMALL_LIGATURE_LONG_S_T_UTF8
     LATIN_SMALL_LIGATURE_ST
     LATIN_SMALL_LIGATURE_ST_UTF8
-    LC_COLLATE_LOCK
-    LC_COLLATE_UNLOCK
     LC_NUMERIC_LOCK
     LC_NUMERIC_UNLOCK
-    LEAVE_SCOPE
     LEX_NOTPARSING
     LF_NATIVE
-    LIB_INVARG
-    LINE_Tf
-    LOC
     LOCALE_INIT
     LOCALE_LOCK
     LOCALE_PAT_MOD
@@ -1648,12 +990,9 @@ my @unresolved_visibility_overrides = qw(
     LOCALE_TERM
     LOCALE_UNLOCK
     LOCAL_PATCH_COUNT
-    LOCALTIME_LOCK
-    LOCALTIME_UNLOCK
     LOCK_DOLLARZERO_MUTEX
     LOCK_LC_NUMERIC_STANDARD
     LONGDOUBLE_BIG_ENDIAN
-    LONGDOUBLE_DOUBLEDOUBLE
     LONG_DOUBLE_EQUALS_DOUBLE
     LONGDOUBLE_LITTLE_ENDIAN
     LONGDOUBLE_MIX_ENDIAN
@@ -1667,13 +1006,6 @@ my @unresolved_visibility_overrides = qw(
     LVf_OUT_OF_RANGE
     LVRET
     LvSTARGOFF
-    LvTARG
-    LvTARGLEN
-    LvTARGOFF
-    LvTYPE
-    MADE_EXACT_TRIE
-    MADE_JUMP_TRIE
-    MADE_TRIE
     MALFORMED_UTF8_DIE
     MALFORMED_UTF8_WARN
     MALLOC_CHECK_TAINT
@@ -1682,60 +1014,21 @@ my @unresolved_visibility_overrides = qw(
     MALLOC_OVERHEAD
     MALLOC_TERM
     MALLOC_TOO_LATE_FOR
-    MARKER1
-    MARKER2
-    MARK_NAUGHTY
-    MARK_NAUGHTY_EXP
-    MAXARG
     MAXARG3
     MAX_FOLD_FROMS
     MAX_LEGAL_CP
     MAX_MATCHES
-    MAXO
-    MAXPATHLEN
     MAX_PORTABLE_UTF8_TWO_BYTE
     MAX_RECURSE_EVAL_NOCHANGE_DEPTH
     MAX_SAVEt
     MAXSYSFD
     MAX_UNICODE_UTF8
     MAX_UTF8_TWO_BYTE
-    MDEREF_ACTION_MASK
-    MDEREF_AV_gvav_aelem
-    MDEREF_AV_gvsv_vivify_rv2av_aelem
-    MDEREF_AV_padav_aelem
-    MDEREF_AV_padsv_vivify_rv2av_aelem
-    MDEREF_AV_pop_rv2av_aelem
-    MDEREF_AV_vivify_rv2av_aelem
-    MDEREF_FLAG_last
-    MDEREF_HV_gvhv_helem
-    MDEREF_HV_gvsv_vivify_rv2hv_helem
-    MDEREF_HV_padhv_helem
-    MDEREF_HV_padsv_vivify_rv2hv_helem
-    MDEREF_HV_pop_rv2hv_helem
-    MDEREF_HV_vivify_rv2hv_helem
-    MDEREF_INDEX_const
-    MDEREF_INDEX_gvsv
-    MDEREF_INDEX_MASK
-    MDEREF_INDEX_none
-    MDEREF_INDEX_padsv
     MDEREF_MASK
-    MDEREF_reload
-    MDEREF_SHIFT
-    memBEGINPs
-    memBEGINs
-    MEMBER_TO_FPTR
-    memENDPs
-    memENDs
     memGE
     memGT
     memLE
-    MEM_LOG_ALLOC
-    MEM_LOG_DEL_SV
-    MEM_LOG_FREE
-    MEM_LOG_NEW_SV
-    MEM_LOG_REALLOC
     memLT
-    MEM_SIZE
     MEM_SIZE_MAX
     MEM_WRAP_CHECK
     MEM_WRAP_CHECK_1
@@ -1744,24 +1037,23 @@ my @unresolved_visibility_overrides = qw(
     MGf_BYTES
     MGf_GSKIP
     MGf_MINMATCH
-    MGf_REFCOUNTED
     MGf_REQUIRE_GV
     MGf_TAINTEDDIR
     MgPV
     MgPV_const
     MgPV_nolen_const
+    MgSIZEOF
     MgSV
     MgTAINTEDDIR
     MgTAINTEDDIR_off
     MgTAINTEDDIR_on
+    MGv2f_REFCOUNTED_AUXSV
+    MGv2f_WITH_MASK
     MICRO_SIGN
     MICRO_SIGN_NATIVE
     MICRO_SIGN_UTF8
     MI_INIT_WORKAROUND_PACK
-    MIN_OFFUNI_VARIANT_CP
     Mkdir
-    MKTIME_LOCK
-    MKTIME_UNLOCK
     M_PAT_MODS
     msbit_pos
     MSPAGAIN
@@ -1772,23 +1064,16 @@ my @unresolved_visibility_overrides = qw(
     MSVC_DIAG_RESTORE_DECL
     MSVC_DIAG_RESTORE_STMT
     MULTILINE_PAT_MOD
-    MUST_RESTART
-    MUTEX_DESTROY
-    MUTEX_INIT
     MUTEX_INIT_NEEDS_MUTEX_ZEROED
-    MUTEX_LOCK
-    MUTEX_UNLOCK
     my_binmode
     MY_CXT_INDEX
     MY_CXT_INIT_ARG
     my_lstat
     my_stat
-    namedclass_to_classnum
     NAN_COMPARE_BROKEN
     NATIVE8_TO_UNI
     NATIVE_BYTE_IS_INVARIANT
     NATIVE_SKIP
-    NATIVE_TO_ASCII
     NATIVE_TO_I8
     NATIVE_TO_UTF
     NATIVE_UTF8_TO_I8
@@ -1797,56 +1082,36 @@ my @unresolved_visibility_overrides = qw(
     NBSP_NATIVE
     NBSP_UTF8
     NDEBUG
-    NEED_UTF8
     NEGATE_2IV
     NEGATE_2UV
     NEGATIVE_INDICES_VAR
-    NETDB_R_OBSOLETE
-    New
     new_body_allocated
     new_body_from_arena
-    Newc
     new_NOARENA
     new_NOARENAZ
-    NewOp
     NewOpSz
     new_SV
-    NEWSV
     NEW_VERSION
     new_XNV
     new_XPVMG
     new_XPVNV
-    Newz
     NEXT_LINE_CHAR
     NOARENA
     NOCAPTURE_PAT_MOD
     NOCAPTURE_PAT_MODS
-    NO_ENV_ARRAY_IN_MAIN
     NO_ENVIRON_ARRAY
     NofAMmeth
     NOLINE
     NONDESTRUCT_PAT_MOD
     NONDESTRUCT_PAT_MODS
     NONV
-    NORETURN_FUNCTION_END
-    NORMAL
-    NO_TAINT_SUPPORT
     NOTE3
-    NOT_REACHED
-    NSIG
     ntohi
-    Null
     Nullfp
-    Nullgv
-    Nullhe
-    Nullhek
-    Nullop
     NUM_ANYOF_CODE_POINTS
     NV_BIG_ENDIAN
-    NV_DIG
     NV_EPSILON
     NV_IMPLICIT_BIT
-    NV_INF
     NV_LITTLE_ENDIAN
     NV_MANT_DIG
     NV_MAX
@@ -1856,17 +1121,13 @@ my @unresolved_visibility_overrides = qw(
     NV_MIN_10_EXP
     NV_MIN_EXP
     NV_MIX_ENDIAN
-    NV_NAN
     NV_NAN_BITS
     NV_NAN_IS_QUIET
-    NV_NAN_IS_SIGNALING
-    NV_NAN_PAYLOAD_MASK
     NV_NAN_PAYLOAD_MASK_IEEE_754_128_BE
     NV_NAN_PAYLOAD_MASK_IEEE_754_128_LE
     NV_NAN_PAYLOAD_MASK_IEEE_754_64_BE
     NV_NAN_PAYLOAD_MASK_IEEE_754_64_LE
     NV_NAN_PAYLOAD_MASK_SKIP_EIGHT
-    NV_NAN_PAYLOAD_PERM
     NV_NAN_PAYLOAD_PERM_0_TO_7
     NV_NAN_PAYLOAD_PERM_7_TO_0
     NV_NAN_PAYLOAD_PERM_IEEE_754_128_BE
@@ -1884,14 +1145,12 @@ my @unresolved_visibility_overrides = qw(
     NV_NAN_QS_TEST
     NV_NAN_QS_XOR
     NV_NAN_SET_QUIET
-    NV_NAN_SET_SIGNALING
     NV_VAX_ENDIAN
     NV_WITHIN_IV
     NV_WITHIN_UV
     NV_X86_80_BIT
     OA_AVREF
     OA_BASEOP_OR_UNOP
-    OA_CLASS_MASK
     OA_CVREF
     OA_DANGEROUS
     OA_DEFGV
@@ -1917,33 +1176,16 @@ my @unresolved_visibility_overrides = qw(
     ObjectMAXFIELD
     OCSHIFT
     OCTAL_VALUE
-    OFFUNI_IS_INVARIANT
-    OFFUNISKIP
     ONCE_PAT_MOD
     ONCE_PAT_MODS
     ONE_IF_EBCDIC_ZERO_IF_NOT
-    ONLY_LOCALE_MATCHES_INDEX
-    OOB_NAMEDCLASS
-    OOB_UNICODE
     opASSIGN
     OP_CHECK_MUTEX_INIT
-    OP_CHECK_MUTEX_LOCK
     OP_CHECK_MUTEX_TERM
-    OP_CHECK_MUTEX_UNLOCK
-    OPCODE
     OPf_FOLDED
     OPf_KNOW
     OPf_LIST
-    OPf_MOD
-    OPf_PARENS
     OP_FREED
-    OPf_REF
-    OPf_SPECIAL
-    OPf_STACKED
-    OPf_WANT
-    OPf_WANT_LIST
-    OPf_WANT_SCALAR
-    OPf_WANT_VOID
     OP_GIMME
     OP_GIMME_REVERSE
     OP_IS_DIRHOP
@@ -1973,8 +1215,6 @@ my @unresolved_visibility_overrides = qw(
     OPpASSIGN_TRUEBOOL
     OPpAVHVSWITCH_MASK
     OPpCONCAT_NESTED
-    OPpCONST_BARE
-    OPpCONST_ENTERED
     OPpCONST_NOVER
     OPpCONST_SHORTCIRCUIT
     OPpCONST_STRICT
@@ -1996,8 +1236,6 @@ my @unresolved_visibility_overrides = qw(
     OPpDONT_INIT_GV
     OPpEMPTYAVHV_IS_HV
     OPpENTERSUB_DB
-    OPpENTERSUB_HASTARG
-    OPpENTERSUB_INARGS
     OPpENTERSUB_LVAL_MASK
     OPpENTERSUB_NOPAREN
     OPpEVAL_BYTES
@@ -2026,7 +1264,6 @@ my @unresolved_visibility_overrides = qw(
     OPpKVSLICE
     OPpLIST_GUESSED
     OPpLVAL_DEFER
-    OPpLVAL_INTRO
     OPpLVALUE
     OPpLVREF_AV
     OPpLVREF_CV
@@ -2035,12 +1272,11 @@ my @unresolved_visibility_overrides = qw(
     OPpLVREF_ITER
     OPpLVREF_SV
     OPpLVREF_TYPE
+    OPpMATCH_JUST_COUNT
     OPpMAYBE_LVSUB
     OPpMAYBE_TRUEBOOL
     OPpMAY_RETURN_CONSTANT
     OPpMETH_NO_BAREWORD_IO
-    op_pmflags
-    op_pmoffset
     OPpMULTICONCAT_APPEND
     OPpMULTICONCAT_FAKE
     OPpMULTICONCAT_STRINGIFY
@@ -2051,12 +1287,9 @@ my @unresolved_visibility_overrides = qw(
     OPpOPEN_IN_RAW
     OPpOPEN_OUT_CRLF
     OPpOPEN_OUT_RAW
-    OPpOUR_INTRO
     OPpPADHV_ISKEYS
-    OPpPADRANGE_COUNTMASK
     OPpPADRANGE_COUNTSHIFT
     OPpPAD_STATE
-    OPpPV_IS_UTF8
     OPpREFCOUNTED
     OPpREPEAT_DOLIST
     OPpREVERSE_INPLACE
@@ -2068,9 +1301,7 @@ my @unresolved_visibility_overrides = qw(
     OPpSORT_INTEGER
     OPpSORT_NUMERIC
     OPpSORT_REVERSE
-    OPpSPLIT_ASSIGN
     OPpSPLIT_IMPLIM
-    OPpSPLIT_LEX
     OPpSTATEMENT
     OPpSUBSTR_REPL_FIRST
     OPpTARGET_MY
@@ -2098,8 +1329,6 @@ my @unresolved_visibility_overrides = qw(
     OpREFCNT_set
     OP_REFCNT_TERM
     OP_REFCNT_UNLOCK
-    OP_SIBLING
-    OPTIMIZE_INFTY
     OP_TYPE_IS_COP_NN
     OP_TYPE_IS_NN
     OP_TYPE_ISNT
@@ -2110,29 +1339,23 @@ my @unresolved_visibility_overrides = qw(
     OpTYPE_set
     OutCopFILE
     padadd_FIELD
-    padadd_NO_DUP_CHECK
     padadd_OUR
     padadd_STALEOK
-    padadd_STATE
     padalloc_NO_SV
     PAD_BASE_SV
     PAD_CLONE_VARS
     PAD_COMPNAME
     PAD_COMPNAME_FLAGS
-    PAD_COMPNAME_FLAGS_isOUR
     PAD_COMPNAME_GEN
     PAD_COMPNAME_GEN_set
     PAD_COMPNAME_OURSTASH
     PAD_COMPNAME_PV
     PAD_COMPNAME_SV
     PAD_COMPNAME_TYPE
-    PAD_FAKELEX_ANON
-    PAD_FAKELEX_MULTI
     padfind_FIELD_OK
     padname_dup_inc
     PADNAMEf_FIELD
     PadnameFIELDINFO
-    PadnameFLAGS
     PADNAMEf_LVALUE
     PADNAMEf_OUR
     PADNAME_FROM_PV
@@ -2150,14 +1373,7 @@ my @unresolved_visibility_overrides = qw(
     PadnameLVALUE_on
     PadnameOURSTASH
     PadnameOURSTASH_set
-    PadnameOUTER
     PadnamePROTOCV
-    PADNAMEt_LVALUE
-    PADNAMEt_OUR
-    PADNAMEt_OUTER
-    PADNAMEt_STATE
-    PADNAMEt_TYPED
-    PadnameTYPE
     PadnameTYPE_set
     padnew_CLONE
     padnew_SAVE
@@ -2168,19 +1384,8 @@ my @unresolved_visibility_overrides = qw(
     PAD_SET_CUR
     PAD_SET_CUR_NOSAVE
     PAD_SETSV
-    PAD_SV
     PAD_SVl
     panic_write2
-    PAREN_OFFSET
-    PAREN_SET
-    PAREN_TEST
-    PARENT_FAKELEX_FLAGS
-    PARENT_PAD_INDEX
-    PAREN_UNSET
-    PATCHLEVEL
-    Pause
-    PBITVAL
-    PBYTE
     PerlEnv_putenv
     PIPE_OPEN_MODE
     PIPESOCK_MODE
@@ -2215,74 +1420,27 @@ my @unresolved_visibility_overrides = qw(
     PMf_USED
     PMf_USE_RE_EVAL
     PMf_WILDCARD
-    PM_GETRE
     PM_GETRE_raw
-    PmopSTASH
-    PmopSTASHPV
     PmopSTASHPV_set
     PmopSTASH_set
     PM_SETRE
     PM_SETRE_raw
-    PNf
-    PNfARG
     PoisonPADLIST
     POISON_SV_HEAD
-    POPMARK
     POPpconstx
-    POPSTACK
-    POPSTACK_TO
     POSIX_CC_COUNT
     POSIX_SETLOCALE_LOCK
     POSIX_SETLOCALE_UNLOCK
-    POSTPONED
-    PP
-    PP_wrapped
     PRESCAN_VERSION
-    PRINTF_FORMAT_NULL_OK
-    PRIVLIB_EXP
     PRIVSHIFT
-    ProgLen
-    pthread_addr_t
-    PTHREAD_ATFORK
-    PTHREAD_ATTR_SETDETACHSTATE
-    pthread_condattr_default
     PTHREAD_CREATE
-    PTHREAD_CREATE_JOINABLE
     PTHREAD_GETSPECIFIC
     PTHREAD_GETSPECIFIC_INT
     PTHREAD_INIT_SELF
-    pthread_key_create
-    pthread_keycreate
-    pthread_mutexattr_default
-    pthread_mutexattr_init
-    pthread_mutexattr_settype
-    pTHX_1
-    pTHX_12
-    pTHX_2
-    pTHX_3
-    pTHX_4
-    pTHX_5
-    pTHX_6
-    pTHX_7
-    pTHX_8
-    pTHX_9
-    pTHX__FORMAT
-    pTHX_FORMAT
-    pTHXo
-    pTHX__VALUE
-    pTHX_VALUE
-    pTHXx
     PUSH_MULTICALL_FLAGS
-    PUSHSTACK
-    PUSHSTACKi
     PUSHSTACK_INIT_HWM
-    PUSHTARG
     PVf_QUOTEDPREFIX
-    pWARN_ALL
-    pWARN_NONE
-    pWARN_STD
     QR_PAT_MODS
-    QUESTION_MARK_CTRL
     RCPVf_ALLOW_EMPTY
     RCPVf_NO_COPY
     RCPVf_USE_STRLEN
@@ -2360,33 +1518,13 @@ my @unresolved_visibility_overrides = qw(
     REENTRANT_PROTO_V_D
     REENTRANT_PROTO_V_H
     REENTRANT_PROTO_V_ID
-    REENTR_MEMZERO
     REFCOUNTED_HE_EXISTS
     REFCOUNTED_HE_KEY_UTF8
     REGCOMP_INTERNAL_H
-    RegexLengthToShowInErrorMessages
     REG_FETCH_ABSOLUTE
-    REGNODE_GUTS
-    REG_NODE_NUM
-    REGNODE_OFFSET
-    REGNODE_p
-    REGNODE_STEP_OVER
-    REGTAIL
-    REGTAIL_STUDY
-    reg_warn_non_literal_string
-    RE_OPTIMIZE_CURLYX_TO_CURLYM
-    RE_OPTIMIZE_CURLYX_TO_CURLYN
-    REPORT_LOCATION
-    REPORT_LOCATION_ARGS
-    REQUIRE_BRANCHJ
-    REQUIRE_PARENS_PASS
-    REQUIRE_UNI_RULES
-    REQUIRE_UTF8
     ReREFCNT_dec
     ReREFCNT_inc
-    RESTART_PARSE
     RESTORE_ERRNO
-    RESTORE_WARNINGS
     RETPUSHNO
     RETPUSHUNDEF
     RETPUSHYES
@@ -2394,87 +1532,8 @@ my @unresolved_visibility_overrides = qw(
     RETSETTARG
     RETSETUNDEF
     RETSETYES
-    RETURN
-    RETURN_FAIL_ON_RESTART
-    RETURN_FAIL_ON_RESTART_FLAGP
-    RETURN_FAIL_ON_RESTART_OR_FLAGS
     RETURNOP
     RETURNX
-    RExC_close_parens
-    RExC_contains_locale
-    RExC_copy_start_in_constructed
-    RExC_copy_start_in_input
-    RExC_emit
-    RExC_emit_start
-    RExC_end
-    RExC_end_op
-    RExC_flags
-    RExC_frame_count
-    RExC_frame_head
-    RExC_frame_last
-    RExC_in_lookaround
-    RExC_in_multi_char_class
-    RExC_in_script_run
-    RExC_lastnum
-    RExC_lastparse
-    RExC_latest_warn_offset
-    RExC_logical_npar
-    RExC_logical_to_parno
-    RExC_logical_total_parens
-    RExC_maxlen
-    RExC_mysv
-    RExC_mysv1
-    RExC_mysv2
-    RExC_naughty
-    RExC_nestroot
-    RExC_npar
-    RExC_open_parens
-    RExC_orig_utf8
-    RExC_paren_name_list
-    RExC_paren_names
-    RExC_parens_buf_size
-    RExC_parno_to_logical
-    RExC_parno_to_logical_next
-    RExC_parse
-    RExC_parse_inc
-    RExC_parse_inc_by
-    RExC_parse_incf
-    RExC_parse_inc_if_char
-    RExC_parse_inc_safe
-    RExC_parse_inc_safef
-    RExC_parse_inc_utf8
-    RExC_parse_set
-    RExC_pm_flags
-    RExC_precomp
-    RExC_precomp_end
-    RExC_recode_x_to_native
-    RExC_recurse
-    RExC_recurse_count
-    RExC_rx
-    RExC_rxi
-    RExC_rx_sv
-    RExC_save_copy_start_in_constructed
-    RExC_sawback
-    RExC_seen
-    RExC_seen_d_op
-    RExC_seen_zerolen
-    RExC_sets_depth
-    RExC_size
-    RExC_start
-    RExC_strict
-    RExC_study_chunk_recursed
-    RExC_study_chunk_recursed_bytes
-    RExC_study_chunk_recursed_count
-    RExC_study_started
-    RExC_total_parens
-    RExC_uni_semantics
-    RExC_unlexed_names
-    RExC_use_BRANCHJ
-    RExC_utf8
-    RExC_warned_WARN_EXPERIMENTAL__REGEX_SETS
-    RExC_warned_WARN_EXPERIMENTAL__VLB
-    RExC_warn_text
-    RExC_whilem_seen
     REXEC_CHECKED
     REXEC_FAIL_ON_UNDERFLOW
     REXEC_IGNOREPOS
@@ -2484,14 +1543,9 @@ my @unresolved_visibility_overrides = qw(
     RMS_FAC
     RMS_FEX
     RMS_FNF
-    RMS_IFI
     RMS_ISI
     RMS_PRV
-    ROTL32
-    ROTL64
     ROTL_UV
-    ROTR32
-    ROTR64
     ROTR_UV
     RsPARA
     RsRECORD
@@ -2501,11 +1555,7 @@ my @unresolved_visibility_overrides = qw(
     RV2CVOPCV_FLAG_MASK
     RV2CVOPCV_RETURN_STUB
     RX_CHECK_SUBSTR
-    RX_COMPFLAGS
-    RX_ENGINE
-    RX_EXTFLAGS
     RXf_BASE_SHIFT
-    RXf_CHECK_ALL
     RXf_COPY_DONE
     RXf_EVAL_SEEN
     RXf_INTUIT_TAIL
@@ -2584,9 +1634,7 @@ my @unresolved_visibility_overrides = qw(
     RXp_PRE_PREFIX
     RX_PPRIVATE
     RXp_QR_ANONCV
-    RX_PRECOMP
     RX_PRECOMP_const
-    RX_PRELEN
     RX_PRE_PREFIX
     RXp_SAVED_COPY
     RXp_SUBBEG
@@ -2604,16 +1652,11 @@ my @unresolved_visibility_overrides = qw(
     RX_SUBOFFSET
     RX_SUBSTRS
     RX_TAINT_on
-    RX_UTF8
     RX_WRAPLEN
-    RX_WRAPPED
-    RX_WRAPPED_const
     RX_ZERO_LEN
-    safefree
     SAVEADELETE
     SAVECLEARSV
     SAVECOMPILEWARNINGS
-    SAVECOMPPAD
     SAVECOPFILE
     SAVECOPFILE_FREE
     SAVECOPFILE_FREE_x
@@ -2622,13 +1665,10 @@ my @unresolved_visibility_overrides = qw(
     SAVECOPSTASH_FREE
     SAVECURCOPWARNINGS
     SAVE_ERRNO
-    SAVEFREECOPHH
     SAVEFREEPADNAME
     SAVEGENERICPV
     SAVEHDELETE
-    SAVEHINTS
     SAVE_MASK
-    SAVEOP
     SAVEPADSVANDMORTALIZE
     SAVEPARSER
     SAVESETSVFLAGS
@@ -2695,7 +1735,6 @@ my @unresolved_visibility_overrides = qw(
     SAVEt_SVREF
     SAVEt_TMPSFLOOR
     SAVEt_VPTR
-    SAVEVPTR
     SAWAMPERSAND_LEFT
     SAWAMPERSAND_MIDDLE
     SAWAMPERSAND_RIGHT
@@ -2711,64 +1750,31 @@ my @unresolved_visibility_overrides = qw(
     SBOX32_WARN4
     SBOX32_WARN5
     SBOX32_WARN6
-    sC
     SCAN_DEF
     SCAN_REPL
     SCAN_TR
     SCAN_VERSION
-    SCF_DO_STCLASS
-    SCF_DO_STCLASS_AND
-    SCF_DO_STCLASS_OR
-    SCF_DO_SUBSTR
-    SCF_IN_DEFINE
-    SCF_SEEN_ACCEPT
-    SCF_TRIE_DOING_RESTUDY
-    SCF_TRIE_RESTUDY
-    SCF_WHILEM_VISITED_POS
     SCOPE_SAVES_SIGNAL_MASK
     Semctl
     semun
-    SETERRNO
-    SETGRENT_R_HAS_FPTR
     SETi
     SET_MARK_OFFSET
     SETn
     SET_NUMERIC_STANDARD
     SET_NUMERIC_UNDERLYING
     SETp
-    SetProgLen
-    SETPWENT_R_HAS_FPTR
-    SET_recode_x_to_native
-    SETs
     SET_SVANY_FOR_BODYLESS_IV
     SET_SVANY_FOR_BODYLESS_NV
     SETTARG
     SET_THR
     SET_THREAD_SELF
     SETu
-    SF_BEFORE_EOL
-    SF_BEFORE_MEOL
-    SF_BEFORE_SEOL
-    SF_HAS_EVAL
-    SF_HAS_PAR
-    SF_IN_PAR
-    SF_IS_INF
     share_hek_hek
-    sharepvn
-    SHARP_S_SKIP
-    SH_PATH
     SHUTDOWN_TERM
-    sI
-    SIMPLE
-    Simple_vFAIL
-    Simple_vFAILn
     SINGLE_PAT_MOD
     SIPHASH_SEED_STATE
     SIPROUND
-    S_IWOTH
-    S_IXOTH
     Size_t_MAX
-    SKIP_IF_CHAR
     SLOPPYDIVIDE
     SOCKET_OPEN_MODE
     S_PAT_MODS
@@ -2784,17 +1790,12 @@ my @unresolved_visibility_overrides = qw(
     SS_ADD_PTR
     SS_ADD_UV
     SS_BUFFEROVF
-    ssc_add_cp
     SSCHECK
-    ssc_init_zero
-    ssc_match_all_cp
     SS_DEVOFFLINE
     SSGROW
     SS_IVCHAN
-    SSize_t_MAX
     SS_MAXPUSH
     SS_NOPRIV
-    SS_NORMAL
     SSPOPBOOL
     SSPOPDPTR
     SSPOPDXPTR
@@ -2812,14 +1813,10 @@ my @unresolved_visibility_overrides = qw(
     SSPUSHPTR
     SSPUSHUV
     Stack_off_t_MAX
-    STANDARD_C
     StashHANDLER
     Stat
-    STATIC
-    Stat_t
     STATUS_ALL_FAILURE
     STATUS_ALL_SUCCESS
-    STATUS_CURRENT
     STATUS_EXIT
     STATUS_EXIT_SET
     STATUS_NATIVE
@@ -2830,28 +1827,17 @@ my @unresolved_visibility_overrides = qw(
     STD_PAT_MODS
     STD_PMMOD_FLAGS_CLEAR
     STORE_LC_NUMERIC_SET_STANDARD
-    strBEGINs
-    Strerror
-    STRFMON_LOCK
-    STRFMON_UNLOCK
-    STRFTIME_LOCK
-    STRFTIME_UNLOCK
-    STRUCT_OFFSET
     STRUCT_SV
     SUBVERSION
     sv_2bool_nomg
     sv_2nv
     sv_2pv_nomg
-    SvANY
     SvARENA_CHAIN
     SvARENA_CHAIN_SET
     SvCANCOW
     SvCANEXISTDELETE
     sv_cathek
     sv_catpvn_nomg_utf8_upgrade
-    SvCOMPILED
-    SvCOMPILED_off
-    SvCOMPILED_on
     SV_CONST_RETURN
     SV_CONSTS_COUNT
     SV_COW_OTHER_PVS
@@ -2866,25 +1852,12 @@ my @unresolved_visibility_overrides = qw(
     SvFAKE
     SvFAKE_off
     SvFAKE_on
-    SVf_AMAGIC
     SVf_BREAK
-    SVf_FAKE
-    SVf_IOK
-    SVf_IsCOW
-    SVf_IVisUV
-    SvFLAGS
-    SVf_NOK
-    SVf_OK
     SVf_OOK
-    SVf_POK
     SVf_PROTECT
-    SVf_READONLY
-    SVf_ROK
     SVf_THINKFIRST
-    SvGMAGICAL
     SvGMAGICAL_off
     SvGMAGICAL_on
-    Sv_Grow
     SvGROW_mutable
     SvIMMORTAL
     SvIMMORTAL_INTERP
@@ -2896,16 +1869,10 @@ my @unresolved_visibility_overrides = qw(
     SvIsCOW_on
     SvIsCOW_static
     SvIS_FREED
-    SvIsUV
     SvIsUV_off
-    SvIsUV_on
-    SvIV_please
     SvIV_please_nomg
     SvIVXx
     SvLENx
-    SvMAGIC
-    SvMAGICAL
-    SvMAGICAL_off
     SvMAGICAL_on
     SV_MUTABLE_RETURN
     SvNIOK_nog
@@ -2914,34 +1881,15 @@ my @unresolved_visibility_overrides = qw(
     SvNOK_nogthink
     SvNOKp_on
     SvNVXx
-    SvOBJECT
-    SvOBJECT_off
-    SvOBJECT_on
-    SvOK_off
     SvOK_off_exc_UV
     SvOKp
     SvOOK_on
-    SvOURSTASH
-    SvOURSTASH_set
-    SvPADMY
-    SvPADMY_on
-    SvPAD_OUR
-    SVpad_OUR
-    SvPAD_OUR_on
     SvPADSTALE
     SvPADSTALE_off
     SvPADSTALE_on
-    SvPAD_STATE
-    SVpad_STATE
-    SvPAD_STATE_on
     SvPADTMP
     SvPADTMP_off
-    SvPADTMP_on
-    SvPAD_TYPED
-    SVpad_TYPED
-    SvPAD_TYPED_on
     SVpav_REAL
-    SVpav_REIFY
     SvPCS_IMPORTED
     SvPCS_IMPORTED_off
     SvPCS_IMPORTED_on
@@ -2951,63 +1899,43 @@ my @unresolved_visibility_overrides = qw(
     SVphv_HasAUX
     SVphv_HASKFLAGS
     SVphv_LAZYDEL
+    SVphv_OVERLOAD
     SVphv_SHAREKEYS
-    SVp_IOK
-    SVp_NOK
     SvPOK_byte_nog
     SvPOK_byte_nogthink
     SvPOK_byte_pure_nogthink
     SvPOK_nog
     SvPOK_nogthink
     SvPOK_or_cached_IV
-    SvPOKp_on
     SvPOK_pure_nogthink
     SvPOK_utf8_nog
     SvPOK_utf8_nogthink
     SvPOK_utf8_pure_nogthink
     SV_POSBYTES
-    SVp_POK
     SVppv_STATIC
     SVprv_PCS_IMPORTED
     SVprv_WEAKREF
     SVp_SCREAM
     SvPV_flags_const_nolen
     sv_pvn_force_nomg
-    SvREFCNT_IMMORTAL
-    SvRMAGICAL
     SvRMAGICAL_off
-    SvRMAGICAL_on
     SvRV_const
     SvSCREAM
     SvSCREAM_off
     SvSCREAM_on
     SvSetSV_and
     SvSetSV_nosteal_and
-    SVs_GMG
     SvSHARED_HEK_FROM_PV
-    SvSMAGICAL
     SvSMAGICAL_off
     SvSMAGICAL_on
-    SVs_OBJECT
-    SVs_RMG
-    SVs_SMG
     SvTAIL
-    SvTEMP
-    SvTEMP_off
     SvTEMP_on
-    SvTHINKFIRST
-    SvTIED_mg
     SVt_MASK
-    SVt_PVBM
     SvTRUEx_nomg
-    SVt_RV
-    SVTYPEMASK
     SV_UNDEF_RETURNS_NULL
     SvUOK_nog
     SvUOK_nogthink
     SvVALID
-    SvWEAKREF
-    SvWEAKREF_off
     SvWEAKREF_on
     SWITCHSTACK
     SYSTEM_GMTIME_MAX
@@ -3017,17 +1945,8 @@ my @unresolved_visibility_overrides = qw(
     TARGi
     TARGn
     TARGu
-    tC
     THR
-    THREAD_CREATE_NEEDS_STACK
-    THREAD_RET_TYPE
-    tI
-    toFOLD_LC
-    toFOLD_uni
-    toLOWER_uni
     TOO_LATE_FOR
-    TOO_NAUGHTY
-    TO_OUTPUT_WARNINGS
     TOPi
     TOPl
     TOPm1s
@@ -3041,30 +1960,17 @@ my @unresolved_visibility_overrides = qw(
     TOPpx
     TOPu
     TOPul
-    toTITLE_uni
     toU8_FOLD_LC
     toU8_LOWER_LC
     toU8_UPPER_LC
     toUPPER_LATIN1_MOD
-    toUPPER_LC
-    toUPPER_uni
-    toUSE_UNI_CHARSET_NOT_DEPENDS
-    TRIE_STCLASS
-    TRIE_STUDY_OPT
-    TRUE
-    TRYAGAIN
     tryAMAGICbin_MG
-    tryAMAGICunDEREF
     tryAMAGICun_MG
     TS_W32_BROKEN_LOCALECONV
-    tTHX
-    TURN_OFF_WARNINGS_IN_SUBSTITUTE_PARSE
     TWO_BYTE_UTF8_TO_NATIVE
     TWO_BYTE_UTF8_TO_UNI
     TYPE_CHARS
     TYPE_DIGITS
-    TZSET_LOCK
-    TZSET_UNLOCK
     U16_MAX
     U16_MIN
     U32_MAX
@@ -3073,14 +1979,8 @@ my @unresolved_visibility_overrides = qw(
     U32_MIN
     U8_MAX
     U8_MIN
-    U8TO16_LE
-    U8TO32_LE
-    U8TO64_LE
     U_I
     U_L
-    UNICODE_ALLOW_ANY
-    UNICODE_ALLOW_SUPER
-    UNICODE_ALLOW_SURROGATE
     UNICODE_BYTE_ORDER_MARK
     UNICODE_DOT_DOT_VERSION
     UNICODE_DOT_VERSION
@@ -3097,18 +1997,15 @@ my @unresolved_visibility_overrides = qw(
     UNICODE_SURROGATE_FIRST
     UNICODE_SURROGATE_LAST
     UNI_IS_INVARIANT
-    UNI_SEMANTICS
     UNISKIP
     UNKNOWN_ERRNO_MSG
     UNLINK
     UNLOCK_DOLLARZERO_MUTEX
     UNLOCK_LC_NUMERIC_STANDARD
-    UNOP_AUX_item_sv
     unpackWARN1
     unpackWARN2
     unpackWARN3
     unpackWARN4
-    UPDATE_WARNINGS_LOC
     UPG_VERSION
     uproot_SV
     U_S
@@ -3124,7 +2021,6 @@ my @unresolved_visibility_overrides = qw(
     USE_LEFT
     USE_LOCALE
     USE_LOCALE_ADDRESS
-    USE_LOCALE_COLLATE
     USE_LOCALE_CTYPE
     USE_LOCALE_IDENTIFICATION
     USE_LOCALE_MEASUREMENT
@@ -3151,7 +2047,6 @@ my @unresolved_visibility_overrides = qw(
     USE_PWENT_FPTR
     USE_PWENT_PTR
     USE_QUERYLOCALE
-    USE_REENTRANT_API
     USER_PROP_MUTEX_INIT
     USER_PROP_MUTEX_LOCK
     USER_PROP_MUTEX_TERM
@@ -3166,40 +2061,21 @@ my @unresolved_visibility_overrides = qw(
     USE_THREAD_SAFE_LOCALE
     USE_TM64
     USE_UTF8_IN_NAMES
-    UTF
     UTF8_ACCUMULATE
-    UTF8_ALLOW_ANYUV
-    UTF8_ALLOW_DEFAULT
-    UTF8_ALLOW_FE_FF
-    UTF8_ALLOW_FFFF
-    UTF8_ALLOW_LONG_AND_ITS_VALUE
-    UTF8_ALLOW_SURROGATE
-    UTF8_DISALLOW_ABOVE_31_BIT
-    UTF8_DISALLOW_FE_FF
     UTF8_EIGHT_BIT_HI
     UTF8_EIGHT_BIT_LO
-    UTF8_GOT_ABOVE_31_BIT
     UTF8_GOT_LONG_WITH_VALUE
-    UTF8_IS_ABOVE_LATIN1
     UTF8_IS_ABOVE_LATIN1_START
-    UTF8_IS_CONTINUATION
-    UTF8_IS_CONTINUED
-    UTF8_IS_DOWNGRADEABLE_START
     UTF8_IS_NEXT_CHAR_DOWNGRADEABLE
     UTF8_IS_NONCHAR_GIVEN_THAT_NON_SUPER_AND_GE_PROBLEMATIC
-    UTF8_IS_START
     UTF8_IS_START_base
     UTF8_MAX_FOLD_CHAR_EXPAND
     UTF8_MAXLEN
     UTF8_MIN_CONTINUATION_BYTE
-    utf8_to_utf16
-    utf8_to_utf16_reversed
     UTF8_TWO_BYTE_HI
     UTF8_TWO_BYTE_HI_nocast
     UTF8_TWO_BYTE_LO
     UTF8_TWO_BYTE_LO_nocast
-    UTF8_WARN_ABOVE_31_BIT
-    UTF8_WARN_FE_FF
     UTF_ACCUMULATION_SHIFT
     UTF_CONTINUATION_BYTE_INFO_BITS
     UTF_CONTINUATION_MARK
@@ -3217,15 +2093,8 @@ my @unresolved_visibility_overrides = qw(
     UV_MAX_P1
     UV_MAX_P1_HALF
     VCMP
-    vFAIL
-    vFAIL2
-    vFAIL2utf8f
-    vFAIL3
-    vFAIL3utf8f
-    vFAIL4
     VNORMAL
     VNUMIFY
-    VOL
     VSTRINGIFY
     vTHX
     VT_NATIVE
@@ -3234,22 +2103,11 @@ my @unresolved_visibility_overrides = qw(
     VTYPECHECK
     VUTIL_REPLACE_CORE
     VVERIFY
-    vWARN
-    vWARN3
-    vWARN4
-    vWARN5
-    vWARN_dep
-    VXS
-    VXS_CLASS
-    VXSp
-    VXS_RETURN_M_SV
-    VXSXSDP
     want_vtbl_bm
     want_vtbl_fm
     WARN_ALLstring
     WARN_DEFAULTstring
     WARN_NONEstring
-    warn_non_literal_string
     WARNshift
     WARNsize
     what_MULTI_CHAR_FOLD_latin1_safe
@@ -3261,32 +2119,20 @@ my @unresolved_visibility_overrides = qw(
     WSETLOCALE_LOCK
     WSETLOCALE_UNLOCK
     XDIGIT_VALUE
-    xI
     xio_any
     xio_dirp
-    xI_offset
-    xiv_iv
-    xlv_targoff
     XOPd_xop_class
     XOPd_xop_desc
     XOPd_xop_dump
     XOPd_xop_name
     XOPd_xop_peep
-    XOPf_xop_class
-    XOPf_xop_desc
     XOPf_xop_dump
-    XOPf_xop_name
     XOPf_xop_peep
     XORSHIFT128_set
-    XPUSHTARG
     XPUSHundef
-    xpv_len
-    XS_DYNAMIC_FILENAME
     XS_INTERNAL
     XTENDED_PAT_MOD
-    xuv_uv
     xV_FROM_REF
-    YIELD
     YYEMPTY
     YYSTYPE_IS_DECLARED
     YYSTYPE_IS_TRIVIAL
@@ -3299,8 +2145,7 @@ my @unresolved_visibility_overrides = qw(
     ZAPHOD32_WARN4
     ZAPHOD32_WARN5
     ZAPHOD32_WARN6
-    aTHXo_
-    aTHXx_
+
     BASE_TWO_BYTE_HI_
     BASE_TWO_BYTE_LO_
     CC_ALPHA_
@@ -3332,7 +2177,6 @@ my @unresolved_visibility_overrides = qw(
     CC_XDIGIT_
     CHECK_AND_OUTPUT_WIDE_LOCALE_CP_MSG_
     CHECK_AND_OUTPUT_WIDE_LOCALE_UTF8_MSG_
-    CHECK_AND_WARN_PROBLEMATIC_LOCALE_
     CHECK_MALLOC_TOO_LATE_FOR_
     DEBUG_LOCALE_INITIALIZATION_
     DFA_RETURN_FAILURE_
@@ -3363,13 +2207,6 @@ my @unresolved_visibility_overrides = qw(
     is_MULTI_CHAR_FOLD_utf8_safe_part1_
     is_MULTI_CHAR_FOLD_utf8_safe_part2_
     is_MULTI_CHAR_FOLD_utf8_safe_part3_
-    KEY___CLASS__
-    KEY___DATA__
-    KEY___END__
-    KEY___FILE__
-    KEY___LINE__
-    KEY___PACKAGE__
-    KEY___SUB__
     LC_ADDRESS_AVAIL_
     LC_COLLATE_AVAIL_
     LC_CTYPE_AVAIL_
@@ -3393,27 +2230,14 @@ my @unresolved_visibility_overrides = qw(
     LOCALE_UNLOCK_
     lsbit_pos_uintmax_
     LZC_TO_MSBIT_POS_
-    MBLEN_LOCK_
-    MBLEN_UNLOCK_
-    MBRLEN_LOCK_
-    MBRLEN_UNLOCK_
-    MBRTOWC_LOCK_
-    MBRTOWC_UNLOCK_
-    MBTOWC_LOCK_
-    MBTOWC_UNLOCK_
     MEM_WRAP_CHECK_
     msbit_pos_uintmax_
     NOT_IN_NUMERIC_STANDARD_
     NOT_IN_NUMERIC_UNDERLYING_
     o1_
-    OFFUNISKIP_helper_
     __PATCHLEVEL_H_INCLUDED__
     PLATFORM_SYS_INIT_
     PLATFORM_SYS_TERM_
-    pTHXo_
-    pTHX__VALUE_
-    pTHX_VALUE_
-    pTHXx_
     SAFE_FUNCTION__
     SBOX32_CASE_
     SVf_
@@ -3425,10 +2249,6 @@ my @unresolved_visibility_overrides = qw(
     utf8_safe_assert_
     UTF_FIRST_CONT_BYTE_110000_
     UTF_START_BYTE_110000_
-    WCRTOMB_LOCK_
-    WCRTOMB_UNLOCK_
-    WCTOMB_LOCK_
-    WCTOMB_UNLOCK_
     what_MULTI_CHAR_FOLD_utf8_safe_part0_
     what_MULTI_CHAR_FOLD_utf8_safe_part1_
     what_MULTI_CHAR_FOLD_utf8_safe_part2_
@@ -3443,10 +2263,568 @@ my @unresolved_visibility_overrides = qw(
     XPV_HEAD_
 );
 
+# These are separated out from the above list while working on getting both to
+# be empty.  The uses in here can be changed without worrying about backwards
+# compatibility.  That's not to say that there aren't uses in cpan that can't
+# be so easily changed.
+my @unresolved_visibility_overrides_but_extensions_definitely_need_these =
+  qw(
+    AvMAX
+    AvREAL
+    CALLREGEXEC
+    CHECK_AND_WARN_PROBLEMATIC_LOCALE_
+    CopHINTHASH_get
+    COP_SEQ_RANGE_HIGH
+    COP_SEQ_RANGE_LOW
+    CvANON
+    CvANONCONST
+    CvANONCONST_off
+    CvANONCONST_on
+    CvCLONED
+    CvCONST
+    CvFLAGS
+    CVf_LEXICAL
+    CVf_LVALUE
+    CVf_METHOD
+    CVf_NOWARN_AMBIGUOUS
+    CvHSCXT
+    CvLVALUE
+    CvLVALUE_on
+    CvREFCOUNTED_ANYSV
+    CvREFCOUNTED_ANYSV_on
+    CvXS_RCSTACK_off
+    CvXS_RCSTACK_on
+    CxTYPE
+    DOSISH
+    DOUBLE_IS_IEEE_FORMAT
+    DPTR2FPTR
+    ENVr_LOCALEr_LOCK
+    ENVr_LOCALEr_UNLOCK
+    EXPECT
+    FmLINES
+    FPTR2DPTR
+    FreeOp
+    Fstat
+    G_NODEBUG
+    GvCVGEN
+    GvESTASH
+    gv_fetchmethod_flags
+    GvFILEGV
+    GvFILE_HEK
+    GvFLAGS
+    GvGP
+    GvGPFLAGS
+    GvIOp
+    GvLINE
+    GvREFCNT
+    HAS_PASSWD
+    HEKf
+    HEKfARG
+    HINT_BLOCK_SCOPE
+    HINT_INTEGER
+    HINT_LOCALIZE_HH
+    HS_CXT
+    HS_KEYp
+    HvAUX
+    HV_DELETE
+    HvENAME_HEK
+    HvHasENAME
+    HvRAND_get
+    HvRITER
+    HvSHAREKEYS_on
+    I32_MIN
+    I8_TO_NATIVE_UTF8
+    inRANGE
+    isALNUM_uni
+    isALPHANUMERIC_uni
+    isALPHA_uni
+    isASCII_uni
+    isBLANK_uni
+    isCNTRL_uni
+    isDIGIT_uni
+    isGRAPH_uni
+    isIDCONT_uni
+    isIDFIRST_uni
+    isLOWER_uni
+    isPRINT_uni
+    isPSXSPC_uni
+    isPUNCT_uni
+    isREGEXP
+    isSPACE_uni
+    isUPPER_uni
+    isUTF8_POSSIBLY_PROBLEMATIC
+    isVERTWS_uni
+    isVERTWS_utf8_safe
+    isVERTWS_uvchr
+    isWORDCHAR_uni
+    isXDIGIT_uni
+    KEYWORD_PLUGIN_EXPR
+    KEYWORD_PLUGIN_STMT
+    kUNOP
+    LC_COLLATE_LOCK
+    LC_COLLATE_UNLOCK
+    LEAVE_SCOPE
+    LINE_Tf
+    LONGDOUBLE_DOUBLEDOUBLE
+    LvTARG
+    LvTARGLEN
+    LvTARGOFF
+    LvTYPE
+    MAXO
+    MDEREF_ACTION_MASK
+    MDEREF_AV_gvav_aelem
+    MDEREF_AV_gvsv_vivify_rv2av_aelem
+    MDEREF_AV_padav_aelem
+    MDEREF_AV_padsv_vivify_rv2av_aelem
+    MDEREF_AV_pop_rv2av_aelem
+    MDEREF_AV_vivify_rv2av_aelem
+    MDEREF_FLAG_last
+    MDEREF_HV_gvhv_helem
+    MDEREF_HV_gvsv_vivify_rv2hv_helem
+    MDEREF_HV_padhv_helem
+    MDEREF_HV_padsv_vivify_rv2hv_helem
+    MDEREF_HV_pop_rv2hv_helem
+    MDEREF_HV_vivify_rv2hv_helem
+    MDEREF_INDEX_const
+    MDEREF_INDEX_gvsv
+    MDEREF_INDEX_MASK
+    MDEREF_INDEX_none
+    MDEREF_INDEX_padsv
+    MDEREF_reload
+    MDEREF_SHIFT
+    MEM_SIZE
+    NewOp
+    NO_ENV_ARRAY_IN_MAIN
+    NOT_REACHED
+    NSIG
+    NV_INF
+    NV_NAN
+    NV_NAN_IS_SIGNALING
+    NV_NAN_PAYLOAD_MASK
+    NV_NAN_PAYLOAD_PERM
+    NV_NAN_SET_SIGNALING
+    OA_CLASS_MASK
+    OPCODE
+    OPf_MOD
+    OPf_PARENS
+    OPf_REF
+    OPf_SPECIAL
+    OPf_WANT
+    OPpCONST_BARE
+    OPpCONST_ENTERED
+    op_pmflags
+    op_pmoffset
+    OPpOUR_INTRO
+    OPpPADRANGE_COUNTMASK
+    OPpPV_IS_UTF8
+    OPpSPLIT_ASSIGN
+    OPpSPLIT_LEX
+    padadd_NO_DUP_CHECK
+    padadd_STATE
+    PAD_COMPNAME_FLAGS_isOUR
+    PAD_FAKELEX_ANON
+    PAD_FAKELEX_MULTI
+    PadnameFLAGS
+    PadnameOUTER
+    PadnameTYPE
+    PARENT_FAKELEX_FLAGS
+    PARENT_PAD_INDEX
+    PM_GETRE
+    PmopSTASH
+    PmopSTASHPV
+    PNf
+    PNfARG
+    POPSTACK_TO
+    PTHREAD_ATFORK
+    PUSHSTACK
+    pWARN_ALL
+    pWARN_NONE
+    pWARN_STD
+    QUESTION_MARK_CTRL
+    ROTL32
+    ROTL64
+    ROTR32
+    ROTR64
+    RX_COMPFLAGS
+    RX_ENGINE
+    RX_EXTFLAGS
+    RXf_CHECK_ALL
+    RX_PRECOMP
+    RX_PRELEN
+    RX_UTF8
+    RX_WRAPPED
+    RX_WRAPPED_const
+    SAVEFREECOPHH
+    SAVEHINTS
+    SETs
+    sharepvn
+    SvOK_off
+    SvPADMY
+    SvTEMP
+    SvTHINKFIRST
+    SVTYPEMASK
+    toFOLD_LC
+    toFOLD_uni
+    toLOWER_uni
+    toTITLE_uni
+    toUPPER_LC
+    toUPPER_uni
+    tryAMAGICunDEREF
+    tTHX
+    U8TO16_LE
+    U8TO32_LE
+    U8TO64_LE
+    UNOP_AUX_item_sv
+    UTF8_IS_ABOVE_LATIN1
+    UTF8_IS_CONTINUATION
+    UTF8_IS_CONTINUED
+    UTF8_IS_DOWNGRADEABLE_START
+    UTF8_IS_START
+    utf8_to_utf16
+    utf8_to_utf16_reversed
+    xiv_iv
+    xlv_targoff
+    XOPf_xop_class
+    XOPf_xop_desc
+    XOPf_xop_name
+    XPUSHTARG
+    xpv_len
+    XS_DYNAMIC_FILENAME
+    xuv_uv
+  );
+
+# Add to main list
+$unresolved_visibility_overrides{$_} = 1
+   for @unresolved_visibility_overrides_but_extensions_definitely_need_these;
+
+# The keys of this hash are the header files that aren't automatically pulled
+# in by the typical module which uses: EXTERN.h, perl.h, and XSUB.h.  The
+# values of each header are the symbols in it whose visibility is unresolved.
+#
+# These are somewhat less important to clean up than the symbols in
+# %unresolved_visibility_overrides, since these are not exposed automatically
+# to the typical module.
+my %unresolved_visibility_but_only_if_header_explicitly_included = (
+    'amigaos4/amigaio.h'                    => [],
+    'feature.h'         	            => [],
+    'invlist_inline.h'                      => [],
+    'keywords.h'	                    => [ qw(
+                            KEY_abs
+                            KEY_accept
+                            KEY_ADJUST
+                            KEY_alarm
+                            KEY_all
+                            KEY_and
+                            KEY_any
+                            KEY_atan2
+                            KEY_AUTOLOAD
+                            KEY_BEGIN
+                            KEY_bind
+                            KEY_binmode
+                            KEY_bless
+                            KEY_break
+                            KEY_caller
+                            KEY_catch
+                            KEY_chdir
+                            KEY_CHECK
+                            KEY_chmod
+                            KEY_chomp
+                            KEY_chop
+                            KEY_chown
+                            KEY_chr
+                            KEY_chroot
+                            KEY_class
+                            KEY_close
+                            KEY_closedir
+                            KEY_cmp
+                            KEY_connect
+                            KEY_continue
+                            KEY_cos
+                            KEY_crypt
+                            KEY_dbmclose
+                            KEY_dbmopen
+                            KEY_default
+                            KEY_defer
+                            KEY_defined
+                            KEY_delete
+                            KEY_DESTROY
+                            KEY_die
+                            KEY_do
+                            KEY_dump
+                            KEY_each
+                            KEY_else
+                            KEY_elsif
+                            KEY_END
+                            KEY_endgrent
+                            KEY_endhostent
+                            KEY_endnetent
+                            KEY_endprotoent
+                            KEY_endpwent
+                            KEY_endservent
+                            KEY_eof
+                            KEY_eq
+                            KEY_eval
+                            KEY_evalbytes
+                            KEY_exec
+                            KEY_exists
+                            KEY_exit
+                            KEY_exp
+                            KEY_fc
+                            KEY_fcntl
+                            KEY_field
+                            KEY_fileno
+                            KEY_finally
+                            KEY_flock
+                            KEY_for
+                            KEY_foreach
+                            KEY_fork
+                            KEY_format
+                            KEY_formline
+                            KEY_ge
+                            KEY_getc
+                            KEY_getgrent
+                            KEY_getgrgid
+                            KEY_getgrnam
+                            KEY_gethostbyaddr
+                            KEY_gethostbyname
+                            KEY_gethostent
+                            KEY_getlogin
+                            KEY_getnetbyaddr
+                            KEY_getnetbyname
+                            KEY_getnetent
+                            KEY_getpeername
+                            KEY_getpgrp
+                            KEY_getppid
+                            KEY_getpriority
+                            KEY_getprotobyname
+                            KEY_getprotobynumber
+                            KEY_getprotoent
+                            KEY_getpwent
+                            KEY_getpwnam
+                            KEY_getpwuid
+                            KEY_getservbyname
+                            KEY_getservbyport
+                            KEY_getservent
+                            KEY_getsockname
+                            KEY_getsockopt
+                            KEY_getspnam
+                            KEY_given
+                            KEY_glob
+                            KEY_gmtime
+                            KEY_goto
+                            KEY_grep
+                            KEY_gt
+                            KEY_hex
+                            KEY_if
+                            KEY_index
+                            KEY_INIT
+                            KEY_int
+                            KEY_ioctl
+                            KEY_isa
+                            KEY_join
+                            KEY_keys
+                            KEY_kill
+                            KEY_last
+                            KEY_lc
+                            KEY_lcfirst
+                            KEY_le
+                            KEY_length
+                            KEY_link
+                            KEY_listen
+                            KEY_local
+                            KEY_localtime
+                            KEY_lock
+                            KEY_log
+                            KEY_lstat
+                            KEY_lt
+                            KEY_m
+                            KEY_map
+                            KEY_method
+                            KEY_mkdir
+                            KEY_msgctl
+                            KEY_msgget
+                            KEY_msgrcv
+                            KEY_msgsnd
+                            KEY_my
+                            KEY_ne
+                            KEY_next
+                            KEY_no
+                            KEY_not
+                            KEY_NULL
+                            KEY_oct
+                            KEY_open
+                            KEY_opendir
+                            KEY_or
+                            KEY_ord
+                            KEY_our
+                            KEY_pack
+                            KEY_package
+                            KEY_pipe
+                            KEY_pop
+                            KEY_pos
+                            KEY_print
+                            KEY_printf
+                            KEY_prototype
+                            KEY_push
+                            KEY_q
+                            KEY_qq
+                            KEY_qr
+                            KEY_quotemeta
+                            KEY_qw
+                            KEY_qx
+                            KEY_rand
+                            KEY_read
+                            KEY_readdir
+                            KEY_readline
+                            KEY_readlink
+                            KEY_readpipe
+                            KEY_recv
+                            KEY_redo
+                            KEY_ref
+                            KEY_rename
+                            KEY_require
+                            KEY_reset
+                            KEY_return
+                            KEY_reverse
+                            KEY_rewinddir
+                            KEY_rindex
+                            KEY_rmdir
+                            KEY_s
+                            KEY_say
+                            KEY_scalar
+                            KEY_seek
+                            KEY_seekdir
+                            KEY_select
+                            KEY_semctl
+                            KEY_semget
+                            KEY_semop
+                            KEY_send
+                            KEY_setgrent
+                            KEY_sethostent
+                            KEY_setnetent
+                            KEY_setpgrp
+                            KEY_setpriority
+                            KEY_setprotoent
+                            KEY_setpwent
+                            KEY_setservent
+                            KEY_setsockopt
+                            KEY_shift
+                            KEY_shmctl
+                            KEY_shmget
+                            KEY_shmread
+                            KEY_shmwrite
+                            KEY_shutdown
+                            KEY_sigvar
+                            KEY_sin
+                            KEY_sleep
+                            KEY_socket
+                            KEY_socketpair
+                            KEY_sort
+                            KEY_splice
+                            KEY_split
+                            KEY_sprintf
+                            KEY_sqrt
+                            KEY_srand
+                            KEY_stat
+                            KEY_state
+                            KEY_study
+                            KEY_sub
+                            KEY_substr
+                            KEY_symlink
+                            KEY_syscall
+                            KEY_sysopen
+                            KEY_sysread
+                            KEY_sysseek
+                            KEY_system
+                            KEY_syswrite
+                            KEY_tell
+                            KEY_telldir
+                            KEY_tie
+                            KEY_tied
+                            KEY_time
+                            KEY_times
+                            KEY_tr
+                            KEY_truncate
+                            KEY_try
+                            KEY_uc
+                            KEY_ucfirst
+                            KEY_umask
+                            KEY_undef
+                            KEY_UNITCHECK
+                            KEY_unless
+                            KEY_unlink
+                            KEY_unpack
+                            KEY_unshift
+                            KEY_untie
+                            KEY_until
+                            KEY_use
+                            KEY_utime
+                            KEY_values
+                            KEY_vec
+                            KEY_wait
+                            KEY_waitpid
+                            KEY_wantarray
+                            KEY_warn
+                            KEY_when
+                            KEY_while
+                            KEY_write
+                            KEY_x
+                            KEY_xor
+                            KEY_y
+                            KEY___CLASS__
+                            KEY___DATA__
+                            KEY___END__
+                            KEY___FILE__
+                            KEY___LINE__
+                            KEY___PACKAGE__
+                            KEY___SUB__
+                    )],
+    'metaconfig.h'                          => [],
+    'mg_names.inc'                          => [],
+    'mg_raw.h'	                            => [],
+    'os2/dlfcn.h'                           => [],
+    'os2/OS2/OS2-ExtAttr/myea.h'            => [],
+    'overload.inc'                          => [],
+    'packsizetables.inc'                    => [],
+    'perlapi.h'                             => [],
+    'perl_inc_macro.h'                      => [ qw(
+                    INCPUSH_APPLLIB_EXP
+                    INCPUSH_APPLLIB_OLD_EXP
+                    INCPUSH_ARCHLIB_EXP
+                    INCPUSH_PRIVLIB_EXP
+                    INCPUSH_SITEARCH_EXP
+                    INCPUSH_SITELIB_EXP
+                    INCPUSH_SITELIB_STEM
+                )],
+    'perliol.h'                             => [],
+    'perlsdio.h'                            => [],
+    'plan9/math.h'                          => [],
+    'regcomp.h'	                            => [],
+    'regcomp_internal.h'	            => [],
+    'time64.h'                              => [],
+    'uni_keywords.h'	                    => [],
+    'vxs.inc'	                            => [qw(
+                            VXS
+                            VXS_CLASS
+                            VXSp
+                            VXS_RETURN_M_SV
+                            VXSXSDP
+                        )],
+    'win32/perlhost.h'                      => [],
+);
+
+# Add the per-header symbols to the main list so later we only need to look at
+# one list.
+foreach my $list (values
+                %unresolved_visibility_but_only_if_header_explicitly_included)
+{
+    $unresolved_visibility_overrides{$_} = 1 for $list->@*;
+}
+
 # This is a list of symbols that are used by the OS and which perl may need to
 # define or redefine, and which aren't otherwise currently detectable by this
 # program's algorithms as being such.  They are not namespace pollutants
-my @system_symbols = qw(
+my %system_symbols = map { $_ => 1 } qw(
     environ
     htonl
     htons
@@ -3459,8 +2837,15 @@ my @system_symbols = qw(
     O_CREAT
     O_RDWR
     O_WRONLY
+    pthread_addr_t
     pthread_attr_init
+    pthread_condattr_default
     pthread_create
+    pthread_key_create
+    pthread_keycreate
+    pthread_mutexattr_default
+    pthread_mutexattr_init
+    pthread_mutexattr_settype
     setregid
     setreuid
     socketpair
@@ -3474,41 +2859,272 @@ my @system_symbols = qw(
 
 # This is a list of symbols that are needed by the ext/re module, and are not
 # documented.  They become undefined for any other modules.
-my @needed_by_ext_re = qw(
+my %needed_by_ext_re = map { $_ => 1 } qw(
+    av_tindex_skip_len_mg
+    av_top_index_skip_len_mg
     FAIL_
     first_upper_bit_set_byte_number
     invlist_intersection_complement_2nd_
     invlist_union_complement_2nd_
+    is_MULTI_CHAR_FOLD_utf8_safe_part4_
+    is_MULTI_CHAR_FOLD_utf8_safe_part5_
+    is_MULTI_CHAR_FOLD_utf8_safe_part6_
+    is_MULTI_CHAR_FOLD_utf8_safe_part7_
     PARSE_IDENT_ERROR_POSITION
     PARSE_IDENT_ERROR_TEXT
     RExC_parse_advance
+    LATIN_SMALL_LIGATURE_LONG_S_WITH_DESCENDER_S
+    LATIN_SMALL_LIGATURE_LONG_S_WITH_DESCENDER_S_UTF8
+    SURSOLIDUM
     WARN_HELPER_
+    what_MULTI_CHAR_FOLD_utf8_safe_part8_
+    what_MULTI_CHAR_FOLD_utf8_safe_part9_
+    what_MULTI_CHAR_FOLD_utf8_safe_part10_
+    what_MULTI_CHAR_FOLD_utf8_safe_part11_
 );
 
 # This is a list of symbols that are needed by various ext/ modules, and are
 # not documented.  They become undefined for any other modules.
-my @needed_by_ext = qw(
+my %needed_by_ext = map { $_ => 1 } qw(
     OPpPARAM_IF_FALSE
     OPpPARAM_IF_UNDEF
     OPpSELF_IN_PAD
 );
 
+# XXX This is a list of symbols that need to be always visible and are
+# candidates to be documented, but we don't have the resources to document
+# them at this time, and want to put off the decision that they need not be
+# documented.
+my @pending_documentation_symbols = qw(
+    AMG_CALLun
+    AvREAL_off
+    CALLRUNOPS
+    CATCH_GET
+    CATCH_SET
+    CLANG_DIAG_IGNORE
+    CLANG_DIAG_IGNORE_STMT
+    CLANG_DIAG_RESTORE
+    CLONEf_JOIN_IN
+    COND_BROADCAST
+    COND_DESTROY
+    COND_INIT
+    COND_SIGNAL
+    COND_WAIT
+    CvANON_off
+    CvCONST_on
+    CvGV_set
+    CvISXSUB
+    CvXSUB
+    CvXSUBANY
+    cxstack_max
+    dJMPENV
+    dMY_CXT_INTERP
+    ESC_NATIVE
+    Fflush
+    FILTER_DATA
+    FILTER_READ
+    GCC_DIAG_IGNORE
+    GCC_DIAG_IGNORE_STMT
+    GCC_DIAG_RESTORE_STMT
+    Gv_AMG
+    GvAVn
+    GvCVu
+    GVf_MULTI
+    GvHVn
+    GvIO
+    GvNAME
+    GvNAMELEN
+    GvNAMEUTF8
+    GvSTASH
+    G_WANT
+    G_WARN_ON
+    HEK_FLAGS
+    HeKUTF8
+    HeNEXT
+    HINT_STRICT_REFS
+    HvARRAY
+    HvEITER_get
+    HvEITER_set
+    HV_FETCH_EMPTY_HE
+    HV_FETCH_ISSTORE
+    HV_FETCH_LVALUE
+    HvHASKFLAGS
+    HVhek_PLACEHOLD
+    HVhek_UTF8
+    HVhek_WASUTF8
+    HvKEYS
+    HvMAX
+    HvPLACEHOLDERS
+    HvPLACEHOLDERS_get
+    HvRITER_get
+    HvRITER_set
+    HvSHAREKEYS_off
+    HvTOTALKEYS
+    HvUSEDKEYS
+    I32_MAX
+    IN_LC
+    isGV
+    IS_SAFE_PATHNAME
+    JMPENV_POP
+    LIB_INVARG
+    MAXARG
+    MAXPATHLEN
+    MGf_REFCOUNTED
+    MUTEX_DESTROY
+    MUTEX_INIT
+    MUTEX_LOCK
+    MUTEX_UNLOCK
+    NATIVE_TO_ASCII
+    NORETURN_FUNCTION_END
+    NORMAL
+    NO_TAINT_SUPPORT
+    NV_DIG
+    OP_CHECK_MUTEX_LOCK
+    OP_CHECK_MUTEX_UNLOCK
+    OPf_STACKED
+    OPf_WANT_LIST
+    OPf_WANT_SCALAR
+    OPf_WANT_VOID
+    OPpENTERSUB_HASTARG
+    OPpENTERSUB_INARGS
+    OPpLVAL_INTRO
+    PAD_SV
+    PATCHLEVEL
+    Pause
+    POPMARK
+    POPSTACK
+    PTHREAD_ATTR_SETDETACHSTATE
+    PTHREAD_CREATE_JOINABLE
+    PUSHSTACKi
+    PUSHTARG
+    RETURN
+    RMS_IFI
+    safefree
+    SAVECOMPPAD
+    SAVEOP
+    SAVEVPTR
+    SETERRNO
+    S_IWOTH
+    S_IXOTH
+    SSize_t_MAX
+    SS_NORMAL
+    Stat_t
+    STATUS_CURRENT
+    Strerror
+    STRUCT_OFFSET
+    SvANY
+    SVf_FAKE
+    SVf_IOK
+    SVf_IsCOW
+    SVf_IVisUV
+    SvFLAGS
+    SVf_NOK
+    SVf_OK
+    SVf_POK
+    SVf_READONLY
+    SVf_ROK
+    Sv_Grow
+    SvIsUV
+    SvIsUV_on
+    SvIV_please
+    SvMAGIC
+    SvMAGICAL_off
+    SvOBJECT
+    SvOBJECT_off
+    SvOBJECT_on
+    SvPADTMP_on
+    SVpav_REIFY
+    SVp_IOK
+    SVp_NOK
+    SvPOKp_on
+    SVp_POK
+    SvREFCNT_IMMORTAL
+    SvRMAGICAL_on
+    SVs_GMG
+    SVs_OBJECT
+    SVs_RMG
+    SVs_SMG
+    SvTEMP_off
+    SvTIED_mg
+    SVt_PVBM
+    SVt_RV
+    SvWEAKREF
+    SvWEAKREF_off
+    THREAD_CREATE_NEEDS_STACK
+    THREAD_RET_TYPE
+    USE_LOCALE_COLLATE
+    YIELD
+);
+
+# This is a list of symbols that we have decided can be hidden from code
+# outside core.  This list exists just to document that decision, so you don't
+# have to go digging through commits.
+my @undocumented_always_hidden = qw(
+);
+
+# XXX This is a list of symbols that we think there is a good chance they
+# needn't be visible outside core, but are unable to make a definitive
+# decision on yet, so remain visible for now.  This list should only contain
+# names that have just a minuscule chance of colliding with something in any
+# module's name space.  Try harder to make a decision for names that could
+# clash.
+my @undocumented_potentially_always_hidden = qw(
+    F_atan2_amg
+    F_cos_amg
+    F_exp_amg
+    F_log_amg
+    F_pow_amg
+    F_sin_amg
+    F_sqrt_amg
+);
+
 # This is a list of symbols that are needed to be visible everywhere and are
 # not documented, and we don't plan to document them any time soon.
 # Effectively these are symbols that would otherwise be in
-# @unresolved_visibility_overrides, but we have resolved them to here.
-#
-# Think twice about adding a symbol to this list.  Would it be better to
-# instead document the symbol?  Or maybe its name could easily be changed to
-# match $names_reserved_for_perl_use_re?
+# %unresolved_visibility_overrides, but we have resolved them to here.
 #
 # Typically these are symbols that are behind-the-scenes helpers whose use is
 # obvious from inspection of the things they help.
 #
+# Think twice about adding a symbol to this list:
+#
+#   Would it be better to instead document the symbol?
+#
+#   Or perhaps it should go into @pending_documentation_symbols -- maybe it
+#   should get documented some day, but it just ain't going to happen now.
+#
+#   Many symbols aren't very likely to conflict with names a module might
+#   choose, but if there is a reasonable chance of a conflict, our symbol name
+#   and all its uses should be changed as soon as practicable.  One
+#   possibility for that is to change the name to match
+#   $names_reserved_for_perl_use_re
+#
 # The list has two parts, separated by a blank line.  The names in the second
 # part have a trailing underscore, indicating the intent for this symbol to
 # not be directly usable by XS code
-my @undocumented_always_visible = qw(
+my %undocumented_always_visible = map { $_ => 1 } qw(
+    _
+    blk_defer
+    blk_eval
+    blk_format
+    blk_gimme
+    blk_givwhen
+    blk_loop
+    blk_oldcop
+    blk_oldmarksp
+    blk_oldpm
+    blk_oldsaveix
+    blk_oldscopesp
+    blk_oldsp
+    blk_old_tmpsfloor
+    blk_sub
+    blk_u16
+    COP_FEATURE_SIZE
+    CC_TOLOWER_
+    CC_TOUPPER_
+    CVf_HasNAME_HEK
+    CvHasNAME_HEK_off
+    CvHasNAME_HEK_on
     DEBUG_A
     DEBUG_A_FLAG
     DEBUG_A_TEST
@@ -3534,6 +3150,11 @@ my @undocumented_always_visible = qw(
     DEBUG_i_TEST
     DEBUG_J_FLAG
     DEBUG_J_TEST
+    DEBUG_K
+    DEBUG_K_FLAG
+    DEBUG_K_TEST
+    DEBUG_Kv
+    DEBUG_Kv_TEST
     DEBUG_l
     DEBUG_L
     DEBUG_l_FLAG
@@ -3605,6 +3226,27 @@ my @undocumented_always_visible = qw(
     DEBUG_yv
     DEBUG_yv_TEST
     MAX_UNICODE_UTF8_BYTES
+    MEM_LOG_ALLOC
+    MEM_LOG_DEL_SV
+    MEM_LOG_FREE
+    MEM_LOG_NEW_SV
+    MEM_LOG_REALLOC
+    MGf_MGv2
+    MIN_OFFUNI_VARIANT_CP
+    OFFUNI_IS_INVARIANT
+    OFFUNISKIP
+    PADNAMEf_FULLSV
+    PadnameIsFULLSV
+    PP
+    PP_wrapped
+    SILENT_NO_TAINT_SUPPORT
+    STRLEN_MAX
+    SVf_OK_no_VMG
+    SVs_VMG
+    UTF8_ALLOW_LONG_AND_ITS_VALUE
+    VALUEMAGIC_APPLYTO
+    VALUEMAGIC_CLEAR
+    VALUEMAGIC_FROM
 
     assert_scalar_or_IO_
     DEBUG__
@@ -3618,6 +3260,8 @@ my @undocumented_always_visible = qw(
     DEBUG_h_TEST_
     DEBUG_i_TEST_
     DEBUG_J_TEST_
+    DEBUG_K_TEST_
+    DEBUG_Kv_TEST_
     DEBUG_l_TEST_
     DEBUG_L_TEST_
     DEBUG_Lv_TEST_
@@ -3647,7 +3291,35 @@ my @undocumented_always_visible = qw(
     EXTEND_SAFE_N_
     MEM_WRAP_NEEDS_RUNTIME_CHECK_
     MEM_WRAP_WILL_WRAP_
+    MGv2_ASSERT_AND_CAST_FUNCS_
+    MGv2_SIZEOF_FLAGS_
     NV_BODYLESS_UNION_
+    OFFUNISKIP_helper_
+    OPpCALLER_PKG
+    OPpCALLER_FILE
+    OPpCALLER_LINE
+    OPpCALLER_SUB
+    OPpCALLER_HINTS
+    OPpCALLER_BITS
+    OPpCALLER_HINTH
+    OPpREF_CMP_AND
+    OPpREF_CMP_EMPTYSTR
+    OPpREF_CMP_L2R
+    OPpREF_CMP_MASK
+    OPpREF_CMP_NE
+    OPpREF_CMP_REGEXP_PKG
+    OPpREF_CMP_SKIPLOGOP
+    pTHX_2
+    pTHX_3
+    pTHX_4
+    pTHX_5
+    pTHX_6
+    pTHX_7
+    pTHX_8
+    pTHX_9
+    pTHX_10
+    pTHX_11
+    pTHX_12
     RXf_PMf_CHARSET_SHIFT_
     RXf_PMf_SHIFT_COMPILETIME_
     RXf_PMf_SHIFT_NEXT_
@@ -3655,6 +3327,19 @@ my @undocumented_always_visible = qw(
     STATIC_ASSERT_STRUCT_BODY_
     STATIC_ASSERT_STRUCT_NAME_
     SV_HEAD_DEBUG_
+    SVrt_ARRAY
+    SVrt_CODE
+    SVrt_FORMAT
+    SVrt_GLOB
+    SVrt_HASH
+    SVrt_INVLIST
+    SVrt_IO
+    SVrt_LVALUE
+    SVrt_OBJECT
+    SVrt_REF
+    SVrt_REGEXP
+    SVrt_SCALAR
+    SVrt_VSTRING
     toFOLD_utf8_flags_
     toLOWER_utf8_flags_
     toTITLE_utf8_flags_
@@ -3676,23 +3361,17 @@ my @undocumented_always_visible = qw(
     UTF8_WARN_NONCHAR_BIT_POS_
     UTF8_WARN_SUPER_BIT_POS_
     UTF8_WARN_SURROGATE_BIT_POS_
+   ),
+   @pending_documentation_symbols;  # These are in the same classification
+
+# The keys are files that have documentation outside the normal apidoc lines,
+# and all the definitions are assumed to exist.
+my %assume_symbols_documented_files = map { $_ => 1 } qw(
+    perl_lock_definitions.h
+    win32/config_H.gc
+    win32/config_H.vc
+    config_h.SH
 );
-
-# Turn all the lists above into hashes
-my %unresolved_visibility_overrides;
-$unresolved_visibility_overrides{$_} = 1 for @unresolved_visibility_overrides;
-
-my %system_symbols;
-$system_symbols{$_} = 1 for @system_symbols;
-
-my %needed_by_ext_re;
-$needed_by_ext_re{$_} = 1 for @needed_by_ext_re;
-
-my %needed_by_ext;
-$needed_by_ext{$_} = 1 for @needed_by_ext;
-
-my %undocumented_always_visible;
-$undocumented_always_visible{$_} = 1 for @undocumented_always_visible;
 
 # Keep lists of symbols to undef under various conditions.  We can initialize
 # the two ones for perl extensions with the lists above.
@@ -3704,8 +3383,10 @@ my %non_ext_undefs = %needed_by_ext;
 my %need_longs;
 
 # Create lists of headers and C files to examine.  Use all top level .c files,
-# and all top level .h files that aren't on the $skip_files list.
-my @header_list;
+# and all top level .h files that aren't on the $skip_files list.  (A couple
+# header files aren't named typically; its simplest to just add them
+# directly.)
+my @header_list = qw(win32/config_H.gc win32/config_H.vc);
 my @c_list;
 open my $mf, "<", "MANIFEST" or die "Can't open MANIFEST: $!";
 while (defined (my $file = <$mf>)) {
@@ -3780,6 +3461,8 @@ my @regex_conditions = qw(
 
                            PERL_IN_REGCOMP_ANY
                            PERL_EXT_RE_BUILD
+                           PERL_EXT_RE_DEBUG
+                           PERL_EXT_RE_STATIC
                            PERL_IN_REGEX_ENGINE
                            PLUGGABLE_RE_EXTENSION
                          );
@@ -3810,6 +3493,10 @@ $cpp_ifdef_constraints{PERL_IN_XS_APITEST} = 0;
 $cpp_ifdef_constraints{PERL_DEBUG_READONLY_OPS} = 0;
 $cpp_ifdef_constraints{PERL_DEBUG_DUMPUNTIL} = 0;
 $cpp_ifdef_constraints{PERL_ENABLE_EXPERIMENTAL_REGEX_OPTIMISATIONS} = 0;
+$cpp_ifdef_constraints{PERL_ENABLE_EXTENDED_TRIE_OPTIMISATION} = 0;
+$cpp_ifdef_constraints{PERL_ENABLE_POSITIVE_ASSERTION_STUDY} = 0;
+$cpp_ifdef_constraints{PERL_ENABLE_TRIE_OPTIMISATION} = 0;
+$cpp_ifdef_constraints{ENABLE_REGEX_SETS_DEBUGGING} = 0;
 $cpp_ifdef_constraints{EXPERIMENTAL_INPLACESCAN} = 0;
 
 # Appears to be obsolete; App:s2p, etc were created to handle this
@@ -3821,7 +3508,9 @@ $cpp_ifdef_constraints{PERL_FOR_X2P} = 0;
 $cpp_ifdef_constraints{WIN32_USE_FAKE_OLD_MINGW_LOCALES} = 0;
 
 $cpp_ifdef_constraints{PERL_EXT} = 0;
-$cpp_ifdef_constraints{PERL_EXT_RE_BUILD} = 0;
+$cpp_ifdef_constraints{PERL_EXT_IO} = 0;
+$cpp_ifdef_constraints{PERL_EXT_LANGINFO} = 0;
+$cpp_ifdef_constraints{PERL_EXT_POSIX} = 0;
 
 # This program evaluates the conditionals surrounding every #define in every
 # examined header.  It turns out that in many cases, using the constraints in
@@ -3879,7 +3568,7 @@ my %cpp_visible_to_extensions      = (
 # Create mnemonic single-character codes for these
 my %visibility_types = (
                           1 =>  \%cpp_always_externally_visible,
-                         '/' => \%cpp_visible_to_regex_extension,
+                         'Q' => \%cpp_visible_to_regex_extension,
                          'E' => \%cpp_visible_to_extensions,
                        );
 
@@ -3890,7 +3579,7 @@ my $never_visible_flags_re = qr/[$never_visible_flags]/;
 my $visible_everywhere_flags = "AC";
 my $visible_everywhere_flags_re = qr/[$visible_everywhere_flags]/;
 
-my $visible_outside_core_flags = "E$visible_everywhere_flags";
+my $visible_outside_core_flags = "EQ$visible_everywhere_flags";
 my $visible_outside_core_flags_re = qr/[$visible_outside_core_flags]/;
 
 my $visibility_flags = "$visible_outside_core_flags$never_visible_flags";
@@ -3981,14 +3670,14 @@ sub generate_proto_h {
             or next;
 
         my $level= $_->{level};
-        my $ind= $level ? " " : "";
+        our $ind= $level ? " " : "";
         $ind .= "  " x ($level-1) if $level>1;
         my $inner_ind= $ind ? "  " : " ";
 
         my ($flags, $ret_type, $plain_func, $args, $assertions ) =
                         @{$embed}{qw(flags return_type name args assertions)};
         if ($flags =~
-             m/([^ aA b C dD eE fF h iI mM nN oO pP Rr sS T uU v W xX ; ])/xx)
+         m/([^ aA bB C dD eE fF h iI mM nN oO pP Q Rr sS tT uU v W xX ; ])/xx)
         {
             die_at_end "flag $1 is not legal (for function $plain_func)";
         }
@@ -4002,8 +3691,12 @@ sub generate_proto_h {
                                                      if $flags =~ tr/Ii// > 1;
         die_at_end "$plain_func: A, C, and S flags are all mutually exclusive"
                                                     if $flags =~ tr/ACS// > 1;
+        die_at_end "$plain_func: [ACEQ] flags are all mutually exclusive"
+                                                 if $flags =~ tr/ACEQ// > 1;
         die_at_end "$plain_func: S and p flags are mutually exclusive"
                                                     if $flags =~ tr/Sp// > 1;
+        die_at_end "$plain_func: t and T flags are mutually exclusive"
+                                                    if $flags =~ tr/tT// > 1;
         die_at_end "$plain_func:, M flag requires p flag"
                                             if $flags =~ /M/ && $flags !~ /p/;
         die_at_end "$plain_func: X flag requires one of [Iip] flags"
@@ -4014,6 +3707,8 @@ sub generate_proto_h {
             die_at_end "$plain_func: b flag without M flag requires D flag"
                                             if $flags !~ /M/ && $flags !~ /D/;
         }
+        die_at_end "$plain_func: b and B flags are mutually exclusive"
+                                                     if $flags =~ tr/bB// > 1;
 
         my $C_required_flags = '[pIimbs]';
         die_at_end
@@ -4030,14 +3725,20 @@ sub generate_proto_h {
         my $never_returns = ( $flags =~ /r/ );
         my $binarycompat = ( $flags =~ /b/ );
         my $has_mflag = ( $flags =~ /m/ );
+        my $has_Xflag = ( $flags =~ /X/ );
         my $has_mpflags = $has_mflag && $flags =~ /p/;
         my $is_malloc = ( $flags =~ /a/ );
         my $can_ignore = $flags !~ /[RP]/ && !$is_malloc;
-        my $extensions_only = ( $flags =~ /E/ );
+        my $extensions_only = ( $flags =~ /[EQ]/ );
         my @asserts;
         my @attrs;
         my $func;
         my $args_assert_line;
+
+        # Never warn about the context parameter not getting used.
+        my @unused;
+        push @unused, "PERL_UNUSED_CONTEXT_FOR_ARGS_ASSERT"
+                                                         unless $flags =~ /T/;
 
         # A function always gets assertions for it
         if (! $has_mflag) {
@@ -4151,7 +3852,8 @@ sub generate_proto_h {
         if ($has_context) {
 
             # Pretend there was an aTHX argument in the first position.
-            unshift $args->@*, "PerlInterpreter* aTHX NN";
+            my $NULL_accept = $flags =~ /t/ ? "NULLOK" : "NN";
+            unshift $args->@*, "PerlInterpreter* aTHX $NULL_accept";
 
             $ret .= "pTHX";
             $ret .= "_ " if $args->@* > 1;
@@ -4207,6 +3909,11 @@ sub generate_proto_h {
                     my $nz =      ( $arg =~ s/\bNZ\b// );
                     my $nullok =  ( $arg =~ s/\bNULLOK\b// );
                     my $nocheck = ( $arg =~ s/\bNOCHECK\b// );
+                    my $unused = ( $arg =~ s/\bUNUSED\b// );
+                    my $debug_only = ( $arg =~ s/\bDEBUG_ONLY\b// );
+                    die_at_end
+                        ":$func: $arg Use only one of UNUSED, DEBUG_ONLY"
+                                                    if $unused && $debug_only;
 
                     # Trim $arg and remove multiple blanks
                     $arg =~ s/^\s+//;
@@ -4263,7 +3970,7 @@ sub generate_proto_h {
                         }
                     }
                     elsif (   defined $argname
-                        && ($args_assert_line || $binarycompat))
+                           && ($args_assert_line || $binarycompat))
                     {
                         if ($nn||$nz) {
                             push @asserts, "assert($argname)";
@@ -4284,6 +3991,18 @@ sub generate_proto_h {
                             $type_assert = "!$argname || $type_assert"
                                                                    if $nullok;
                             push @asserts, "assert($type_assert)";
+                        }
+
+                        # Exactly one of these expands to nothing.
+                        if ($unused) {
+                            $arg .= " __attribute__unused__";
+                            push @unused,
+                                 "PERL_UNUSED_ARG_FOR_ARGS_ASSERT($argname)";
+                        }
+                        elsif ($debug_only) {
+                            $arg .= " __attribute__unused_unless_debugging__";
+                            push @unused,
+                              "PERL_DEBUG_ONLY_ARG_FOR_ARGS_ASSERT($argname)";
                         }
 
                         # If this is a pointer to a character string argument,
@@ -4523,51 +4242,124 @@ sub generate_proto_h {
         # Hide the prototype from non-authorized code.  This acts kind of like
         # __attribute__visibility__("hidden") for cases where that can't be
         # used.
-        $ret = "#${ind}if defined(PERL_CORE) || defined(PERL_EXT)\n"
-             . $ret
-             . "\n#${ind}endif"
-          if $extensions_only;
+        if ($extensions_only && ! $has_Xflag) {
+            my $type = ($flags =~ /Q/) ? "PERL_EXT_RE_BUILD" : "PERL_EXT";
+            $ret = "#${ind}if defined(PERL_CORE) || defined($type)\n"
+                 . $ret
+                 . "\n#${ind}endif"
+        }
 
         # We don't hide the ARGS_ASSERT macro; having that defined does no
         # harm, and otherwise some inline functions that are looking for it
         # would fail to compile.
+        my @args_assert;
         if ($args_assert_line || @asserts) {
-            $ret .= "\n#${ind}define PERL_ARGS_ASSERT_\U$plain_func\E";
+            $ret .= "\n";
+
+            # Do some extra work to make it more human readable
+            push @args_assert,
+                             "#${ind}define PERL_ARGS_ASSERT_\U$plain_func\E";
+
+            # This includes keeping track of the maximum length so that the
+            # continuation characters don't form a ragged right edge
+            my $max_length = length $args_assert[-1];
+
+            # Any subsequent lines are indented this much from the #define
+            my $extra_indent = 4;
+
             if (@asserts) {
-                $ret .= " \\\n";
+                local $ind = $ind . " " x $extra_indent;
 
-                my $line = "";
-                while(@asserts) {
-                    my $assert = shift @asserts;
+                # The first line of the expansion is always this
+                my $start = "${ind}STMT_START { ";
+                my $line = $start;
 
-                    if(length($line) + length($assert) > 78) {
-                        $ret .= $line . "; \\\n";
-                        $line = "";
+                # Any subsequent expansion lines are indented beyond it.
+                local $ind = " " x length $start;
+
+                my $first_item_on_line = 1;
+                my $is_multi_line = 0;
+
+                # Declaring this to be an array, allows the code below to
+                # "just work" as far as folding
+                my @end = '} STMT_END';
+
+                foreach my $which (\@asserts, \@unused, \@end) {
+
+                    # Look at each line that goes into the definition
+                    while($which->@*) {
+                        my $component = shift $which->@*;
+
+                        # It reads better if the STMT_END is on its own line,
+                        # closing up the definition, but not if the whole
+                        # thing fits on a single line.
+                        #
+                        # We also start a new line if the next component won't
+                        # fit in the space allotted.
+                        if (   $is_multi_line && $which == \@end
+                            || (length($line) + length($component))
+                                >  78
+                                  - 1   # Trailing semicolon
+                                  - 3   # Two blanks and the continuation
+                        ) {
+                            # Add the full line; the component needs a
+                            # semicolon
+                            push @args_assert, $line . ";";
+
+                            $max_length = length $args_assert[-1] if
+                                        length $args_assert[-1] > $max_length;
+
+                            # The STMT_END is outdented to be directly under
+                            # the STMT_START
+                            local $ind = " " x $extra_indent if $which == \@end;
+
+                            # Setup for the new line, including indentation
+                            $line = $ind;
+                            $is_multi_line = 1;
+                            $first_item_on_line = 1;
+                        }
+
+                        # This component is separated from any predecessor by
+                        # a semicolon
+                        $line .= "; " unless $first_item_on_line;
+                        $first_item_on_line = 0;
+                        $line .= $component;
                     }
-
-                    $line .= " " x 8 if !length $line;
-                    $line .= "; " if $line =~ m/\S/;
-                    $line .= $assert;
                 }
 
-                $ret .= $line if length $line;
-                $ret .= "\n";
+                # Here, all items have been assembled; include the final line
+                push @args_assert, $line if length $line;
+                $max_length = length $args_assert[-1] if
+                                        length $args_assert[-1] > $max_length;
+            }
+
+            # If there is only one line, output it directly
+            if (@args_assert == 1) {
+                $ret .= $args_assert[0] . "\n";
+            }
+            else {
+
+                # Otherwise add the trailing continuation for all but the
+                # final line;
+                for (my $i = 0; $i < @args_assert - 1; $i++) {
+                    $args_assert[$i] .= " " x (  $max_length
+                                            - length $args_assert[$i]);
+                    $args_assert[$i] .= '  \\';
+                }
+
+                $ret .= join("\n", @args_assert) . "\n";
             }
         }
-        $ret .= "\n";
 
         $ret = "#${ind}ifndef PERL_NO_INLINE_FUNCTIONS\n$ret\n#${ind}endif"
             if $static_inline;
         $ret = "#${ind}ifndef NO_MATHOMS\n$ret\n#${ind}endif"
             if $binarycompat;
-        $ret = "#${ind}ifdef USE_THREADS\n$ret\n#${ind}endif"
-            if $has_mflag;
 
         $ret .= @attrs ? "\n\n" : "\n";
 
         print $pr $ret;
     }
-
 
     close $pr;
 
@@ -4585,9 +4377,12 @@ sub generate_proto_h {
         #if defined(MULTIPLICITY)
           #  define Perl_assert_aTHX             assert(aTHX)
           #  define Perl_attribute_nonnull_aTHX  __attribute__nonnull__(1)
+          #  define PERL_UNUSED_CONTEXT_FOR_ARGS_ASSERT                     \\
+                                    PERL_UNUSED_ARG_FOR_ARGS_ASSERT(my_perl)
         #else
           #  define Perl_assert_aTHX
           #  define Perl_attribute_nonnull_aTHX
+          #  define PERL_UNUSED_CONTEXT_FOR_ARGS_ASSERT
         #endif
 
         START_EXTERN_C
@@ -4699,6 +4494,11 @@ sub embed_h {
             if ($flags !~ $visible_outside_core_flags_re) {
                 $always_undefs{$func} = 1
                   unless defined $unresolved_visibility_overrides{$func};
+            }
+            elsif ($flags =~ /Q/) {     # Visible to 're'
+                $non_ext_re_undefs{$func} = 1
+                  unless defined $unresolved_visibility_overrides{$func}
+                      or defined $needed_by_ext_re{$func};
             }
             elsif ($flags =~ /E/) {     # Visible to perl extensions
                 $non_ext_undefs{$func} = 1
@@ -4875,7 +4675,7 @@ sub embed_h {
 }
 
 sub generate_embed_h {
-    my ($all, $api, $ext, $core)= @_;
+    my ($all, $api, $ext, $ext_re, $core)= @_;
 
     my $em= open_buf_out(my $embed_buffer);
 
@@ -4892,6 +4692,8 @@ sub generate_embed_h {
 
     embed_h($em, '', $api);
     embed_h($em, '#if defined(PERL_CORE) || defined(PERL_EXT)', $ext);
+    embed_h($em, '#if defined(PERL_CORE) || defined(PERL_EXT_RE_BUILD)',
+            $ext_re);
     embed_h($em, '#if defined(PERL_CORE)', $core);
 
     print $em <<~'END';
@@ -5022,38 +4824,48 @@ sub set_flags_visibility {
     # determined by apidoc or embed.fnc lines.  The visibility is stored as
     # a single character mnemonic, as follows:
     #   0   The symbol is not supposed to be visible outside the perl core
-    #   E   The symbol is supposed to be visible to perl extensions and the
-    #       core but nowhere else
+    #   Q   The symbol is supposed to be visible to the 're' perl extension
+    #       and the core but nowhere else
+    #   E   The symbol is supposed to be visible to other perl extensions and
+    #       the core but nowhere else
     #   1   The symbol is supposed to be visible everywhere
 
-    # Use the stored flags if new ones empty.  If those don't exist, assume
-    # visible everywhere for symbols that Perl reserves for its use, and
-    # hidden visibility for everything else.
+    # Use the stored flags if new ones empty.  Look for special handling
+    # request otherwise.
     my $flags = $raw_flags // $visibility{$name}{flags_raw};
     if (! defined $flags) {
-        if ($name =~ $names_reserved_for_perl_use_re) {
+        if ($assume_symbols_documented_files{$file}) {
+
+            # Every definition in $file is assumed to have documentation and
+            # is visible everywhere
+            $flags = 'Am';
+        }
+        elsif ($name =~ $names_reserved_for_perl_use_re) {
+
+            # Symbols that Perl reserves for its use are assumed to be
+            # everywhere visible.
             $flags = 'A';
 
             # But note that this is an assumption; so can avoid warning later.
             $visibility{$name}{flags_implicit} = 1;
         }
-        else {
+        else {  # Hidden visibility for everything else.
             $flags = 'e';
         }
     }
 
     my $is_macro = $flags =~ /m/;
 
-    # Convert never to 0; always to 1; 'E' remains 'E'.
+    # Convert never to 0; always to 1; 'E' and 'Q' remain themselves.
     $flags =~ s/$discard_non_visibility_flags_re//g;
-    if ($flags =~ s/E//g) {
-        $flags .= 'E';          # Squeeze out multiple E's
+    if ($flags =~ s/([EQ])//g) {
+        $flags .= $1;           # Squeeze out redundant uses
         $flags =~ s/[eX]//g;    # These flags are irrelevant for our purposes
-        if ($flags ne 'E') {
-            die_at_end "'E' flag for $name can't have other visibility flag"
-                     . " except [eX], not '$raw_flags'; in $file line"
+        if (length $flags > 1) {
+            die_at_end "'[EQ]' flags for $name can't have other visibility"
+                     . " flag except [eX], not '$raw_flags'; in $file line"
                      . " $line_number";
-            $flags = 'E';
+            $flags = substr $flags, -1, 1;
         }
     }
     elsif ($flags eq "" || $flags =~ $never_visible_flags_re) {
@@ -5081,10 +4893,13 @@ sub set_flags_visibility {
     # Multiply to get the numeric numbers spread more widely than the
     # non-numeric one.
     if ($flags =~ / ^ -? \d+ $/x) {
-        $ordering = 2 * $flags;
+        $ordering = 3 * $flags;
+    }
+    elsif ($flags eq 'Q') {
+        $ordering = 1;
     }
     elsif ($flags eq 'E') {
-        $ordering = 1;
+        $ordering = 2;
     }
     else {
         die_at_end "Flag for $name '$flags' unrecognized in $file line"
@@ -5122,7 +4937,7 @@ sub get_and_set_cpp_visibility {
 
     # The stored visibility is the same as the codes used in
     # set_flags_visibility(), plus
-    #   /   The symbol is visible in the 'use re' extension, plus the perl
+    #   Q   The symbol is visible in the 'use re' extension, plus the perl
     #       core, but nowhere else
 
     my $file = $line->{source};
@@ -5191,7 +5006,7 @@ sub get_and_set_cpp_visibility {
 
     # See if the symbol is visible everywhere; and if not, if it is visible to
     # 'use 're'; and if not, if it is visible to other extensions.
-    for my $code (1, '/', 'E') {
+    for my $code (1, 'Q', 'E') {
         my %hash = (%this_file_conds, $visibility_types{$code}->%*);
         my $pattern = join "|", keys %hash;
         my $regex = qr/ \b defined \( ( $pattern ) \) /x;
@@ -5223,7 +5038,7 @@ sub get_and_set_cpp_visibility {
     elsif ($visibility_code eq 'E') {
         $ordering = 2;
     }
-    elsif ($visibility_code eq '/') {
+    elsif ($visibility_code eq 'Q') {
         $ordering = 1;
     }
     else {
@@ -5498,11 +5313,14 @@ sub find_undefs {
             # Just the symbol, no arglist nor definition
             $name =~ s/ (?: \s | \( ) .* //x;
 
-            # Call the subroutine with an 'undef' third parameter for symbols
-            # reserved for Perl-use.  That tells it to consider these to be
-            # always visible unless otherwise directed
-            set_flags_visibility($name, $hdr, $line->{start_line_num}, undef)
-                                  if $name =~ $names_reserved_for_perl_use_re;
+            # Call the subroutine with an 'undef' third parameter for these
+            # reasons, to signal it to handle them specially.
+            if (   $assume_symbols_documented_files{$hdr}
+                || $name =~ $names_reserved_for_perl_use_re)
+            {
+                set_flags_visibility($name, $hdr, $line->{start_line_num},
+                                     undef);
+            }
 
             # Calculate $name's actual visibility for later use.
             my $stringified_conds = get_and_set_cpp_visibility($name, $line);
@@ -5559,7 +5377,20 @@ sub find_undefs {
                 next;
             }
         }
-    }   # Done with headers
+    }   # Done with headers, except for config.h
+
+    # We can't examine config.h directly because it is not under source code
+    # control, and the outputs of this program are.  However, config_h.SH is
+    # under source control, and we can infer from it the symbols that config.h
+    # will eventually contain.  All of them are considered public.
+    my $config_name = "config_h.SH";
+    open my $config_fh, "<", $config_name or die "Can't open $config_name: $!";
+    while (<$config_fh>) {
+                    # Pattern based on manual inspection of $config_name
+        next unless / ^ \# (?: define | \$ (?: d_ )? \w+ ) \s+ (\w+) /x;
+        set_flags_visibility($1, $config_name, $., undef);
+    }
+    close $config_fh, or die "Can't close config_h.SH: $!";
 
     # Now look through the C and pod files.  Any preprocessor constraints in
     # these affect only the containing files, so no need to look for cpp
@@ -5602,10 +5433,8 @@ sub find_undefs {
         if (! defined $cpp_visibility) {
 
             # To get here we have a macro without having encountered its
-            # #define.  This can legitimately happen when that definition is
-            # in config.h, which we don't (and can't examine); or it could be
-            # the result of some flaw somewhere.  But there is no real harm
-            # done unless we are trying to restrict the external visibility.
+            # #define.  There is no real harm done unless we are trying to
+            # restrict the external visibility.
             if ($flags_visibility ne '1') {
                 warn "'$name' unexpectedly has no C preprocessor conditions"
                    . " for #defining it; found in "
@@ -5614,8 +5443,6 @@ sub find_undefs {
             }
             $cpp_visibility = 1;    # Assume worst case
 
-            # (The reason we can't examine config.h is that it is not under
-            # source code control, and the outputs of this program are.)
         }
 
         if ($cpp_visibility eq '0') {
@@ -5638,6 +5465,11 @@ sub find_undefs {
                 # Supposed to be hidden, but isn't.  #undef it to hide it
                 $always_undefs{$name} = 1;
             }
+            elsif ($flags_visibility =~ /Q/) {
+                # Supposed to be hidden from everything but the 're'
+                # extension, but isn't.
+                $non_ext_re_undefs{$name} = 1;
+            }
             elsif ($flags_visibility =~ /E/) {
                 # Supposed to be hidden from non-extensions, but isn't.
                 $non_ext_undefs{$name} = 1;
@@ -5655,8 +5487,8 @@ sub find_undefs {
             next;
         }
 
-        # The remaining legal codes are  '/' and 'E'
-        if ($cpp_visibility !~ m! ^ [/E] $ !x ) {
+        # The remaining legal codes are  'Q' and 'E'
+        if ($cpp_visibility !~ m! ^ [EQ] $ !x ) {
             die_at_end "Unexpected visibility code '$cpp_visibility' for"
                      . " '$name'";
             next;
@@ -5664,7 +5496,8 @@ sub find_undefs {
 
         # Here #ifdef's in the code severely restrict the visibility of
         # $name, regardless of any flags.
-        warn "'$name' is needlessly in %unresolved_visibility_overrides"
+        warn "'$name' is needlessly in one of the "
+           . ' %unnresolved_visibility_overrides hashes'
                                    if $unresolved_visibility_overrides{$name};
         delete $always_undefs{$name};   # No need to #undef it
 
@@ -5727,7 +5560,17 @@ sub find_undefs {
 
 sub generate_long_names_c {
     my $longs = shift;
-    my $fh = open_print_header("long_names.c");
+    my $fh = open_print_header("long_names.c", <<'EOQ');
+ */
+
+/*
+ *      What's in a name? That which we call a rose
+ *      By any other word would smell as sweet.
+ *              --Juliet
+ *
+ *     [Act II, scene ii of _Romeo and Juliet_]
+ */
+EOQ
 
     print $fh <<~'EOT';
 /* This file is automatically generated by embed.pl.
@@ -5745,8 +5588,6 @@ sub generate_long_names_c {
 #include "EXTERN.h"
 #define PERL_IN_LONG_NAMES_C
 #include "perl.h"
-
-#ifdef USE_THREADS
 
 EOT
 
@@ -5809,21 +5650,17 @@ EOT
         print $fh $hp->lines_as_str($group), "\n";;
     }
 
-    print $fh <<~'EOT';
-
-        #endif
-        EOT
-
     read_only_bottom_close_and_rename($fh) if ! $error_count;
 }
 
 sub update_headers {
-    my ($all, $api, $ext, $core) = setup_embed(); # see regen/embed_lib.pl
+    # see regen/embed_lib.pl
+    my ($all, $api, $ext_re, $ext, $core) = setup_embed();
     generate_proto_h($all);
     die_at_end "$unflagged_pointers pointer arguments to clean up\n"
                                                        if $unflagged_pointers;
     find_undefs($all);
-    generate_embed_h($all, $api, $ext, $core);
+    generate_embed_h($all, $api, $ext, $ext_re, $core);
     generate_long_names_c(\%need_longs);
     generate_embedvar_h();
     die "$error_count errors found" if $error_count;

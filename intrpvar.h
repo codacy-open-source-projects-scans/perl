@@ -77,6 +77,8 @@ PERLVAR(I, curpm_under,        PMOP *)                /* what to do \ interps in
 PERLVAR(I, tainting,	bool)		/* ? doing taint checks */
 PERLVARI(I, tainted,	bool, FALSE)	/* using variables controlled by $< */
 
+PERLVAR(I, valuemagic_annotations, SV *) /* temporary holder of value magics during current op */
+
 /* PL_delaymagic is currently used for two purposes: to assure simultaneous
  * updates in ($<,$>) = ..., and to assure atomic update in push/unshift
  * @ISA, It works like this: a few places such as pp_push set the DM_DELAY
@@ -390,8 +392,9 @@ PERLVAR(I, exit_flags,	U8)		/* was exit() unexpected, etc. */
 
 PERLVAR(I, utf8locale,	bool)		/* utf8 locale detected */
 
-#if defined(USE_LOCALE) && defined(USE_LOCALE_THREADS)
+#if defined(USE_THREADS)
 PERLVARI(I, locale_mutex_depth, int, 0)     /* Emulate general semaphore */
+PERLVARI(I, locale_mutex_readers, int, 0)
 #endif
 
 #ifdef USE_LOCALE_CTYPE
@@ -529,8 +532,9 @@ PERLVAR(I, statusvalue_vms, U32)
 PERLVAR(I, statusvalue_posix, I32)
 #endif
 
-PERLVARI(I, sig_pending, int, 0)	/* Number if highest signal pending */
-PERLVAR(I, psig_pend, int *)		/* per-signal "count" of pending */
+/* Number of signals pending */
+PERLVARI(I, sig_pending, PERL_ATOMIC(int), 0)
+PERLVAR(I,  psig_pend, PERL_ATOMIC(int) *) /* per-signal "count" of pending */
 
 /* shortcuts to various I/O objects */
 PERLVAR(I, stdingv,	GV *)		/*  *STDIN      */
@@ -758,7 +762,15 @@ PERLVARI(I, cur_locale_obj, locale_t, LC_GLOBAL_LOCALE)
  * is almost always toggled into the C locale, and the locale it nominally is
  * is stored as PL_numeric_name. */
 PERLVARA(I, curlocales, LOCALE_CATEGORIES_COUNT_ + 1, const char *)
+#endif
+#ifdef EMULATE_THREAD_SAFE_LOCALES
+PERLVARA(I, restore_locale, LOCALE_CATEGORIES_COUNT_, const char *)
+PERLVARA(I, restore_locale_depth, LOCALE_CATEGORIES_COUNT_, Size_t)
+PERLVARI(I, NUMERIC_toggle_depth, int, 0)
+#endif
 
+#if defined(USE_LOCALE) && (defined(WIN32) || ! defined(USE_THREAD_SAFE_LOCALE))
+PERLVARI(I, perl_controls_locale, bool, true)
 #endif
 #ifdef USE_PL_CUR_LC_ALL
 PERLVARI(I, cur_LC_ALL, const char *, NULL)
@@ -868,10 +880,9 @@ PERLVARI(I, ctype_name, const char *, NULL)   /* Name of current ctype locale */
 
 /* Array of signal handlers, indexed by signal number, through which the C
    signal handler dispatches.  */
-PERLVAR(I, psig_ptr,	SV **)
+PERLVAR(I, psig_ptr,	PERL_ATOMIC(SV*) *)
 /* Array of names of signals, indexed by signal number, for (re)use as the first
-   argument to a signal handler.   Only one block of memory is allocated for
-   both psig_name and psig_ptr.  */
+   argument to a signal handler. */
 PERLVAR(I, psig_name,	SV **)
 
 #if defined(PERL_IMPLICIT_SYS)
@@ -904,10 +915,18 @@ PERLVAR(I, stashpad,    HV **)		/* for CopSTASH */
 PERLVARI(I, stashpadmax, PADOFFSET, 64)
 PERLVARI(I, stashpadix, PADOFFSET, 0)
 PERLVARI(I, env_mutex_depth, int, 0)     /* Emulate general semaphore */
+PERLVARI(I, env_mutex_readers, int, 0)
+
+/* This is set when switching to a thread's context while starting to
+ * free that thread: don't switch any other stuff too (currently just the
+ * thread-specific locale) because that stuff is in the middle of being
+ * freed also, and so may not be viable.
+ */
+PERLVARI(I, veto_switch_non_tTHX_context, int, FALSE)
 #endif
 
 #ifdef USE_REENTRANT_API
-PERLVAR(I, reentrant_buffer, REENTR *)	/* here we store the _r buffers */
+PERLVAR(I, reentrant_buffer, PERL_REENTR *)  /* here we store the _r buffers */
 #endif
 
 PERLVAR(I, custom_op_names, HV *)	/* Names of user defined ops */
@@ -1105,6 +1124,11 @@ PERLVARI(I, in_warnhook, bool, FALSE)
 #  define PERL_LOAD_MATHOMS_HOOK  Perl_load_mathoms
 #endif
 PERLVARI(I, load_mathoms, shutdown_proc_t, PERL_LOAD_MATHOMS_HOOK)
+
+/* Adjust how long before the regex engine's super-linear cache kicks
+ * in. This can be get/set from user-land via ${^RE_SUPERLINEAR_CACHE_DELAY}.
+ * See its description in perlvar for the meanings of its value. */
+PERLVARI(I, re_superlinear_cache_delay, IV, 0)
 
 /* If you are adding a U8 or U16, check to see if there are 'Space' comments
  * above on where there are gaps which currently will be structure padding.  */

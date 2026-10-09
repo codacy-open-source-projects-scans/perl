@@ -77,8 +77,8 @@ cpanp(1)
 CPANPLUS
 crypt(3)
 Crypt::PRNG
-Crypt::URandom
 Crypt::SysRandom
+Crypt::URandom
 ctime(3)
 curl(1)
 Dancer
@@ -249,6 +249,7 @@ nl_langinfo(3)
 Number::Format
 Object::Accessor
 Object::InsideOut
+Object::Pad
 open(2)
 OS2::Proc
 OS2::WinObject
@@ -429,7 +430,6 @@ pod/perlmacosx.pod	Verbatim line length including indents exceeds 78 by	3
 pod/perlmroapi.pod	? Should you be using L<...> instead of	1
 pod/perlos2.pod	? Should you be using L<...> instead of	1
 pod/perlos2.pod	Verbatim line length including indents exceeds 78 by	5
-pod/perlos390.pod	Verbatim line length including indents exceeds 78 by	1
 pod/perlperf.pod	Verbatim line length including indents exceeds 78 by	-1
 pod/perlrun.pod	Verbatim line length including indents exceeds 78 by	3
 pod/perlsolaris.pod	Verbatim line length including indents exceeds 78 by	-1

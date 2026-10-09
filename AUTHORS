@@ -89,6 +89,7 @@ Alexey Toptygin                <alexeyt@freeshell.org>
 Alexey Tourbin                 <at@altlinux.ru>
 Alexey V. Barantsev            <barancev@kazbek.ispras.ru>
 Ali Polatel                    <alip@exherbo.org>
+Alin Iacob                     <alinbsp@gmail.com>
 Allen Smith                    <allens@cpan.org>
 Alyssa Ross                    <hi@alyssa.is>
 Ambrose Kofi Laing
@@ -111,8 +112,8 @@ Andrew Bettison                <andrewb@zip.com.au>
 Andrew Burt                    <aburt@isis.cs.du.edu>
 Andrew Cohen                   <cohen@andy.bu.edu>
 andrew deryabin                <djsf@technarchy.ru>
-Andrew Fresh                   <afresh1@openbsd.org>
 Andrew Hamm                    <AHamm@civica.com.au>
+Andrew Hewus Fresh             <afresh1@openbsd.org>
 Andrew M. Langmead             <aml@world.std.com>
 Andrew Pimlott                 <pimlott@idiomtech.com>
 Andrew Rodland                 <arodland@cpan.org>
@@ -205,6 +206,7 @@ Brad Gilbert                   <b2gills@gmail.com>
 Brad Howerter                  <bhower@wgc.woodward.com>
 Brad Hughes                    <brad@tgsmc.com>
 Brad Lanam                     <bll@gentoo.com>
+Brad Smith                     <brad@comstyle.com>
 Bradley Dean                   <bjdean@bjdean.id.au>
 Bram                           <perl-rt@wizbit.be>
 Brandon Black                  <blblack@gmail.com>
@@ -421,6 +423,7 @@ Dennis Marsa                   <dennism@cyrix.com>
 Devin Heitmueller              <devin.heitmueller@gmail.com>
 DH                             <crazyinsomniac@yahoo.com>
 Diab Jerius                    <dj@head-cfa.harvard.edu>
+Dina Tagantseva                <dinchik@altlinux.org>
 dLux                           <dlux@spam.sch.bme.hu>
 Dmitri Tikhonov                <dmitri@cpan.org>
 Dmitrii Kuvaiskii              <dimakuv@amazon.de>
@@ -491,6 +494,7 @@ Firas Khalil Khana             <firasuke@gmail.com>
 Florent Guillaume
 Florian Ragwitz                <rafl@debian.org>
 Florian Weimer                 <fweimer@redhat.com>
+Frank                          <46161394+BraveChicken1@users.noreply.github.com>
 Frank Crawford
 Frank Ridderbusch              <Frank.Ridderbusch@pdb.siemens.de>
 Frank Tobin                    <ftobin@uiuc.edu>
@@ -517,6 +521,7 @@ Georg Schwarz                  <geos@epost.de>
 George Greer                   <perl@greerga.m-l.org>
 George Hartzell                <georgewh@gene.com>
 George Necula                  <necula@eecs.berkeley.edu>
+Georgij Tsarin                 <68424751+crystarm@users.noreply.github.com>
 Geraint A Edwards              <gedge@serf.org>
 Gerard Goossen                 <gerard@ggoossen.net>
 Gerben Wierda                  <G.C.Th.Wierda@AWT.nl>
@@ -529,6 +534,7 @@ Giovanni Tataranni             <gtataranni@users.noreply.github.com>
 Gisle Aas                      <gisle@aas.no>
 Glenn D. Golden                <gdg@zplane.com>
 Glenn Linderman                <perl@nevcal.com>
+GlobalTechStrategics           <ian.t@globaltechstrategics.com>
 Gomar                          <gomar@md.media-web.de>
 Gordon J. Miller               <gjm@cray.com>
 Gordon Lack                    <gml4410@ggr.co.uk>
@@ -1225,7 +1231,7 @@ Rob Napier                     <rnapier@employees.org>
 Robert May                     <robertmay@cpan.org>
 Robert Millan                  <rmh@debian.org>
 Robert Partington              <rjp@riffraff.plig.net>
-Robert Rothenberg              <rrwo@cpan.org>
+Robert Rothenberg              <perl@rhizomnic.com>
 Robert Sanders                 <Robert.Sanders@linux.org>
 Robert Sebastian Gerus         <arachnist@gmail.com>
 Robert Spier                   <rspier@pobox.com>
@@ -1320,6 +1326,7 @@ Sreeji K Das                   <sreeji_k@yahoo.com>
 Stan Ulbrych                   <89152624+StanFromIreland@users.noreply.github.com>
 Stanislaw Pusep                <stas@sysd.org>
 Stas Bekman                    <stas@stason.org>
+Stefan Adams                   <s1037989@gmail.com>
 Stefan Seifert                 <nine@detonation.org>
 Steffen Müller                 <smueller@cpan.org>
 Steffen Schwigon               <ss5@renormalist.net>
@@ -1374,6 +1381,7 @@ Tels                           <nospam-abuse@bloodgate.com>
 Teun Burgers                   <burgers@ecn.nl>
 Thad Floryan                   <thad@thadlabs.com>
 Theo Buehler                   <theo@math.ethz.ch>
+theoremoon                     <theoldmoon0602@gmail.com>
 Thibault Duponchelle           <thibault.duponchelle@gmail.com>
 Thomas Bowditch                <bowditch@inmet.com>
 Thomas Conté                   <tom@fr.uu.net>
@@ -1384,6 +1392,7 @@ Thomas Pfau                    <pfau@nbpfaus.net>
 Thomas Sibley                  <tsibley@cpan.org>
 Thomas Wegner                  <wegner_thomas@yahoo.com>
 Thorsten Glaser                <tg@mirbsd.org>
+Tigranuhy Grigoryan            <tigranuhy.grigoryan@gmail.com>
 Tim Adye                       <T.J.Adye@rl.ac.uk>
 Tim Ayers                      <tayers@bridge.com>
 Tim Bunce                      <tim.bunce@pobox.com>
@@ -1485,6 +1494,7 @@ Yaroslav Kuzmin                <ykuzmin@rocketsoftware.com>
 Yary Hluchan
 Yasushi Nakajima               <sey@jkc.co.jp>
 Yitzchak Scott-Thoennes        <sthoenna@efn.org>
+Yudai Takada                   <t.yudai92@gmail.com>
 Yutaka OIWA                    <oiwa@is.s.u-tokyo.ac.jp>
 Yutaka OKAIE
 Yutao Feng

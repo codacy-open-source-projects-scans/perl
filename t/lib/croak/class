@@ -222,3 +222,88 @@ X->new for 0;
 EXPECT
 Exiting subroutine via last at - line 7.
 Can't "last" outside a loop block at - line 7.
+########
+# NAME GH 24418 test case
+use v5.40;
+use experimental 'class';
+
+class Foo {
+    field $message :param :reader;
+
+    use overload '""' => method ($,$) { $message }, fallback => 1;
+}
+
+say Foo->new(message => "yeehaaw");
+EXPECT
+OPTIONS nonfatal
+yeehaaw
+########
+# NAME GH 23446 test case
+use experimental "class";
+class Foo;
+field $foo = 42;
+use overload q{""} => method (@) { $foo };
+EXPECT
+OPTIONS nonfatal
+########
+# NAME GH 24418 clarifying test case
+use v5.40;
+use experimental 'class';
+
+class Foo {
+    field $message :param :reader;
+
+    sub foo {
+        return method () { $message };
+    }
+}
+
+my $meth = Foo->foo;
+say Foo->new(message => "yeehaw")->$meth();
+EXPECT
+OPTIONS nonfatal
+yeehaw
+########
+# NAME isa that doesn't define the class GH 24157
+--FILE-- Mod24517.pm
+package MOD24517; # different capitalisation to filename
+
+1;
+--FILE--
+use v5.36;
+use feature 'class';
+no warnings 'experimental::class';
+class X :isa(Mod24517) {
+  field $x;
+}
+EXPECT
+Class :isa attribute requires a class but "Mod24517" is not one at - line 4.
+########
+# NAME class cleanup doesn't crash GH #24616
+use strict;
+use warnings;
+use experimental 'class';
+my $r;
+class Bug;
+field $_y = $r->{foo}{bar};
+method g() { $x }
+EXPECT
+Global symbol "$x" requires explicit package name (did you forget to declare "my $x"?) at - line 7.
+########
+# NAME correct error message for globals in fields GH #24730
+use v5.44;
+use experimental 'class';
+class Foo {
+    field $_;
+}
+EXPECT
+Can't use global $_ in "field" at - line 4, near "field $_"
+########
+# NAME :reader name must be valid identifier after stripping _
+use v5.44;
+use experimental 'class';
+class Foo {
+    field $_42 :reader;
+}
+EXPECT
+"42" is not a valid name for a generated method at - line 4.

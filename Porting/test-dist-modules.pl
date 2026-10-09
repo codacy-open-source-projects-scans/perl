@@ -11,6 +11,8 @@ use ExtUtils::Manifest "maniread";
 use Cwd "getcwd";
 use Getopt::Long;
 use Config;
+use File::Copy "cp";
+use File::Path "mkpath";
 
 my $continue;
 my $separate;
@@ -83,6 +85,9 @@ if (@dists) {
     for my $dist (@dists) {
         -d "dist/$dist" or die "dist/$dist not a directory\n";
     }
+    # we might only want to test Devel-PPPort, it has already been
+    # tested, so don't do it again
+    @dists = grep { $_ ne "Devel-PPPort" } @dists;
 }
 else {
     opendir my $distdir, "dist"
@@ -124,8 +129,16 @@ sub test_dist {
     my $dir = tempdir( CLEANUP => !$keep);
     print "$name testing in $dir\n" if $keep;
 
-    run("cp", "-a", "dist/$name/.", "$dir/.")
-      or die "Cannot copy dist files to working directory\n";
+    my $base = "dist/$name/";
+    my @files = sort grep /^\Q$base\E/, keys %$manifest;
+    for my $from (@files) {
+        (my $to = $from) =~ s(^\Q$base\E)($dir/)
+          or die "Could not replace output directory for $from";
+        (my $to_dir = $to) =~ s([^/]+$)();
+        -d $to_dir or mkpath($to_dir);
+        cp($from, $to)
+          or die "Cannot copy $from to $to: $!";
+    }
     chdir $dir
       or die "Cannot chdir to dist working directory '$dir': $!\n";
     if ($pppfile) {
@@ -878,7 +891,7 @@ sub _create_runperl { # Create the string to qx in runperl().
     } elsif (defined $args{progfile}) {
         $runperl .= qq( "$args{progfile}");
     } else {
-        # You probaby didn't want to be sucking in from the upstream stdin
+        # You probably didn't want to be sucking in from the upstream stdin
         die "test.pl:runperl(): none of prog, progs, progfile, args, "
             . " switches or stdin specified"
             unless defined $args{args} or defined $args{switches}

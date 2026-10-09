@@ -582,6 +582,98 @@ PP(pp_ref)
 
 }
 
+/* Optimized ref + eq, ref + ne, reftype + eq, or reftype +ne,
+ * where the comparison is with a constant string matching one
+ * of the built-in types:
+ * SCALAR:     SCALAR, VSTRING, REF, GLOB, LVALUE, REGEXP
+ * NON-SCALAR: ARRAY, HASH, CODE, FORMAT, IO
+ * or the empty string ''.
+ *
+ * It also supports the matching 'Regexp' for qr// patterns,
+ * but this can only ever match with ref not reftype.
+*/
+
+PP(pp_ref_cmp)
+{
+    const U8 op_private = PL_op->op_private;
+    const U8 wanted = op_private & OPpREF_CMP_MASK;
+
+    SV * const sv = *PL_stack_sp;
+    SvGETMAGIC(sv);
+
+    if (LIKELY(SvROK(sv))) {
+        SV * const rsv = SvRV(sv);
+        bool is_reftype = PL_op->op_flags & OPf_SPECIAL;
+        if (UNLIKELY(!is_reftype && SvOBJECT(rsv))) {
+            HEK * namehek = HvNAME_HEK(SvSTASH(rsv));
+            if (namehek) {
+                /* Note: There's potential to juice this path further by storing the U32 hash
+                 *       of the desired value and comparing it to namehek's hash.
+                 *       The existing length comparisons may be a good enough filter... */
+                I32 namelen = HEK_LEN(namehek);
+                assert(namelen != HEf_SVKEY); /* Stash name HEKs are never HEf_SVKEY */
+
+                if ((U32)namelen <= 7) { /* Is it 0-7 chars long? */
+                    const char * name = HEK_KEY(namehek);
+
+                    if (wanted <= SVrt_INVLIST
+                        && ((I32)PL_sv_reftype_lookup[wanted].len == namelen)
+                        && memEQ(PL_sv_reftype_lookup[wanted].str, name, namelen)
+                        )
+                         goto matched;
+
+                    if (namelen == 6 && (wanted == OPpREF_CMP_REGEXP_PKG && memEQs(name, 6, "Regexp")))
+                         goto matched;
+
+                    if (namelen == 0 && wanted == OPpREF_CMP_EMPTYSTR)
+                         goto matched;
+                }
+            }
+        } else {
+            if (sv_reftype_id(rsv) == wanted)
+                goto matched;
+        }
+    } else {
+        if ((PL_op->op_flags & OPf_SPECIAL) && !PL_localizing
+            && ckWARN(WARN_UNINITIALIZED)) {
+            report_uninit(NULL);
+        }
+        if (wanted == OPpREF_CMP_EMPTYSTR)
+            goto matched;
+    }
+
+    /* No match */
+    if (op_private & OPpREF_CMP_NE) goto matched_for_real;
+
+    not_matched:
+    if (LIKELY(op_private & OPpREF_CMP_SKIPLOGOP)) {
+        OP *next = PL_op->op_next;
+        assert( OP_TYPE_IS(next, OP_COND_EXPR) || OP_TYPE_IS(next, OP_AND) );
+        if (op_private & OPpREF_CMP_AND)
+            rpp_replace_1_IMM_NN(&PL_sv_no);
+        else
+            rpp_popfree_1();
+        return cLOGOPx(next)->op_next;
+    }
+    rpp_replace_1_IMM_NN(&PL_sv_no);
+    return NORMAL;
+
+    /* Match found */
+    matched:
+    if (op_private & OPpREF_CMP_NE) {
+        goto not_matched;
+    }
+    matched_for_real:
+    if (LIKELY(op_private & OPpREF_CMP_SKIPLOGOP)) {
+        rpp_popfree_1();
+        OP *next = PL_op->op_next;
+        assert( OP_TYPE_IS(next, OP_COND_EXPR) || OP_TYPE_IS(next, OP_AND) );
+        return cLOGOPx(next)->op_other;
+    }
+    rpp_replace_1_IMM_NN(&PL_sv_yes);
+    return NORMAL;
+
+}
 
 PP(pp_bless)
 {
@@ -977,7 +1069,7 @@ PP(pp_undef)
                        SVfARG(CvANON((const CV *)sv)
                          ? newSVpvs_flags("(anonymous)", SVs_TEMP)
                          : newSVhek_mortal(
-                            CvNAMED(sv)
+                            CvHasNAME_HEK(sv)
                              ? CvNAME_HEK((CV *)sv)
                              : GvENAME_HEK(CvGV((const CV *)sv))
                            )
@@ -1029,6 +1121,8 @@ PP(pp_undef)
             break;
         }
     default:
+        if (SvTYPE(sv) >= SVt_PVMG && SvMAGICAL(sv))
+            mg_unpropagate(sv);
         if (SvTYPE(sv) >= SVt_PV && SvPVX_const(sv) && SvLEN(sv)
             && !(PL_op->op_private & OPpUNDEF_KEEP_PV)
         ) {
@@ -1057,12 +1151,12 @@ PP(pp_undef)
 static OP *
 S_postincdec_common(pTHX_ SV *sv, SV *targ)
 {
-    const bool inc =
-        PL_op->op_type == OP_POSTINC || PL_op->op_type == OP_I_POSTINC;
+    const bool inc = PL_op->op_type == OP_POSTINC;
 
+    SvGETMAGIC(sv);
     if (SvROK(sv))
         TARG = sv_newmortal();
-    sv_setsv(TARG, sv);
+    sv_setsv_flags(TARG, sv, SV_DO_COW_SVSETSV);
     if (inc)
         sv_inc_nomg(sv);
     else
@@ -1076,8 +1170,6 @@ S_postincdec_common(pTHX_ SV *sv, SV *targ)
     return NORMAL;
 }
 
-
-/* also used for: pp_i_postinc() */
 
 PP(pp_postinc)
 {
@@ -1101,8 +1193,6 @@ PP(pp_postinc)
     return S_postincdec_common(aTHX_ sv, TARG);
 }
 
-
-/* also used for: pp_i_postdec() */
 
 PP(pp_postdec)
 {
@@ -2229,6 +2319,40 @@ PP(pp_ne)
 }
 
 
+PP(pp_neu)
+{
+    SV *right = PL_stack_sp[0];
+    SV *left  = PL_stack_sp[-1];
+
+    SvGETMAGIC(left);
+    if(left != right)
+        SvGETMAGIC(right);
+
+    bool lundef = !SvOK(left), rundef = !SvOK(right);
+
+    if(lundef || rundef) {
+        rpp_replace_2_IMM_NN(boolSV(!(lundef && rundef)));
+        return NORMAL;
+    }
+
+    if (rpp_try_AMAGIC_2(ne_amg, AMGf_numeric|AMGf_no_GETMAGIC))
+        return NORMAL;
+
+    /* a copy-paste of the logic from pp_ne */
+    U32 flags_and = SvFLAGS(left) & SvFLAGS(right);
+    U32 flags_or  = SvFLAGS(left) | SvFLAGS(right);
+
+    rpp_replace_2_IMM_NN(boolSV(
+        ( (flags_and & SVf_IOK) && ((flags_or & SVf_IVisUV) ==0 ) )
+        ?    (SvIVX(left) != SvIVX(right))
+        : (flags_and & SVf_NOK)
+        ?    (SvNVX(left) != SvNVX(right))
+        : (do_ncmp(left, right) != 0)
+    ));
+    return NORMAL;
+}
+
+
 /* compare left and right SVs. Returns:
  * -1: <
  *  0: ==
@@ -2381,6 +2505,30 @@ PP(pp_seq)
 }
 
 
+PP(pp_sequ)
+{
+    SV *right = PL_stack_sp[0];
+    SV *left  = PL_stack_sp[-1];
+
+    SvGETMAGIC(left);
+    if(left != right)
+        SvGETMAGIC(right);
+
+    bool lundef = !SvOK(left), rundef = !SvOK(right);
+
+    if(lundef || rundef) {
+        rpp_replace_2_IMM_NN(boolSV(lundef && rundef));
+        return NORMAL;
+    }
+
+    if (rpp_try_AMAGIC_2(seq_amg, AMGf_no_GETMAGIC))
+        return NORMAL;
+
+    rpp_replace_2_IMM_NN(boolSV(sv_eq_flags(left, right, 0)));;
+    return NORMAL;
+}
+
+
 PP(pp_sne)
 {
     if (rpp_try_AMAGIC_2(sne_amg, 0))
@@ -2388,6 +2536,30 @@ PP(pp_sne)
 
     SV *right = PL_stack_sp[0];
     SV *left  = PL_stack_sp[-1];
+
+    rpp_replace_2_IMM_NN(boolSV(!sv_eq_flags(left, right, 0)));
+    return NORMAL;
+}
+
+
+PP(pp_sneu)
+{
+    SV *right = PL_stack_sp[0];
+    SV *left  = PL_stack_sp[-1];
+
+    SvGETMAGIC(left);
+    if(left != right)
+        SvGETMAGIC(right);
+
+    bool lundef = !SvOK(left), rundef = !SvOK(right);
+
+    if(lundef || rundef) {
+        rpp_replace_2_IMM_NN(boolSV(!(lundef && rundef)));
+        return NORMAL;
+    }
+
+    if (rpp_try_AMAGIC_2(sne_amg, AMGf_no_GETMAGIC))
+        return NORMAL;
 
     rpp_replace_2_IMM_NN(boolSV(!sv_eq_flags(left, right, 0)));
     return NORMAL;
@@ -2993,6 +3165,60 @@ PP(pp_i_ne)
 }
 
 
+PP(pp_i_equ)
+{
+    SV *right = PL_stack_sp[0];
+    SV *left  = PL_stack_sp[-1];
+
+    SvGETMAGIC(left);
+    if(left != right)
+        SvGETMAGIC(right);
+
+    bool lundef = !SvOK(left), rundef = !SvOK(right);
+
+    if(lundef || rundef) {
+        rpp_replace_2_IMM_NN(boolSV(lundef && rundef));
+        return NORMAL;
+    }
+
+    if (rpp_try_AMAGIC_2(eq_amg, AMGf_numeric|AMGf_no_GETMAGIC))
+        return NORMAL;
+
+    IV ileft    = SvIV_nomg(left);
+    IV iright   = SvIV_nomg(right);
+
+    rpp_replace_2_IMM_NN(boolSV(ileft == iright));
+    return NORMAL;
+}
+
+
+PP(pp_i_neu)
+{
+    SV *right = PL_stack_sp[0];
+    SV *left  = PL_stack_sp[-1];
+
+    SvGETMAGIC(left);
+    if(left != right)
+        SvGETMAGIC(right);
+
+    bool lundef = !SvOK(left), rundef = !SvOK(right);
+
+    if(lundef || rundef) {
+        rpp_replace_2_IMM_NN(boolSV(!(lundef && rundef)));
+        return NORMAL;
+    }
+
+    if (rpp_try_AMAGIC_2(ne_amg, AMGf_numeric|AMGf_no_GETMAGIC))
+        return NORMAL;
+
+    IV ileft    = SvIV_nomg(left);
+    IV iright   = SvIV_nomg(right);
+
+    rpp_replace_2_IMM_NN(boolSV(ileft != iright));
+    return NORMAL;
+}
+
+
 PP(pp_i_ncmp)
 {
     dTARGET;
@@ -3037,6 +3263,211 @@ PP(pp_i_negate)
     }
 }
 
+#define SvIsSimpleIV(sv) ((SvFLAGS(sv) & (                           \
+                                 SVf_THINKFIRST|SVs_GMG|SVf_ROK|     \
+                                 SVf_IOK|SVf_IVisUV|SVf_NOK|SVp_NOK| \
+                                    SVf_POK|SVp_POK)) == SVf_IOK)
+
+PP(pp_i_preinc)
+{
+    SV *sv = *PL_stack_sp;
+
+    if (LIKELY(SvIsSimpleIV(sv))) {
+        IV iv = SvIVX(sv);
+        SvIV_set(sv, (IV)((UV)iv + 1));
+    } else {
+        SvGETMAGIC(sv);
+
+        /* This should now be comparable to sv_inc_nomg */
+
+        if (SvTHINKFIRST(sv)) {
+            if (SvREADONLY(sv)) {
+                croak_no_modify();
+            }
+            if (SvROK(sv)) {
+                IV i;
+                if (SvAMAGIC(sv) && AMG_CALLunary(sv, inc_amg))
+                    goto wrap_up;
+                SV *wot = sv_2num(sv);
+                i = SvIV(wot);
+                sv_setiv(sv, i);
+            }
+            else sv_force_normal_flags(sv, 0);
+        }
+
+        if (LIKELY(sv->sv_flags & (SVp_NOK|SVp_IOK))) {
+            IV iv = SvIV_nomg(sv);
+            sv_setiv(sv, (IV)((UV)iv + 1));
+        } else {
+            sv_inc_nomg(sv);
+            if (SvNOK(sv)) { /* $x = "1.1"; ++$x; */
+                IV iv = SvIV_nomg(sv);
+                sv_setiv(sv, iv);
+            }
+        }
+    }
+
+  wrap_up:
+    SvSETMAGIC(sv);
+    return NORMAL;
+}
+
+PP(pp_i_postinc)
+{
+    dTARGET;
+    SV *sv = *PL_stack_sp;
+
+    if (LIKELY(SvIsSimpleIV(sv))) {
+        IV iv = SvIVX(sv);
+        SvIV_set(sv, (IV)((UV)iv + 1));
+        TARGi(iv, 0); /* arg not GMG, so can't be tainted */
+        rpp_replace_1_1_NN(TARG);
+        return NORMAL;
+    } else {
+        SvGETMAGIC(sv);
+        if (SvROK(sv))
+            TARG = sv_newmortal();
+        sv_setsv_flags(TARG, sv, SV_DO_COW_SVSETSV);
+
+        /* This should now be comparable to sv_inc_nomg */
+
+        if (SvTHINKFIRST(sv)) {
+            if (SvREADONLY(sv)) {
+                croak_no_modify();
+            }
+            if (SvROK(sv)) {
+                IV i;
+                if (SvAMAGIC(sv) && AMG_CALLunary(sv, inc_amg))
+                    goto wrap_up;
+                SV *wot = sv_2num(sv);
+                i = SvIV(wot);
+                sv_setiv(sv, i);
+            }
+            else sv_force_normal_flags(sv, 0);
+        }
+
+        if (LIKELY(sv->sv_flags & (SVp_NOK|SVp_IOK))) {
+            IV iv = SvIV_nomg(sv);
+            sv_setiv(sv, (IV)((UV)iv + 1));
+        } else {
+            sv_inc_nomg(sv);
+            if (SvNOK(sv)) { /* $x = "1.1"; $x++; */
+                IV iv = SvIV_nomg(sv);
+                sv_setiv(sv, iv);
+            }
+        }
+
+      wrap_up:
+        SvSETMAGIC(sv);
+
+        /* This is a special case, as per pp_postinc */
+        if (!SvOK(TARG))
+            sv_setiv(TARG, 0);
+
+        SvSETMAGIC(TARG);
+        rpp_replace_1_1_NN(TARG);
+        return NORMAL;
+    }
+}
+
+PP(pp_i_predec)
+{
+    SV *sv = *PL_stack_sp;
+
+    if (LIKELY(SvIsSimpleIV(sv))) {
+        IV iv = SvIVX(sv);
+        SvIV_set(sv, (IV)((UV)iv - 1));
+    }
+    else {
+        SvGETMAGIC(sv);
+
+        /* This should now be comparable to sv_dec_nomg */
+
+        if (SvTHINKFIRST(sv)) {
+            if (SvREADONLY(sv)) {
+                croak_no_modify();
+            }
+            if (SvROK(sv)) {
+                IV i;
+                if (SvAMAGIC(sv) && AMG_CALLunary(sv, dec_amg))
+                    goto wrap_up;
+                SV *wot = sv_2num(sv);
+                i = SvIV(wot);
+                sv_setiv(sv, i);
+            }
+            else sv_force_normal_flags(sv, 0);
+        }
+        if (LIKELY(sv->sv_flags & (SVp_NOK|SVp_IOK))) {
+            IV iv = SvIV_nomg(sv);
+            sv_setiv(sv, (IV)((UV)iv - 1));
+        } else {
+            sv_dec_nomg(sv);
+            if (SvNOK(sv)) { /* $x = "1.1"; --$x; */
+                IV iv = SvIV_nomg(sv);
+                sv_setiv(sv, iv);
+            }
+        }
+    }
+
+  wrap_up:
+    SvSETMAGIC(sv);
+    return NORMAL;
+}
+
+PP(pp_i_postdec)
+{
+    dTARGET;
+    SV *sv = *PL_stack_sp;
+
+    if (LIKELY(SvIsSimpleIV(sv))) {
+        IV iv = SvIVX(sv);
+        SvIV_set(sv, (IV)((UV)iv - 1));
+        TARGi(iv, 0); /* arg not GMG, so can't be tainted */
+        rpp_replace_1_1_NN(TARG);
+        return NORMAL;
+    } else {
+        SvGETMAGIC(sv);
+        if (SvROK(sv))
+            TARG = sv_newmortal();
+        sv_setsv_flags(TARG, sv, SV_DO_COW_SVSETSV);
+
+        /* This should now be comparable to sv_dec_nomg */
+
+        if (SvTHINKFIRST(sv)) {
+            if (SvREADONLY(sv)) {
+                croak_no_modify();
+            }
+            if (SvROK(sv)) {
+                IV i;
+                if (SvAMAGIC(sv) && AMG_CALLunary(sv, dec_amg))
+                    goto wrap_up;
+                SV *wot = sv_2num(sv);
+                i = SvIV(wot);
+                sv_setiv(sv, i);
+            }
+            else sv_force_normal_flags(sv, 0);
+        }
+        if (LIKELY(sv->sv_flags & (SVp_NOK|SVp_IOK))) {
+            IV iv = SvIV_nomg(sv);
+            sv_setiv(sv, (IV)((UV)iv - 1));
+        } else {
+            sv_dec_nomg(sv);
+            if (SvNOK(sv)) { /* $x = "1.1"; $x--; */
+                IV iv = SvIV_nomg(sv);
+                sv_setiv(sv, iv);
+            }
+        }
+
+      wrap_up:
+        SvSETMAGIC(sv);
+
+        SvSETMAGIC(TARG);
+        rpp_replace_1_1_NN(TARG);
+        return NORMAL;
+    }
+}
+
+#undef SvIsSimpleIV
 
 /* High falutin' math. */
 
@@ -3942,7 +4373,7 @@ PP(pp_sprintf)
     dMARK; dORIGMARK; dTARGET;
     SvTAINTED_off(TARG);
     do_sprintf(TARG, PL_stack_sp - MARK, MARK + 1);
-    TAINT_IF(SvTAINTED(TARG));
+    TAINT_IF_SV(TARG);
     rpp_popfree_to_NN(ORIGMARK);
     SvSETMAGIC(TARG);
     rpp_push_1(TARG);
@@ -4030,6 +4461,7 @@ PP(pp_chr)
 
   ret:
     SvSETMAGIC(TARG);
+    VALUEMAGIC_APPLYTO(TARG);
     rpp_replace_1_1_NN(TARG);
     return NORMAL;
 }
@@ -4433,6 +4865,7 @@ PP_wrapped(pp_ucfirst, 1, 0)
 #endif
     if (dest != source && SvTAINTED(source))
         SvTAINT(dest);
+    VALUEMAGIC_APPLYTO(dest);
     SvSETMAGIC(dest);
     return NORMAL;
 }
@@ -4762,6 +5195,7 @@ PP_wrapped(pp_uc, 1, 0)
 #endif
     if (dest != source && SvTAINTED(source))
         SvTAINT(dest);
+    VALUEMAGIC_APPLYTO(dest);
     SvSETMAGIC(dest);
     return NORMAL;
 }
@@ -4982,6 +5416,7 @@ PP_wrapped(pp_lc, 1, 0)
 #endif
     if (dest != source && SvTAINTED(source))
         SvTAINT(dest);
+    VALUEMAGIC_APPLYTO(dest);
     SvSETMAGIC(dest);
     return NORMAL;
 }
@@ -5270,6 +5705,7 @@ PP_wrapped(pp_fc, 1, 0)
 #endif
     if (SvTAINTED(source))
         SvTAINT(dest);
+    VALUEMAGIC_APPLYTO(dest);
     SvSETMAGIC(dest);
     RETURN;
 }
@@ -6316,8 +6752,12 @@ PP_wrapped(pp_splice, 0, 1)
         Safefree(tmparyval);
     }
 
-    if (SvMAGICAL(ary))
+    if (UNLIKELY(SvMAGICAL(ary))) {
+        for (i = 0; i < newlen; ++i) {
+            mg_copy(MUTABLE_SV(ary), AvARRAY(ary)[offset+i], NULL, offset+i);
+        }
         mg_set(MUTABLE_SV(ary));
+    }
 
     SP = MARK;
     RETURN;

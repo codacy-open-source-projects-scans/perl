@@ -188,7 +188,7 @@ SWTEST
     close $f or die "Could not close: $!";
     $r = runperl(
 	progfile    => $filename,
-	args	    => [ '-x=foo -y' ],
+	args	    => [ '-x=foo', '-y' ],
     );
     is( $r, 'foo1', '-s on the shebang line' );
 }
@@ -692,7 +692,7 @@ while (<>) {
 print "ok\n";
 CODE
         $code =~ s/tmpinplace/$tmpinplace/;
-        fresh_perl_like($code, qr/^Cannot complete in-place edit of \Q$tmpinplace\E\/foo: .* - line 5, <> line \d+\./, { },
+        fresh_perl_like($code, qr/^Cannot complete in-place edit of \Q$tmpinplace\E\/foo: .* - line 3, <> line \d+\./, { },
                        "chdir while in-place editing (no at-functions)");
     }
 

@@ -1609,9 +1609,14 @@ PP_wrapped(pp_getc, MAXARG, 0)
         }
     }
     if (!gv || do_eof(gv)) { /* make sure we have fp with something */
-        if (!io || (!IoIFP(io) && IoTYPE(io) != IoTYPE_WRONLY))
+        if (!io || (!IoIFP(io) && IoTYPE(io) != IoTYPE_WRONLY)) {
             report_evil_fh(gv);
-        SETERRNO(EBADF,RMS_IFI);
+            SETERRNO(EBADF,RMS_IFI);
+        }
+#ifdef USE_PERLIO
+        else if (IoIFP(io) && PerlIO_error(IoIFP(io)))
+            PerlIO_restore_errno(IoIFP(io));
+#endif
         RETPUSHUNDEF;
     }
     TAINT;
@@ -2005,7 +2010,7 @@ PP_wrapped(pp_sysread, 0, 1)
             SETERRNO(EBADF,SS_IVCHAN);
             goto say_undef;
         }
-#if (defined(VMS_DO_SOCKETS) && defined(DECCRTL_SOCKETS)) || defined(__QNXNTO__)
+#if defined(__VMS) || defined(__QNXNTO__)
         bufsize = sizeof (struct sockaddr_in);
 #else
         bufsize = sizeof namebuf;
@@ -2014,6 +2019,7 @@ PP_wrapped(pp_sysread, 0, 1)
         if (bufsize >= 256)
             bufsize = 255;
 #endif
+        const Sock_size_t namesize = bufsize;
         buffer = SvGROW(bufsv, (STRLEN)(length+1));
         /* 'offset' means 'flags' here */
         count = PerlSock_recvfrom(fd, buffer, length, offset,
@@ -2041,6 +2047,12 @@ PP_wrapped(pp_sysread, 0, 1)
         if (bufsize == sizeof namebuf)
             bufsize = 0;
 #endif
+        /* recvfrom() may return a length larger than the supplied buffer. */
+        if (bufsize > namesize) {
+            ck_warner(packWARN(WARN_IO),
+                      "Socket address truncated in %s()", "recvfrom");
+            bufsize = namesize;
+        }
         sv_setpvn(TARG, namebuf, bufsize);
         PUSHs(TARG);
         RETURN;
@@ -2829,11 +2841,12 @@ PP_wrapped(pp_accept, 2, 0)
     dSP; dTARGET;
     IO *nstio;
     char namebuf[MAXPATHLEN];
-#if (defined(VMS_DO_SOCKETS) && defined(DECCRTL_SOCKETS)) || defined(__QNXNTO__)
+#if defined(__VMS) || defined(__QNXNTO__)
     Sock_size_t len = sizeof (struct sockaddr_in);
 #else
     Sock_size_t len = sizeof namebuf;
 #endif
+    const Sock_size_t namesize = len;
     GV * const ggv = MUTABLE_GV(POPs);
     GV * const ngv = MUTABLE_GV(POPs);
     int fd;
@@ -2872,6 +2885,13 @@ PP_wrapped(pp_accept, 2, 0)
 #ifdef __SCO_VERSION__
     len = sizeof (struct sockaddr_in); /* OpenUNIX 8 somehow truncates info */
 #endif
+
+    /* accept() may return a length larger than the supplied buffer. */
+    if (len > namesize) {
+        ck_warner(packWARN(WARN_IO),
+                  "Socket address truncated in %s()", "accept");
+        len = namesize;
+    }
 
     PUSHp(namebuf, len);
     RETURN;
@@ -2935,7 +2955,24 @@ PP_wrapped(pp_ssockopt,(PL_op->op_type == OP_GSOCKOPT) ? 3 : 4 , 0)
         (void)SvPOK_only(sv);
         SvCUR_set(sv, PERL_GETSOCKOPT_SIZE);
         *SvEND(sv) ='\0';
+
+#ifdef OEMVS
+
+        /* Work around z/OS limitation.  The buffer size parameter on this
+         * platform must be the precise sizeof the type being returned.  Other
+         * platforms, and the POSIX standard, require it to be large enough to
+         * hold the returned value, not necessarily the precise sizeof.  On
+         * z/OS 3.1 all currently handled options but SO_LINGER are of type
+         * int */
+        if (optname == SO_LINGER) {
+            len = sizeof(struct linger);
+        }
+        else {
+            len = sizeof(int);
+        }
+#else
         len = SvCUR(sv);
+#endif
         if (PerlSock_getsockopt(fd, lvl, optname, SvPVX(sv), &len) < 0)
             goto nuts2;
 #if defined(_AIX)
@@ -2987,6 +3024,7 @@ PP_wrapped(pp_getpeername, 1, 0)
     GV * const gv = MUTABLE_GV(POPs);
     IO * const io = GvIOn(gv);
     Sock_size_t len;
+    Sock_size_t namesize;
     SV *sv;
     int fd;
 
@@ -2998,6 +3036,7 @@ PP_wrapped(pp_getpeername, 1, 0)
 #else
     len = 256;
 #endif
+    namesize = len;
     sv = sv_2mortal(newSV(len+1));
     (void)SvPOK_only(sv);
     SvCUR_set(sv, len);
@@ -3013,7 +3052,7 @@ PP_wrapped(pp_getpeername, 1, 0)
     case OP_GETPEERNAME:
         if (PerlSock_getpeername(fd, (struct sockaddr *)SvPVX(sv), &len) < 0)
             goto nuts2;
-#if defined(VMS_DO_SOCKETS) && defined (DECCRTL_SOCKETS)
+#ifdef __VMS
         {
             static const char nowhere[] = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
             /* If the call succeeded, make sure we don't have a zeroed port/addr */
@@ -3032,6 +3071,13 @@ PP_wrapped(pp_getpeername, 1, 0)
     if (len == BOGUS_GETNAME_RETURN)
         len = sizeof(struct sockaddr);
 #endif
+    /* getpeername() and getsockname() may return a length larger than the
+     * supplied buffer. */
+    if (len > namesize) {
+        ck_warner(packWARN(WARN_IO),
+                  "Socket address truncated in %s()", OP_NAME(PL_op));
+        len = namesize;
+    }
     SvCUR_set(sv, len);
     *SvEND(sv) ='\0';
     PUSHs(sv);

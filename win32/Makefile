@@ -4,7 +4,7 @@
 #	Microsoft Visual C++ 2015 / 14.0 or later
 #
 # This is set up to build a perl.exe that runs off a shared library
-# (perl543.dll).  Also makes individual DLLs for the XS extensions.
+# (perl545.dll).  Also makes individual DLLs for the XS extensions.
 #
 
 ##
@@ -37,7 +37,7 @@ INST_TOP	= $(INST_DRV)\perl
 # versioned installation can be obtained by setting INST_TOP above to a
 # path that includes an arbitrary version string.
 #
-#INST_VER	= \5.43.11
+#INST_VER	= \5.45.4
 
 #
 # Comment this out if you DON'T want your perl installation to have
@@ -172,7 +172,7 @@ DEFAULT_INC_EXCLUDES_DOT = define
 # set this to additionally provide a statically linked perl-static.exe.
 # Note that dynamic loading will not work with this perl, so you must
 # include required modules statically using the STATIC_EXT or ALL_STATIC
-# variables below. A static library perl543s.lib will also be created.
+# variables below. A static library perl545s.lib will also be created.
 # Ordinary perl.exe is not affected by this option.
 #
 #BUILD_STATIC	= define
@@ -570,9 +570,9 @@ $(o).dll:
 
 # makedef.pl must be updated if this changes, and this should normally
 # only change when there is an incompatible revision of the public API.
-PERLIMPLIB	= ..\perl543.lib
-PERLSTATICLIB	= ..\perl543s.lib
-PERLDLL		= ..\perl543.dll
+PERLIMPLIB	= ..\perl545.lib
+PERLSTATICLIB	= ..\perl545s.lib
+PERLDLL		= ..\perl545.dll
 
 MINIPERL	= ..\miniperl.exe
 # contains config.h for the full perl build
@@ -735,6 +735,7 @@ CORE_NOCFG_H	=		\
 		..\hv.h		\
 		..\hv_func.h	\
 		..\iperlsys.h	\
+		..\perl_lock_definitions.h	\
 		..\mg.h		\
 		..\nostdio.h	\
 		..\op.h		\
@@ -1174,7 +1175,7 @@ utils: $(PERLEXE) ..\utils\Makefile
 	copy ..\README.tw       ..\pod\perltw.pod
 	copy ..\README.vos      ..\pod\perlvos.pod
 	copy ..\README.win32    ..\pod\perlwin32.pod
-	copy ..\pod\perldelta.pod ..\pod\perl54311delta.pod
+	copy ..\pod\perldelta.pod ..\pod\perl5454delta.pod
 	cd ..\win32
 	$(PERLEXE) $(PL2BAT) $(UTILS)
 	$(MINIPERL) -I..\lib ..\autodoc.pl -c "win32\$(CONFIG_H)" ..
@@ -1275,7 +1276,7 @@ distclean: realclean
 	-if exist $(LIBDIR)\Win32API rmdir /s /q $(LIBDIR)\Win32API
 	-if exist $(LIBDIR)\XS rmdir /s /q $(LIBDIR)\XS
 	-cd $(PODDIR) && del /f *.html *.bat roffitall \
-	    perl54311delta.pod perlaix.pod perlamiga.pod perlandroid.pod \
+	    perl5454delta.pod perlaix.pod perlamiga.pod perlandroid.pod \
 	    perlapi.pod perlbs2000.pod perlcn.pod perlcygwin.pod \
 	    perlfreebsd.pod perlhaiku.pod perlhpux.pod perlhurd.pod \
 	    perlintern.pod perlirix.pod perljp.pod perlko.pod perllinux.pod \
@@ -1309,17 +1310,17 @@ install : all installbare installhtml
 
 installbare : utils ..\pod\perltoc.pod
 	$(PERLEXE) ..\installperl
-	if exist $(WPERLEXE) $(XCOPY) $(WPERLEXE) $(INST_BIN)\*.*
-	if exist $(PERLEXESTATIC) $(XCOPY) $(PERLEXESTATIC) $(INST_BIN)\*.*
-	$(XCOPY) $(GLOBEXE) $(INST_BIN)\*.*
-	if exist ..\perl*.pdb $(XCOPY) ..\perl*.pdb $(INST_BIN)\*.*
-	$(XCOPY) bin\*.bat $(INST_SCRIPT)\*.*
+	if exist $(WPERLEXE) $(XCOPY) $(WPERLEXE) "$(INST_BIN)\*.*"
+	if exist $(PERLEXESTATIC) $(XCOPY) $(PERLEXESTATIC) "$(INST_BIN)\*.*"
+	$(XCOPY) $(GLOBEXE) "$(INST_BIN)\*.*"
+	if exist ..\perl*.pdb $(XCOPY) ..\perl*.pdb "$(INST_BIN)\*.*"
+	$(XCOPY) bin\*.bat "$(INST_SCRIPT)\*.*"
 
 installhtml : doc
-	$(RCOPY) $(HTMLDIR)\*.* $(INST_HTML)\*.*
+	$(RCOPY) $(HTMLDIR)\*.* "$(INST_HTML)\*.*"
 
 inst_lib : $(CONFIGPM)
-	$(RCOPY) ..\lib $(INST_LIB)\*.*
+	$(RCOPY) ..\lib "$(INST_LIB)\*.*"
 
 $(UNIDATAFILES) ..\pod\perluniprops.pod : $(MINIPERL) $(CONFIGPM) ..\lib\unicore\mktables Extensions_nonxs
 	cd ..\lib\unicore && \
@@ -1361,6 +1362,40 @@ regen :
 	cd ..
 	regen.pl
 	cd win32
+
+regen_headers regen-headers :
+	cd .. && regen.pl -v
+
+# Requires Devel::Tokenizer::C 0.05 or newer in the installed Perl.
+regen_keywords regen-keywords :
+	cd .. && perl.exe regen\keywords.pl
+
+regen_invlist regen-invlist :
+	cd .. && perl.exe -Ilib regen\mk_invlists.pl
+
+regen_charclass regen-charclass :
+	cd .. && perl.exe -Ilib regen\regcharclass.pl
+
+regen_meta regen-meta :
+	cd .. && perl.exe -Ilib Porting\makemeta -y
+	cd .. && perl.exe -Ilib Porting\makemeta -j
+
+# regen_perly is omitted here.  It depends on tools only known to be
+# available on Unix-like systems.
+regen_all regen-all :
+	@echo If this fails, run the regeneration steps one at a time:
+	@echo   nmake regen
+	@echo   nmake regen_keywords
+	@echo   nmake regen_invlist
+	@echo   nmake regen_charclass
+	@echo   nmake regen_meta
+	$(MAKE)
+	$(MAKE) regen
+	$(MAKE) regen_keywords
+	$(MAKE) regen_invlist
+	$(MAKE) regen_charclass
+	$(MAKE) regen_meta
+	$(MAKE)
 
 test-notty : test-prep
 	set PERL_SKIP_TTY_TEST=1

@@ -28,7 +28,7 @@ skip_all_without_unicode_tables();
 my $has_locales = locales_enabled('LC_CTYPE');
 my $utf8_locale = find_utf8_ctype_locale();
 
-plan tests => 1298;  # Update this when adding/deleting tests.
+plan tests => 1314;  # Update this when adding/deleting tests.
 
 run_tests() unless caller;
 
@@ -2157,7 +2157,8 @@ EOP
     }
     {
         # [perl #129281] buffer write overflow, detected by ASAN, valgrind
-        fresh_perl_is('/0(?0)|^*0(?0)|^*(^*())0|/', '', {}, "don't bump whilem_c too much");
+        fresh_perl_is('/0(?0)|^*0(?0)|^*(^*())0|/', '', {},
+            "don't bump slc_whilem_seen too much");
     }
     {
         # RT #131893 - fails with ASAN -fsanitize=undefined
@@ -2650,6 +2651,75 @@ SKIP:
     }
 
     {
+        # GH #24614
+        # On an anchored patten with utf8 fixed substring, where there is
+        # no equivalent non-utf8 substring which can be compared to a
+        # non-utf8 pattern, abandon intuit rather than trying to use a
+        # non-existent substr. It was necessary to run the match twice to
+        # trigger the bug, as the sub-optimal way intuit works meant that
+        # wasn't trying on the first iteration.
+
+        for my $i (1..2) {
+            ok("pqrs" !~ m{^\x{100}.+?AB}, "GH #24614 iter $i");
+        }
+    }
+
+
+    {
+        # Test the super-linear cache
+
+        # Use the minimum countdown before enabling the cache, to ensure
+        # the cache is being exercised wherever possible:
+        local ${^RE_SUPERLINEAR_CACHE_DELAY} = 1;
+
+        # RT #79152
+        # Test the super-linear cache against nested quantifiers.
+
+        ok("xayxay" =~ /^.*(x(a|bc)*y){2,}/,  'SLC RT #79152 1');
+        is($&, "xayxay",                      'SLC RT #79152 1 $&');
+
+        ok("xayxay" =~ /^.*(x(a|bc)*y){2,3}/, 'SLC RT #79152 2');
+        is($&, "xayxay",                      'SLC RT #79152 2 $&');
+
+        ok("xayxayxayxayZ"
+          =~ /^.*?(x(a|bc)*y){2,3}Z/,         'SLC RT #79152 3');
+        is($&, "xayxayxayxayZ",               'SLC RT #79152 3 $&');
+
+        # This tested a bug in the positive part of the SLC, which
+        # no longer exists; but might as well keep the test.
+        ok("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            =~ /^(a*?)(?!(a{6}|a{5})*$)/,     'SLC +ve');
+        is($+[1], "12",                       'SLC +ve $+[1]');
+
+        # Test running a nested external sub-pattern
+
+        my $inner_qr = qr/(x(a|bc)*y)/;
+        ok("xayxay" =~ /^.*(??{ $inner_qr }){2,3}/, 'SLC nested qr');
+        is($&, "xayxay",                            'SLC nested qr $&');
+
+        # Non-regular items such as back-references
+
+        ok( "aaabbbaa"
+          =~ /^
+                (a+)       # a
+                ([ab]+)*   # aabbb
+                (
+                    \g{1}  # a
+                    |
+                    cccc
+                )
+                [az]       # a
+            $/x,
+            "SLC backref"
+        );
+
+        # multiple quantifiers
+
+        ok("aa;bbbbbbbbbbbbbbbbbbbb;cc"
+            =~ /^(aa?)*;(bb?)*bbbbbbbbbbbbbbbbbb;(cc?)*$/, "SLC multi");
+    }
+
+    {
         # github #21661
         fresh_perl_is(<<'PROG', <<'EXPECT', {}, "double-free on fatal warn with existing error");
 use warnings FATAL => qw(all);
@@ -2669,6 +2739,22 @@ PROG
     {   # GH 16894 Fixed by acababb42be12ff2986b73c1bfa963b70bb5d54e
         "abab" =~ /(?:[^b]*(?=(b)|(a))ab)*/;
         is($1, undef, "GH #16894");
+    }
+
+    {   # GH #24336
+        fresh_perl_is(<<~'PROG', "", {}, "Parses ambiguous array vs subscript correctly");
+            my $foo = "whatever";
+            $foo =~ s{^$foo[/\\]?}{};
+            print $foo, "\n";
+            PROG
+    }
+
+    {   # GH 24339
+        fresh_perl_is(<<~'PROG', "", {}, "intuit_more bug compiles");
+        use strict;
+        my ($prevDecade, $decade, $year) = (0, 1, 2);
+        qr/\A(?:1[0-9][0-9]{2}|20[0-$prevDecade][0-9]|20$decade[0-$year])\Z/o;
+        PROG
     }
 
 } # End of sub run_tests

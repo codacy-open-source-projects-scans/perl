@@ -64,7 +64,6 @@ See L<perlguts/Autoloading with XSUBs>.
 #define CvXSUBANY(sv)	((XPVCV*)MUTABLE_PTR(SvANY(sv)))->xcv_start_u.xcv_xsubany
 #define CvGV(sv)	Perl_CvGV(aTHX_ (CV *)(sv))
 #define CvGV_set(cv,gv)	Perl_cvgv_set(aTHX_ cv, gv)
-#define CvHASGV(cv)	cBOOL(SvANY(cv)->xcv_gv_u.xcv_gv)
 #define CvFILE(sv)	((XPVCV*)MUTABLE_PTR(SvANY(sv)))->xcv_file
 #ifdef USE_ITHREADS
 #  define CvFILE_set_from_cop(sv, cop)	\
@@ -78,6 +77,32 @@ See L<perlguts/Autoloading with XSUBs>.
 /* For use when you only have a XPVCV*, not a real CV*.
    Must be assert protected as in Perl_CvDEPTH before use. */
 #define CvDEPTHunsafe(sv) ((XPVCV*)MUTABLE_PTR(SvANY(sv)))->xcv_depth
+
+/*
+=for apidoc Am|bool|CvHasNAME|CV *cv
+
+Returns true if the CV has a name, either by having a name HEK or a GV. This
+macro does not indicate which. If additionally L</CvHasNAME_HEK> is true, then
+the name can be found in L</CvNAME_HEK>. If C<CvHasNAME_HEK> is false, the
+name can be found via the L</CvGV>.
+
+=cut
+*/
+
+/* This union is shared by both .xcv_gv and .xcv_hek, so the boolean truth of
+ * it indicates that either one is set
+ */
+#define CvHasNAME(cv)   ((bool)SvANY(cv)->xcv_gv_u.xcv_gv)
+
+/*
+=for apidoc ABm|bool|CvHASGV|CV *cv
+A synonym for c<L</CvHasNAME>>
+
+=cut
+*/
+#ifndef PERL_CORE
+#  define CvHASGV(cv)  CvHasNAME(cv)
+#endif
 
 /* these CvPADLIST/CvRESERVED asserts can be reverted one day, once stabilized */
 #define CvPADLIST(sv)	  (*(assert_(!CvISXSUB((CV*)(sv))) \
@@ -148,7 +173,7 @@ See L<perlguts/Autoloading with XSUBs>.
 #define CVf_DYNFILE	0x1000	/* The filename is malloced  */
 #define CVf_AUTOLOAD	0x2000	/* SvPVX contains AUTOLOADed sub name  */
 #define CVf_HASEVAL	0x4000	/* contains string eval  */
-#define CVf_NAMED	0x8000  /* Has a name HEK */
+#define CVf_HasNAME_HEK 0x8000  /* Has a name HEK */
 #define CVf_LEXICAL	0x10000 /* Omit package from name */
 #define CVf_ANONCONST	0x20000 /* :const - create anonconst op */
 #define CVf_SIGNATURE   0x40000 /* CV uses a signature */
@@ -236,9 +261,54 @@ See L<perlguts/Autoloading with XSUBs>.
 #define CvHASEVAL_on(cv)	(CvFLAGS(cv) |= CVf_HASEVAL)
 #define CvHASEVAL_off(cv)	(CvFLAGS(cv) &= ~CVf_HASEVAL)
 
-#define CvNAMED(cv)		(CvFLAGS(cv) & CVf_NAMED)
-#define CvNAMED_on(cv)		(CvFLAGS(cv) |= CVf_NAMED)
-#define CvNAMED_off(cv)		(CvFLAGS(cv) &= ~CVf_NAMED)
+/*
+=for apidoc Am|I32|CvHasNAME_HEK|CV *cv
+=for apidoc_item CVf_HasNAME_HEK
+
+If true, indicates that this CV has a name stored I<directly> into it, which
+is accessible by L</CvNAME_HEK>. This is normally only the case for named
+lexical subroutines (i.e. those created by C<my sub ...> syntax). Named
+package subroutines do not store their name this way; instead those are
+accessible via the L</CvGV>.
+
+In normal circumstances you would not need to check this flag just to see if
+the subroutine has a name as would be recognised by a Perl developer. For
+that purpose, see L</CvGvNAME_HEK>.
+
+This macro returns the value of the flag constant directly; it may be used to
+copy the flag from one CV to another; using something like
+
+    CvFLAGS(ncv) |= CvHasNAME_HEK(ocv);
+
+=cut
+*/
+
+#define CvHasNAME_HEK(cv)       (CvFLAGS(cv) & CVf_HasNAME_HEK)
+#define CvHasNAME_HEK_on(cv)    (CvFLAGS(cv) |= CVf_HasNAME_HEK)
+#define CvHasNAME_HEK_off(cv)   (CvFLAGS(cv) &= ~CVf_HasNAME_HEK)
+
+#ifndef PERL_CORE
+/*
+=for apidoc  ABmn|I32|CVf_NAMED
+
+Use C<L</CVf_HasNAME_HEK>> instead
+
+=for apidoc  ABm|HEK *|CvNAMED
+=for apidoc_item||CvNAMED_on
+=for apidoc_item||CvNAMED_off
+
+Use, respectively, C<L</CvHasNAME_HEK>>,
+C<CvHasNAME_HEK_on>,
+and C<CvHasNAME_HEK_off> instead
+
+=cut
+*/
+
+#  define CVf_NAMED    CVf_HasNAME_HEK
+#  define CvNAMED      CvHasNAME_HEK
+#  define CvNAMED_on   CvHasNAME_HEK_on
+#  define CvNAMED_off  CvHasNAME_HEK_off
+#endif
 
 #define CvLEXICAL(cv)		(CvFLAGS(cv) & CVf_LEXICAL)
 #define CvLEXICAL_on(cv)	(CvFLAGS(cv) |= CVf_LEXICAL)
@@ -304,19 +374,37 @@ Helper macro to turn off the C<CvREFCOUNTED_ANYSV> flag.
 /* Flags for newXS_flags  */
 #define XS_DYNAMIC_FILENAME	0x01	/* The filename isn't static  */
 
+/*
+=for apidoc ATi|HEK *|CvNAME_HEK|CV *cv
+
+If the CV is named with a hash key structure (i.e. L</CvHasNAME_HEK> is true),
+returns the name hash key structure. If not, returns C<NULL>.
+
+=cut
+*/
+
 PERL_STATIC_INLINE HEK *
 CvNAME_HEK(CV *sv)
 {
-    return CvNAMED(sv)
+    return CvHasNAME_HEK(sv)
         ? ((XPVCV*)MUTABLE_PTR(SvANY(sv)))->xcv_gv_u.xcv_hek
         : 0;
 }
 
-/* helper for the common pattern:
-   CvNAMED(sv) ? CvNAME_HEK((CV *)sv) : GvNAME_HEK(CvGV(sv))
+/*
+=for apidoc Am|HEK *|CvGvNAME_HEK|CV *cv
+
+Attempts to return a naming hash key structure associated with the CV; either
+by using L</CvNAME_HEK> or the L</GvNAME_HEK> of its L</CvGV>.
+
+Equivalent to the otherwise-common pattern:
+
+   CvHasNAME_HEK(cv) ? CvNAME_HEK((CV *)cv) : GvNAME_HEK(CvGV(cv))
+
+=cut
 */
 #define CvGvNAME_HEK(sv) ( \
-        CvNAMED((CV*)sv) ? \
+        CvHasNAME_HEK((CV*)sv) ? \
             ((XPVCV*)MUTABLE_PTR(SvANY((SV*)sv)))->xcv_gv_u.xcv_hek\
             : GvNAME_HEK(CvGV( (SV*) sv)) \
         )
@@ -328,7 +416,15 @@ CvNAME_HEK(CV *sv)
             ? unshare_hek(SvANY((CV *)(cv))->xcv_gv_u.xcv_hek)	  \
             : (void)0,						   \
         ((XPVCV*)MUTABLE_PTR(SvANY(cv)))->xcv_gv_u.xcv_hek = (hek), \
-        CvNAMED_on(cv)						     \
+        CvHasNAME_HEK_on(cv)						     \
+    )
+
+#define CvNAME_HEK_clear(sv) (                                   \
+        CvNAME_HEK((CV *)sv)                                      \
+            ? unshare_hek(SvANY((CV *)(cv))->xcv_gv_u.xcv_hek)     \
+            : (void)0,                                              \
+        (((XPVCV*)MUTABLE_PTR(SvANY(cv)))->xcv_gv_u.xcv_hek) = NULL, \
+        CvHasNAME_HEK_off(cv)                                         \
     )
 
 /*

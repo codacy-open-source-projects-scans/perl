@@ -453,6 +453,8 @@ B<-D14> is equivalent to B<-Dtls>):
  134217728  i  trace PerlIO layer processing.  Set PERLIO_DEBUG to
                the filename to trace to.
  268435456  y  trace y///, tr/// compilation and execution
+ 536870912  K  Mutex locking/unlocking; enabled only when Configure
+               was passed -Accflags=-DPERL_DEBUG_MUTEXES
 
 All these flags require B<-DDEBUGGING> when you compile the Perl
 executable (but see C<:opd> in L<Devel::Peek> or L<re/'debug' mode>
@@ -1374,6 +1376,21 @@ information to stdout. You can write to other opened file descriptors
 in a variety of ways:
 
   $ 3>foo3 PERL_MEM_LOG=3m perl ...
+
+=item PERL_RE_SUPERLINEAR_CACHE_DELAY
+X<PERL_RE_SUPERLINEAR_CACHE_DELAY>
+
+Setting this environment variable to the value C<NNN> causes an effect
+roughly equivalent to including this code at the start of the program:
+
+    BEGIN { ${^RE_SUPERLINEAR_CACHE_DELAY} = NNN; }
+
+See L<perlvar/"${^RE_SUPERLINEAR_CACHE_DELAY}"> for details.
+
+Note that this environment variable is only honoured if the perl
+interpreter has been built with the C<PERL_RE_SUPERLINEAR_CACHE_DELAY>
+define: see F<INSTALL>.
+
 
 =item PERL_ROOT (specific to the VMS port)
 X<PERL_ROOT>

@@ -83,6 +83,15 @@
 /* Not for production use: */
 #define PERL_ENABLE_EXPERIMENTAL_REGEX_OPTIMISATIONS 0
 
+/* a cache pointer and countdown for a single super-linear cache compatible
+ * WHILEM node
+ */
+
+struct slc_cache_item {
+    U8 *slc_bitmap;
+    STRLEN slc_countdown;
+};
+
 /*
  * Structure for regexp "program".  This is essentially a linear encoding
  * of a nondeterministic finite-state machine (aka syntax charts or
@@ -118,20 +127,28 @@
    private to the engine itself. It now lives here. */
 
 typedef struct regexp_internal {
-        regnode *regstclass;    /* Optional startclass as identified or constructed
-                                   by the optimiser */
-        struct reg_data *data;	/* Additional miscellaneous data used by the program.
-                                   Used to make it easier to clone and free arbitrary
-                                   data that the regops need. Often the ARG field of
-                                   a regop is an index into this structure. NOTE the
-                                   0th element of this structure is NEVER used and is
-                                   strictly reserved for internal purposes. */
+        regnode *regstclass;    /* Optional startclass as identified or
+                                   constructed by the optimiser */
+        struct reg_data *data;	/* Additional miscellaneous data used by the
+                                   program.  Used to make it easier to clone
+                                   and free arbitrary data that the regops
+                                   need. Often the ARG field of a regop is an
+                                   index into this structure. NOTE the 0th
+                                   element of this structure is NEVER used and
+                                   is strictly reserved for internal purposes.
+                                 */
         struct reg_code_blocks *code_blocks;/* positions of literal (?{}) */
         U32 proglen;            /* size of the compiled program in regnodes */
-        U32 name_list_idx;      /* Optional data index of an array of paren names,
-                                   only valid when RXp_PAREN_NAMES(prog) is true,
-                                   0 means "no value" like any other index into the
-                                   data array.*/
+        U32 name_list_idx;      /* Optional data index of an array of paren
+                                   names, only valid when RXp_PAREN_NAMES(prog)
+                                   is true, 0 means "no value" like any other
+                                   index into the data array.*/
+        U32 depth;              /* 1 = executing; 2+ = recursing */
+        U8 slc_whilem_seen;     /* Num of WHILEMs using super-linear cache.
+                                   Same type as FLAGS() */
+        struct slc_cache_item *slc; /* permanent array of super-linear cache
+                                       countdown / bitmap pointer pairs*/
+
         regnode program[1];	/* Unwarranted chumminess with compiler. */
 } regexp_internal;
 
@@ -222,12 +239,12 @@ typedef struct regexp_internal {
  * into a regnode.
 
  * NOTE: Ideally we do not put pointers into the regnodes in a program. Instead
- * we put them in the "data" part of the regexp structure and store the index into
- * the data in the pointers in the regnode. This allows the pointer to be handled
- * properly during clone/free operations (eg refcount bookkeeping). See S_add_data(),
- * Perl_regdupe_internal(), Perl_regfree_internal() in regcomp.c for how the data
- * array can be used, the letters 'arsSu' all refer to different types of SV that
- * we already have support for in the data array.
+ * we put them in the "data" part of the regexp structure and store the index
+ * into the data in the pointers in the regnode. This allows the pointer to be
+ * handled properly during clone/free operations (eg refcount bookkeeping). See
+ * S_add_data(), Perl_regdupe_internal(), Perl_regfree_internal() in regcomp.c
+ * for how the data array can be used, the letters 'arsSu' all refer to
+ * different types of SV that we already have support for in the data array.
  */
 
 union regnode_arg {
@@ -247,7 +264,8 @@ struct regnode_string {
 
 struct regnode_lstring { /* Constructed this way to keep the string aligned. */
     union regnode_head head;
-    U32 str_len_u32;    /* Only 18 bits allowed before would overflow 'next_off' */
+    U32 str_len_u32;    /* Only 18 bits allowed before would overflow
+                           'next_off' */
     char string[1];
 };
 
@@ -276,10 +294,10 @@ struct regnode_1 {
  * data structure. As a byproduct it also saves space, often we use a 16 bit
  * member to store indexes into the data[] array.
  *
- * Also note that the weird storage here is because regnodes are 32 bit aligned,
- * which means we cannot have a 64 bit aligned member. To make things more annoying
- * the size of a pointer may vary by platform. Thus we use a character array, and
- * then use inline functions to copy the data in or out.
+ * Also note that the weird storage here is because regnodes are 32 bit
+ * aligned, which means we cannot have a 64 bit aligned member. To make things
+ * more annoying the size of a pointer may vary by platform. Thus we use a
+ * character array, and then use inline functions to copy the data in or out.
  * */
 struct regnode_p {
     union regnode_head head;
@@ -287,7 +305,7 @@ struct regnode_p {
 };
 
 /* "Two Node" - similar to a regnode_1 but with space for an extra 32
- * bit value, or two 16 bit valus. The first fields must match regnode_1.
+ * bit value, or two 16 bit values. The first fields must match regnode_1.
  * Extra field can be accessed as (U32)ARG2u() (I32)ARG2i() or (U16)ARG2a()
  * and (U16)ARG2b() */
 struct regnode_2 {
@@ -336,38 +354,37 @@ struct regnode_bbm {
  * regnode has a U32, which is what reganode() allocates as a unit.  Therefore
  * no field can require stricter alignment than U32. */
     
-/* also used by trie */
 struct regnode_charclass {
     union regnode_head head;
     union regnode_arg arg1;
-    char bitmap[ANYOF_BITMAP_SIZE];	/* only compile-time */
+    U8 bitmap[ANYOF_BITMAP_SIZE];	/* only compile-time */
 };
 
 /* has runtime (locale) \d, \w, ..., [:posix:] classes */
 struct regnode_charclass_posixl {
     union regnode_head head;
     union regnode_arg arg1;
-    char bitmap[ANYOF_BITMAP_SIZE];		/* both compile-time ... */
+    U8 bitmap[ANYOF_BITMAP_SIZE];		/* both compile-time ... */
     U32 classflags;	                        /* and run-time */
 };
 
 /* A synthetic start class (SSC); is a regnode_charclass_posixl_fold, plus an
  * extra SV*, used only during regex construction and which is not used by the
- * main machinery in regexec.c and which does not get embedded in the final compiled
- * regex program.
+ * main machinery in regexec.c and which does not get embedded in the final
+ * compiled regex program.
  *
- * Because it does not get embedded it does not have to comply with the alignment
- * and sizing constraints required for a normal regnode structure: it MAY contain
- * pointers or members of whatever size needed and the compiler will do the right
- * thing. (Every other regnode type is 32 bit aligned.)
+ * Because it does not get embedded it does not have to comply with the
+ * alignment and sizing constraints required for a normal regnode structure: it
+ * MAY contain pointers or members of whatever size needed and the compiler
+ * will do the right thing. (Every other regnode type is 32 bit aligned.)
  *
- * Note that the 'next_off' field is unused, as the SSC stands alone, so there is
- * never a next node.
+ * Note that the 'next_off' field is unused, as the SSC stands alone, so there
+ * is never a next node.
  */
 struct regnode_ssc {
     union regnode_head head;
     union regnode_arg arg1;
-    char bitmap[ANYOF_BITMAP_SIZE];	/* both compile-time ... */
+    U8 bitmap[ANYOF_BITMAP_SIZE];	/* both compile-time ... */
     U32 classflags;	                /* ... and run-time */
 
     /* Auxiliary, only used during construction; NULL afterwards: list of code
@@ -437,6 +454,10 @@ struct regnode_ssc {
 #define ARG2i(p) ARG_VALUE(ARG2i_LOC(p))
 #define ARG2a(p) ARG_VALUE(ARG2a_LOC(p))
 #define ARG2b(p) ARG_VALUE(ARG2b_LOC(p))
+#define ARG2u_AFTERCC(p) ARG_VALUE(ARG2u_AFTERCC_LOC(p))
+#define ARG2i_AFTERCC(p) ARG_VALUE(ARG2i_AFTERCC_LOC(p))
+#define ARG2a_AFTERCC(p) ARG_VALUE(ARG2a_AFTERCC_LOC(p))
+#define ARG2b_AFTERCC(p) ARG_VALUE(ARG2b_AFTERCC_LOC(p))
 
 #define ARG3u(p) ARG_VALUE(ARG3u_LOC(p))
 #define ARG3i(p) ARG_VALUE(ARG3i_LOC(p))
@@ -454,6 +475,10 @@ struct regnode_ssc {
 #define ARG2i_SET(p, val) ARG__SET(ARG2i_LOC(p), (val))
 #define ARG2a_SET(p, val) ARG__SET(ARG2a_LOC(p), (val))
 #define ARG2b_SET(p, val) ARG__SET(ARG2b_LOC(p), (val))
+#define ARG2u_AFTERCC_SET(p, val) ARG__SET(ARG2u_AFTERCC_LOC(p), (val))
+#define ARG2i_AFTERCC_SET(p, val) ARG__SET(ARG2i_AFTERCC_LOC(p), (val))
+#define ARG2a_AFTERCC_SET(p, val) ARG__SET(ARG2a_AFTERCC_LOC(p), (val))
+#define ARG2b_AFTERCC_SET(p, val) ARG__SET(ARG2b_AFTERCC_LOC(p), (val))
 
 #define ARG3u_SET(p, val) ARG__SET(ARG3u_LOC(p), (val))
 #define ARG3i_SET(p, val) ARG__SET(ARG3i_LOC(p), (val))
@@ -1149,8 +1174,6 @@ END_EXTERN_C
  *       multicharacter strings resulting from casefolding the single-character
  *       entries in the character class
  *   t - trie struct
- *   u - trie struct's widecharmap (a HV, so can't share, must dup)
- *       also used for revcharmap and words under DEBUGGING
  *   T - aho-trie struct
  *   S - sv for named capture lookup
  * 20010712 mjd@plover.com
@@ -1186,15 +1209,12 @@ struct reg_data {
 #define RX_FLOAT_SUBSTR(rx)	(ReANY(rx)->float_substr)
 #define RX_FLOAT_UTF8(rx)	(ReANY(rx)->float_utf8)
 
-/* trie related stuff */
+/* Trie related stuff.  regcomp_trie.c describes the compressed base/check
+ * table layout. */
 
-/* a transition record for the state machine. the
-   check field determines which state "owns" the
-   transition. the char the transition is for is
-   determined by offset from the owning states base
-   field.  the next field determines which state
-   is to be transitioned to if any.
-*/
+/* A transition record for the state machine.  check identifies the state
+ * which owns the physical slot.  The owning state's base maps each input
+ * octet to its slot.  next identifies the destination state. */
 struct reg_trie_trans_ {
   U32 next;
   U32 check;
@@ -1202,27 +1222,36 @@ struct reg_trie_trans_ {
 
 /* a transition list element for the list based representation */
 struct reg_trie_trans_list_elem_ {
-    U16 forid;
+    U32 octet;
     U32 newstate;
 };
 typedef struct reg_trie_trans_list_elem_ reg_trie_trans_le;
 
-/* a state for compressed nodes. base is an offset
-  into an array of reg_trie_trans array. If wordnum is
-  nonzero the state is accepting. if base is zero then
-  the state has no children (and will be accepting)
-*/
+/* A state for compressed nodes. base is an offset into an array of
+ * reg_trie_trans. If wordnum is nonzero the state is accepting. If base is
+ * zero then the state has no children (and will be accepting).
+ *
+ * min_octet and max_octet describe the range of octets with transitions from
+ * this state. They are retained after the construction lists are discarded so
+ * the delayed Aho-Corasick construction can avoid scanning the whole octet
+ * alphabet. They are also useful when debugging the trie. Because trie
+ * construction and Aho construction are currently separate, these fields
+ * remain in the state structures for now; the call pattern could be changed
+ * in the future so this information is kept only until Aho construction.
+ */
 struct reg_trie_state_ {
-  U16 wordnum;
-  union {
-    U32                base;
-    reg_trie_trans_le* list;
-  } trans;
+    U32 wordnum;
+    U8 min_octet;
+    U8 max_octet;
+    union {
+        U32                base;
+        reg_trie_trans_le* list;
+    } trans;
 };
 
 /* info per word; indexed by wordnum */
 typedef struct {
-    U16  prev;	/* previous word in acceptance chain; eg in
+    U32  prev;	/* previous word in acceptance chain; eg in
                  * zzz|abc|ab/ after matching the chars abc, the
                  * accepted word is #2, and the previous accepted
                  * word is #3 */
@@ -1239,46 +1268,72 @@ typedef struct reg_trie_trans_    reg_trie_trans;
    should be dealt with in pregfree.
    refcount is first in both this and reg_ac_data_ to allow a space
    optimisation in Perl_regdupe.  */
+enum trie_flags {
+    TRIE_CP_INVARIANT = 1, /* codepoints invariant in UTF-8 */
+    TRIE_CP_AWKWARD = 2,   /* non-invariant codepoints <= 255 */
+    TRIE_CP_HIGH = 4,      /* codepoints > 255; absent from non-UTF-8 strings */
+    TRIE_CP_WIDE = TRIE_CP_AWKWARD | TRIE_CP_HIGH,
+    TRIE_FOLD_NATIVE = 8,
+    TRIE_FOLD_UNICODE = 16,
+    TRIE_FOLD_MASK = TRIE_FOLD_NATIVE | TRIE_FOLD_UNICODE
+};
+
 struct reg_trie_data_ {
     U32             refcount;        /* number of times this trie is referenced */
-    U32             lasttrans;       /* last valid transition element */
-    U16             *charmap;        /* byte to charid lookup array */
+    U32             lasttrans;       /* one past the transition allocation */
     reg_trie_state  *states;         /* state data */
     reg_trie_trans  *trans;          /* array of transition elements */
-    char            *bitmap;         /* stclass bitmap */
-    U16 	    *jump;           /* optional 1 indexed array of offsets before tail 
+    TRIE_JUMP_TYPE  *jump;           /* optional 1 indexed array of offsets before tail
                                         for the node following a given word. */
+    SSize_t         jump_correction; /* distance from original trie base */
     U16             *j_before_paren; /* optional 1 indexed array of parno reset data
                                         for the given jump. */
     U16             *j_after_paren;  /* optional 1 indexed array of parno reset data
                                         for the given jump. */
 
     reg_trie_wordinfo *wordinfo;     /* array of info per word */
-    U16             uniquecharcount; /* unique chars in trie (width of trans table) */
     U32             startstate;      /* initial state - used for common prefix optimisation */
     STRLEN          minlen;          /* minimum length of words in trie - build/opt only? */
     STRLEN          maxlen;          /* maximum length of words in trie - build/opt only? */
-    U32             prefixlen;       /* #chars in common prefix */
+    U32             prefixlen_octets; /* octets in common prefix */
+    U32             prefixlen_chars; /* source codepoints in common prefix */
     U32             statecount;      /* Build only - number of states in the states array 
                                         (including the unused zero state) */
     U32             wordcount;       /* Build only */
+    U8              prop_flags;      /* TRIE_CP_* and TRIE_FOLD_* bit mask */
     U16             before_paren;
     U16             after_paren;
 #ifdef DEBUGGING
     STRLEN          charcount;       /* Build only */
 #endif
 };
+
+/* A jump is stored relative to the original location of the trie.  The
+ * correction is normally zero; prefix extraction can use it to rebase the
+ * target without rewriting the jump table. */
+#define TRIE_JUMP_TARGET(node, jump, correction, word) \
+    ((node) + (jump)[word] - (correction))
+#define TRIE_JUMP_FIRST_UNABSORBED_BRANCH(node, jump, correction) \
+    ((node) + (jump)[0] - (correction))
+#define TRIE_JUMP_ROOM(trie) \
+    ((SSize_t)(trie)->jump[1] - (trie)->jump_correction)
+
+#define TRIE_CONTAINS_WIDE(trie) \
+    ((trie)->prop_flags & TRIE_CP_WIDE)
+#define TRIE_IS_FOLDED(trie) \
+    ((trie)->prop_flags & TRIE_FOLD_MASK)
+#define TRIE_RAW_INPUT_MODE(trie, utf8_target) \
+    ((utf8_target && !TRIE_IS_FOLDED(trie)) || \
+     (!utf8_target && !((trie)->prop_flags & (TRIE_CP_WIDE | TRIE_FOLD_MASK))))
 /* There is one (3 under DEBUGGING) pointers that logically belong in this
    structure, but are held outside as they need duplication on thread cloning,
    whereas the rest of the structure can be read only:
-    HV              *widecharmap;    code points > 255 to charid
 #ifdef DEBUGGING
     AV              *words;          Array of words contained in trie, for dumping
-    AV              *revcharmap;     Map of each charid back to its character representation
 #endif
 */
 
-#define TRIE_WORDS_OFFSET 2
+#define TRIE_WORDS_OFFSET 1
 
 typedef struct reg_trie_data_ reg_trie_data;
 
@@ -1292,23 +1347,37 @@ struct reg_ac_data_ {
 };
 typedef struct reg_ac_data_ reg_ac_data;
 
-/* ANY_BIT doesn't use the structure, so we can borrow it here.
-   This is simpler than refactoring all of it as wed end up with
-   three different sets... */
+#define IS_LONG_TRIE(op) (REGNODE_TYPE(op) == TRIE && REGNODE_OFF_BY_ARG(op))
+#define IS_TRIE_AC(op) ((op)==AHOCORASICK)
 
-#define TRIE_BITMAP(p)		(((reg_trie_data *)(p))->bitmap)
-#define TRIE_BITMAP_BYTE(p, c)	BITMAP_BYTE(TRIE_BITMAP(p), c)
-#define TRIE_BITMAP_SET(p, c)	(TRIE_BITMAP_BYTE(p, c) |=  ANYOF_BIT((U8)c))
-#define TRIE_BITMAP_CLEAR(p,c)	(TRIE_BITMAP_BYTE(p, c) &= ~ANYOF_BIT((U8)c))
-#define TRIE_BITMAP_TEST(p, c)	(TRIE_BITMAP_BYTE(p, c) &   ANYOF_BIT((U8)c))
+#define TRIE_DATA_SLOT(p) (REGNODE_OFF_BY_ARG(OP(p)) ? ARG2u(p) : ARG1u(p))
+#define SHORT_TRIE_DATA_SLOT_set(p, val) STMT_START {                      \
+    ARG1u_SET((p), (val));                                                 \
+} STMT_END
+#define LONG_TRIE_DATA_SLOT_set(p, val) STMT_START {                       \
+    ARG2u_SET((p), (val));                                                 \
+} STMT_END
+#define TRIE_DATA_SLOT_set(p, val) STMT_START {                            \
+    if (REGNODE_OFF_BY_ARG(OP(p)))                                         \
+        LONG_TRIE_DATA_SLOT_set((p), (val));                               \
+    else                                                                   \
+        SHORT_TRIE_DATA_SLOT_set((p), (val));                              \
+} STMT_END
+#define TRIE_NEXT(p) (REGNODE_OFF_BY_ARG(OP(p)) ? ARG1u(p) : NEXT_OFF(p))
+#define TRIE_NEXT_set(p, val) STMT_START {                                 \
+    if (REGNODE_OFF_BY_ARG(OP(p)))                                         \
+        ARG1u_SET((p), (val));                                             \
+    else                                                                   \
+        NEXT_OFF_set((p), (val));                                          \
+} STMT_END
 
-#define IS_ANYOF_TRIE(op) ((op)==TRIEC || (op)==AHOCORASICKC)
-#define IS_TRIE_AC(op) ((op)>=AHOCORASICK)
+#define TRIE_ALPHABET_SIZE 256
 
-/* these defines assume uniquecharcount is the correct variable, and state may be evaluated twice */
-#define TRIE_NODENUM(state) (((state)-1)/(trie->uniquecharcount)+1)
-#define SAFE_TRIE_NODENUM(state) ((state) ? (((state)-1)/(trie->uniquecharcount)+1) : (state))
-#define TRIE_NODEIDX(state) ((state) ? (((state)-1)*(trie->uniquecharcount)+1) : (state))
+/* These defines assume a 256-octet trie alphabet, and state may be evaluated
+ * twice. */
+#define TRIE_NODENUM(state) (((state)-1)/(TRIE_ALPHABET_SIZE)+1)
+#define SAFE_TRIE_NODENUM(state) ((state) ? (((state)-1)/(TRIE_ALPHABET_SIZE)+1) : (state))
+#define TRIE_NODEIDX(state) ((state) ? (((state)-1)*(TRIE_ALPHABET_SIZE)+1) : (state))
 
 #ifdef DEBUGGING
 #define TRIE_CHARCOUNT(trie) ((trie)->charcount)
@@ -1316,8 +1385,9 @@ typedef struct reg_ac_data_ reg_ac_data;
 #define TRIE_CHARCOUNT(trie) (trie_charcount)
 #endif
 
-#define RE_TRIE_MAXBUF_INIT 65536
+#define RE_TRIE_MAXBUF_INIT 655360
 #define RE_TRIE_MAXBUF_NAME "\022E_TRIE_MAXBUF"
+#define RE_TRIE_PREFER_LONG_NAME "\022E_TRIE_PREFER_LONG"
 #define RE_DEBUG_FLAGS "\022E_DEBUG_FLAGS"
 
 #define RE_COMPILE_RECURSION_INIT 1000

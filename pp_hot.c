@@ -209,10 +209,10 @@ Perl_rpp_free_2_(pTHX_ SV *const sv1,  SV *const sv2,
     else
         Perl_sv_free2(aTHX_ sv2, rc2);
 #else
-    PERL_UNUSED_VAR(sv1);
-    PERL_UNUSED_VAR(sv2);
-    PERL_UNUSED_VAR(rc1);
-    PERL_UNUSED_VAR(rc2);
+    PERL_UNUSED_ARG(sv1);
+    PERL_UNUSED_ARG(sv2);
+    PERL_UNUSED_ARG(rc1);
+    PERL_UNUSED_ARG(rc2);
 #endif
 }
 
@@ -529,6 +529,11 @@ PP(pp_unstack)
     if (!(PL_op->op_flags & OPf_SPECIAL)) {
         assert(CxTYPE(cx) == CXt_BLOCK || CxTYPE_is_LOOP(cx));
         CX_LEAVE_SCOPE(cx);
+        /* PL_curcop points somewhere inside this loop body.
+         * Unless it is reset, any warnings, errors, or caller()
+         * lookups inside the loop condition will display a
+         * misleading line number. */
+        PL_curcop = cx->blk_oldcop;
     }
     return NORMAL;
 }
@@ -849,6 +854,7 @@ PP(pp_multiconcat)
             U32 targ_utf8;
           stringify_targ:
             SvPV_force_nomg_nolen(targ);
+            SvNIOK_off(targ);
             targ_utf8 = SvFLAGS(targ) & SVf_UTF8;
             if (UNLIKELY(dst_utf8 & ~targ_utf8)) {
                  if (LIKELY(!IN_BYTES))
@@ -1346,6 +1352,8 @@ PP(pp_multiconcat)
                  * the PADTMP from OP_CONST. In later iterations this will
                  * be appended to */
                 nexttarg = PAD_SV(aux[PERL_MULTICONCAT_IX_PADTMP0].pad_offset);
+                if (UNLIKELY(SvMAGICAL(nexttarg)))
+                    mg_unpropagate(nexttarg);
                 nextappend = FALSE;
             }
             else {
@@ -1691,7 +1699,39 @@ PP(pp_eq)
 }
 
 
-/* also used for: pp_i_preinc() */
+PP(pp_equ)
+{
+    SV *right = PL_stack_sp[0];
+    SV *left  = PL_stack_sp[-1];
+
+    SvGETMAGIC(left);
+    if(left != right)
+        SvGETMAGIC(right);
+
+    bool lundef = !SvOK(left), rundef = !SvOK(right);
+
+    if(lundef || rundef) {
+        rpp_replace_2_IMM_NN(boolSV(lundef && rundef));
+        return NORMAL;
+    }
+
+    if (rpp_try_AMAGIC_2(eq_amg, AMGf_numeric|AMGf_no_GETMAGIC))
+        return NORMAL;
+
+    /* a copy-paste of the logic from pp_eq */
+    U32 flags_and = SvFLAGS(left) & SvFLAGS(right);
+    U32 flags_or  = SvFLAGS(left) | SvFLAGS(right);
+
+    rpp_replace_2_IMM_NN(boolSV(
+        ( (flags_and & SVf_IOK) && ((flags_or & SVf_IVisUV) ==0 ) )
+        ?    (SvIVX(left) == SvIVX(right))
+        : (flags_and & SVf_NOK)
+        ?    (SvNVX(left) == SvNVX(right))
+        : ( do_ncmp(left, right) == 0)
+    ));
+    return NORMAL;
+}
+
 
 PP(pp_preinc)
 {
@@ -1711,8 +1751,6 @@ PP(pp_preinc)
     return NORMAL;
 }
 
-
-/* also used for: pp_i_predec() */
 
 PP(pp_predec)
 {
@@ -3741,10 +3779,26 @@ PP(pp_match)
     strend = truebase + len;
     rxtainted = (RXp_ISTAINTED(prog) ||
                  (TAINT_get && (pm->op_pmflags & PMf_RETAINT)));
+    const bool targ_has_valuemagic = sv_has_valuemagic(TARG);
     TAINT_NOT;
+
+    if (rx && sv_has_valuemagic((SV *)rx))
+        mg_unpropagate((SV *)rx);
+    if (rx && targ_has_valuemagic)
+        /* REGEXP is still an SV; use it to store the value annotations from targ */
+        mg_propagate(TARG, (SV *)rx);
 
     /* We need to know this in case we fail out early - pos() must be reset */
     global = dynpm->op_pmflags & PMf_GLOBAL;
+
+    /* In the common idiom for counting the number of matches,
+     *     $count = () = $str =~ /.../g;
+     * pp_match must generate all the matches, but it doesn't need
+     * to emit them all as new mortal SVs. Instead, it can determine
+     * how many matches there were and just push that onto the stack. */
+    const bool just_count = (PL_op->op_private & OPpMATCH_JUST_COUNT) ? true : false;
+    const bool all_matches = just_count || gimme == G_LIST;
+    UV match_count = 0;
 
     /* PMdf_USED is set after a ?? matches once */
     if (
@@ -3810,7 +3864,7 @@ PP(pp_match)
          * only on the first iteration. Therefore we need to copy $' as well
          * as $&, to make the rest of the string available for captures in
          * subsequent iterations */
-        if (! (global && gimme == G_LIST))
+        if (! (global && all_matches))
             r_flags |= REXEC_COPY_SKIP_POST;
     };
 #ifdef PERL_SAWAMPERSAND
@@ -3843,7 +3897,7 @@ PP(pp_match)
 
     /* update pos */
 
-    if (global && (gimme != G_LIST || (dynpm->op_pmflags & PMf_CONTINUE))) {
+    if (global && ((!all_matches) || (dynpm->op_pmflags & PMf_CONTINUE))) {
         if (!mg)
             mg = sv_magicext_mglob(TARG);
         MgBYTEPOS_set(mg, TARG, truebase, RXp_OFFS_END(prog,0));
@@ -3853,7 +3907,7 @@ PP(pp_match)
             mg->mg_flags &= ~MGf_MINMATCH;
     }
 
-    if ((!RXp_NPARENS(prog) && !global) || gimme != G_LIST) {
+    if ((!RXp_NPARENS(prog) && !global) || !all_matches) {
         LEAVE_SCOPE(oldsave);
         if (sp_base)
             rpp_popfree_1(); /* free arg */
@@ -3861,7 +3915,7 @@ PP(pp_match)
         return NORMAL;
     }
 
-    /* push captures on stack */
+    /* push captures on stack (or just the number of them if JUST_COUNT) */
 
     {
         const I32 logical_nparens = RXp_LOGICAL_NPARENS(prog);
@@ -3885,10 +3939,16 @@ PP(pp_match)
            Frankly I probably would have done it differently, but it works so
            I am leaving it. - Yves */
         I32 logical_paren = (global && !logical_nparens) ? 1 : 0;
+
         I32 *l2p = RXp_LOGICAL_TO_PARNO(prog);
         /* This is used to step through the physical parens associated
            with a given logical paren. */
         I32 *p2l_next = RXp_PARNO_TO_LOGICAL_NEXT(prog);
+
+        if (just_count) {
+            match_count += logical_nparens + logical_paren;
+            goto carry_on;
+        }
 
         rpp_extend(logical_nparens + logical_paren);    /* devious code ... */
         EXTEND_MORTAL(logical_nparens + logical_paren); /* ... see above */
@@ -3927,11 +3987,13 @@ PP(pp_match)
                             "start=%zd, end=%zd, s=%p, strend=%p, len=%zd",
                             phys_paren, offs_start, offs_end, s, strend, len);
                     }
-                    rpp_push_1(newSVpvn_flags(s, len,
+                    SV *retsv = newSVpvn_flags(s, len,
                         (DO_UTF8(TARG))
                         ? SVf_UTF8|SVs_TEMP
-                        : SVs_TEMP)
-                    );
+                        : SVs_TEMP);
+                    if (targ_has_valuemagic)
+                        mg_propagate(TARG, retsv);
+                    rpp_push_1(retsv);
                     break;
                 } else if (!p2l_next || !(phys_paren = p2l_next[phys_paren])) {
                     /* Either logical_paren and phys_paren are the same and
@@ -3945,6 +4007,7 @@ PP(pp_match)
                 }
             }
         }
+  carry_on:
         if (global) {
             curpos = (UV)RXp_OFFS_END(prog,0);
             had_zerolen = RXp_ZERO_LEN(prog);
@@ -3952,6 +4015,8 @@ PP(pp_match)
             goto play_it_again;
         }
         LEAVE_SCOPE(oldsave);
+        if (just_count)
+            goto ret_count;
         goto ret_list;
     }
     NOT_REACHED; /* NOTREACHED */
@@ -3964,9 +4029,18 @@ PP(pp_match)
             mg->mg_len = -1;
     }
     LEAVE_SCOPE(oldsave);
-    if (gimme != G_LIST) {
+    if (just_count) {
+      ret_count:
         if (sp_base)
             rpp_popfree_1(); /* free arg */
+        rpp_push_1_norc(newSVuv(match_count));
+        return NORMAL;
+    }
+    if (!all_matches) {
+        if (sp_base)
+            rpp_popfree_1(); /* free arg */
+        else
+            rpp_extend(1);
         rpp_push_IMM(&PL_sv_no);
         return NORMAL;
     }
@@ -5646,6 +5720,8 @@ PP(pp_subst)
         if (rpm->op_pmflags & PMf_NONDESTRUCT) {
             /* From here on down we're using the copy, and leaving the original
                untouched.  */
+            if (sv_has_valuemagic(TARG))
+                mg_propagate(TARG, dstr);
             TARG = dstr;
             retval = dstr;
             goto ret;
@@ -5667,6 +5743,8 @@ PP(pp_subst)
             SvCUR_set(TARG, SvCUR(dstr));
             SvLEN_set(TARG, SvLEN(dstr));
             SvFLAGS(TARG) |= SvUTF8(dstr);
+            if (SvVMAGICAL(dstr))
+                mg_propagate(dstr, TARG);
             SvPV_set(dstr, NULL);
             goto ret_iters;
         }
@@ -6291,10 +6369,10 @@ static void
 S_croak_undefined_subroutine(pTHX_ CV const *cv, GV const *gv)
 {
     if (cv) {
-        if (CvLEXICAL(cv) && CvHASGV(cv))
+        if (CvLEXICAL(cv) && CvHasNAME(cv))
             croak("Undefined subroutine &%" SVf " called",
                        SVfARG(cv_name((CV*)cv, NULL, 0)));
-        else /* pp_entersub triggers when (CvANON(cv) || !CvHASGV(cv)) */
+        else /* pp_entersub triggers when (CvANON(cv) || !CvHasNAME(cv)) */
             croak("Undefined subroutine called");
     } else { /* pp_entersub triggers when (!cv) after `try_autoload` */
         SV *sub_name = newSV_type_mortal(SVt_PV);
@@ -6408,9 +6486,9 @@ PP(pp_entersub)
         GV* autogv;
 
         /* anonymous or undef'd function leaves us no recourse */
-        if (CvLEXICAL(cv) && CvHASGV(cv))
+        if (CvLEXICAL(cv) && CvHasNAME(cv))
             S_croak_undefined_subroutine(aTHX_ cv, NULL);
-        if (CvANON(cv) || !CvHASGV(cv))
+        if (CvANON(cv) || !CvHasNAME(cv))
             S_croak_undefined_subroutine(aTHX_ cv, NULL);
 
         /* autoloaded stub? */
@@ -6808,6 +6886,8 @@ Perl_vivify_ref(pTHX_ SV *sv, U32 to_what)
         case OPpDEREF_HV:
             SvRV_set(sv, MUTABLE_SV(newHV()));
             break;
+        default:
+            NOT_REACHED; /* NOTREACHED */
         }
         SvROK_on(sv);
         SvSETMAGIC(sv);

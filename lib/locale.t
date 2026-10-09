@@ -143,7 +143,6 @@ my %problematical_tests;
 # considered a TODO.
 my %known_bad_locales = (
                           irix => qr/ ^ (?: cs | hu | sk ) $/x,
-                          darwin => qr/ ^ lt_LT.ISO8859 /ix,
                           netbsd => qr/\bISO8859-2\b/i,
 
                           # NBSP is considered graphical in this locale, and
@@ -161,6 +160,12 @@ my %known_bad_locales = (
 # be fixed in later versions.
 if ($os eq 'cygwin' && version->new(($Config{osvers} =~ /^(\d+(?:\.\d+)+)/)[0]) le v2.4.1) {
     $known_bad_locales{'cygwin'} = qr/ ^ ps_AF /ix;
+}
+
+# Per GH #24866, older versions of Darwin have bad lt_LT locales
+my ($osmajmin) = $Config{osvers} =~ /^(\d+\.\d+)/;
+if ($^O eq 'darwin' && $osmajmin < 24) {
+    $known_bad_locales{'darwin'} = qr/ ^ lt_LT.ISO8859 /ix;
 }
 
 use Dumpvalue;

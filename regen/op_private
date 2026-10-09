@@ -191,7 +191,7 @@ use strict;
     # (i.e. in the pp() functions). Thus they must always have 4 bits
     # allocated
     $maxarg{$_} = 1 for qw(
-        binmode bless caller chdir close enterwrite eof exit fileno getc
+        binmode bless chdir close enterwrite eof exit fileno getc
         getpgrp gmtime index mkdir rand reset setpgrp sleep srand sysopen
         tell umask
     );
@@ -199,7 +199,8 @@ use strict;
     # find which ops use 0,1,2,3 or 4 bits of op_private for arg count info
 
     $args0{$_} = 1 for qw(entersub avhvswitch
-                       rv2hv aelemfastlex_store);                  # UNOPs that usurp bit 0
+                       rv2hv aelemfastlex_store
+                       ref_cmp caller);                  # UNOPs that usurp bit 0
 
     # Historically, bit ops used bit 0 to indicate 'use integer' in scope;
     # For now, ban use of bits 0..1 as an arg count, in order to detect
@@ -950,6 +951,53 @@ addbits('methstart',
 addbits('initfield',
     1 => qw(OPpINITFIELD_AV INITFIELD_AV),
     2 => qw(OPpINITFIELD_HV INITFIELD_HV),
+);
+
+# Note: Some of the the ref_cmp private flags deviate from the
+# normal naming convention because they are also used within sv.c
+# by Perl_sv_reftype_id and it would seem a bit weird for that
+# function to use a set of OPp* flags. However, maintaining a
+# separate set of flags and keeping the two sets in sync is also
+# undesirable. So this is a compromise.
+addbits('ref_cmp',
+    '0..3' => {
+        mask_def => 'OPpREF_CMP_MASK',
+        enum => [ qw(
+            1  SVrt_ARRAY   ARRAY
+            2  SVrt_HASH    HASH
+            3  SVrt_CODE    CODE
+            4  SVrt_REF     REF
+            5  SVrt_SCALAR  SCALAR
+            6  SVrt_GLOB    GLOB
+            7  SVrt_REGEXP  REGEXP
+            8  SVrt_OBJECT  OBJECT
+            9  SVrt_LVALUE  LVALUE
+            10 SVrt_IO      IO
+            11 SVrt_FORMAT  FORMAT
+            12 SVrt_VSTRING VSTRING
+            13 SVrt_INVLIST INVLIST
+            14 OPpREF_CMP_REGEXP_PKG  Regexp
+            15 OPpREF_CMP_EMPTYSTR   emptyStr
+         )],
+    },
+    4 => qw(OPpREF_CMP_L2R L2R),
+    5 => qw(OPpREF_CMP_SKIPLOGOP SKIPLOGOP),
+    6 => qw(OPpREF_CMP_AND AND),
+    7 => qw(OPpREF_CMP_NE NE),
+);
+
+addbits('match',
+    7 => qw(OPpMATCH_JUST_COUNT JUST_COUNT),
+);
+
+addbits('caller',
+    0 => qw(OPpCALLER_PKG   PKG),
+    1 => qw(OPpCALLER_FILE  FILE),
+    2 => qw(OPpCALLER_LINE  LINE),
+    3 => qw(OPpCALLER_SUB   SUB),
+    4 => qw(OPpCALLER_HINTS HINTS),
+    5 => qw(OPpCALLER_BITS  BITS),
+    6 => qw(OPpCALLER_HINTH HINTH),
 );
 
 1;

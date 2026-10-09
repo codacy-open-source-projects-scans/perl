@@ -119,6 +119,9 @@
 %type <opval> bare_statement_when
 %type <opval> bare_statement_while
 %type <opval> bare_statement_yadayada
+%type <opval> subscript_index
+%type <opval> subscript_keys
+%type <opval> subscriptable_reference
 
 %type <ival>  startsub startanonsub startanonmethod startformsub
 
@@ -763,6 +766,44 @@ bare_statement_yadayada
 		}
 	;
 
+subscript_index
+	/* Array/list access subscript: [ selector expression ]
+	 * Value of nonterminal: selector expression
+	 */
+	:	PERLY_BRACKET_OPEN
+		expr
+		PERLY_BRACKET_CLOSE
+		{
+			$$ = $expr;
+		}
+	;
+
+subscript_keys
+	/* Hash access subscript: { selector expression }
+	 * Value of nonterminal: selector expression
+	 */
+	/* { expression } */
+	:	PERLY_BRACE_OPEN
+		expr
+		PERLY_SEMICOLON
+		PERLY_BRACE_CLOSE
+		{
+			$$ = $expr;
+		}
+	;
+
+subscriptable_reference
+	/* Expression that is treated by `subscript` nonterminal as a reference
+	 * Produces: reference expression
+	 */
+	:	subscripted
+	|	term
+		ARROW
+		{
+			$$ = $term;
+		}
+	;
+
 /* Either a signatured 'sub' or 'method' keyword */
 sigsub_or_method_named
 	:	KW_SUB_named_sig
@@ -956,7 +997,6 @@ else
 	:	empty
 	|	KW_ELSE mblock
 			{
-			  ($mblock)->op_flags |= OPf_PARENS;
 			  $$ = op_scope($mblock);
 			}
 	|	KW_ELSIF PERLY_PAREN_OPEN mexpr PERLY_PAREN_CLOSE mblock else[else.recurse]
@@ -1105,10 +1145,12 @@ sigslurpelem: sigslurpsigil sigvar
         |     sigslurpsigil sigvar ASSIGNOP
                         {
 			    yyerror("A slurpy parameter may not have a default value");
+			    $$ = NULL;
                         }
         |     sigslurpsigil sigvar ASSIGNOP term
                         {
 			    yyerror("A slurpy parameter may not have a default value");
+			    $$ = NULL;
                         }
         ;
 
@@ -1221,7 +1263,12 @@ optsubbody
 
 
 /* Subroutine body (without signature) */
-subbody:	remember  PERLY_BRACE_OPEN stmtseq PERLY_BRACE_CLOSE
+subbody:	remember
+			{
+			  if (CvIsMETHOD(PL_compcv))
+			      class_method_parse_post_blockstart(PL_compcv);
+			}
+		PERLY_BRACE_OPEN stmtseq PERLY_BRACE_CLOSE
 			{
 			  if (parser->copline > (line_t)$PERLY_BRACE_OPEN)
 			      parser->copline = (line_t)$PERLY_BRACE_OPEN;
@@ -1238,7 +1285,12 @@ optsigsubbody
 	;
 
 /* Subroutine body with optional signature */
-sigsubbody:	remember optsubsignature PERLY_BRACE_OPEN 
+sigsubbody:	remember
+			{
+			  if (CvIsMETHOD(PL_compcv))
+			      class_method_parse_post_blockstart(PL_compcv);
+			}
+		optsubsignature PERLY_BRACE_OPEN 
 			{ PL_parser->sig_seen = FALSE; }
 		stmtseq PERLY_BRACE_CLOSE
 			{
@@ -1346,67 +1398,44 @@ methodname:	METHCALL0
 	;
 
 /* Some kind of subscripted expression */
-subscripted:    gelem PERLY_BRACE_OPEN expr PERLY_SEMICOLON PERLY_BRACE_CLOSE        /* *main::{something} */
+subscripted:    gelem subscript_keys[selector]        /* *main::{something} */
                         /* In this and all the hash accessors, PERLY_SEMICOLON is
                          * provided by the tokeniser */
-			{ $$ = newBINOP(OP_GELEM, 0, $gelem, scalar($expr)); }
-	|	scalar[array] PERLY_BRACKET_OPEN expr PERLY_BRACKET_CLOSE          /* $array[$element] */
-			{ $$ = newBINOP(OP_AELEM, 0, oopsAV($array), scalar($expr));
+			{ $$ = newBINOP(OP_GELEM, 0, $gelem, scalar($selector)); }
+	|	scalar[array] subscript_index[selector]          /* $array[$element] */
+			{ $$ = newBINOP(OP_AELEM, 0, oopsAV($array), scalar($selector));
 			}
-	|	term[array_reference] ARROW PERLY_BRACKET_OPEN expr PERLY_BRACKET_CLOSE      /* somearef->[$element] */
+	|	subscriptable_reference[array_reference] subscript_index[selector]    /* $ref->[..]; $foo{$bar}[..] */
 			{ $$ = newBINOP(OP_AELEM, 0,
 					ref(newAVREF($array_reference),OP_RV2AV),
-					scalar($expr));
+					scalar($selector));
 			}
-	|	subscripted[array_reference] PERLY_BRACKET_OPEN expr PERLY_BRACKET_CLOSE    /* $foo->[$bar]->[$baz] */
-			{ $$ = newBINOP(OP_AELEM, 0,
-					ref(newAVREF($array_reference),OP_RV2AV),
-					scalar($expr));
+	|	scalar[hash] subscript_keys[selector]    /* $foo{bar();} */
+			{ $$ = newBINOP(OP_HELEM, 0, oopsHV($hash), jmaybe($selector));
 			}
-	|	scalar[hash] PERLY_BRACE_OPEN expr PERLY_SEMICOLON PERLY_BRACE_CLOSE    /* $foo{bar();} */
-			{ $$ = newBINOP(OP_HELEM, 0, oopsHV($hash), jmaybe($expr));
-			}
-	|	term[hash_reference] ARROW PERLY_BRACE_OPEN expr PERLY_SEMICOLON PERLY_BRACE_CLOSE /* somehref->{bar();} */
+	|	subscriptable_reference[hash_reference] subscript_keys[selector] /* $foo->[bar]->{baz;} */
 			{ $$ = newBINOP(OP_HELEM, 0,
 					ref(newHVREF($hash_reference),OP_RV2HV),
-					jmaybe($expr)); }
-	|	subscripted[hash_reference] PERLY_BRACE_OPEN expr PERLY_SEMICOLON PERLY_BRACE_CLOSE /* $foo->[bar]->{baz;} */
-			{ $$ = newBINOP(OP_HELEM, 0,
-					ref(newHVREF($hash_reference),OP_RV2HV),
-					jmaybe($expr)); }
-	|	term[code_reference] ARROW PERLY_PAREN_OPEN PERLY_PAREN_CLOSE          /* $subref->() */
-			{ $$ = newUNOP(OP_ENTERSUB, OPf_STACKED,
-				   newCVREF(0, scalar($code_reference)));
-			  if (parser->expect == XBLOCK)
-			      parser->expect = XOPERATOR;
-			}
-	|	term[code_reference] ARROW PERLY_PAREN_OPEN expr PERLY_PAREN_CLOSE     /* $subref->(@args) */
-			{ $$ = newUNOP(OP_ENTERSUB, OPf_STACKED,
-				   op_append_elem(OP_LIST, $expr,
-				       newCVREF(0, scalar($code_reference))));
-			  if (parser->expect == XBLOCK)
-			      parser->expect = XOPERATOR;
-			}
-
-	|	subscripted[code_reference] PERLY_PAREN_OPEN expr PERLY_PAREN_CLOSE   /* $foo->{bar}->(@args) */
+					jmaybe($selector)); }
+	|	subscriptable_reference[code_reference] PERLY_PAREN_OPEN expr PERLY_PAREN_CLOSE   /* $subref->(@args); $foo->{bar}(@args) */
 			{ $$ = newUNOP(OP_ENTERSUB, OPf_STACKED,
 				   op_append_elem(OP_LIST, $expr,
 					       newCVREF(0, scalar($code_reference))));
 			  if (parser->expect == XBLOCK)
 			      parser->expect = XOPERATOR;
 			}
-	|	subscripted[code_reference] PERLY_PAREN_OPEN PERLY_PAREN_CLOSE        /* $foo->{bar}->() */
+	|	subscriptable_reference[code_reference] PERLY_PAREN_OPEN PERLY_PAREN_CLOSE   /* $subref->(); $foo->{bar}() */
 			{ $$ = newUNOP(OP_ENTERSUB, OPf_STACKED,
 				   newCVREF(0, scalar($code_reference)));
 			  if (parser->expect == XBLOCK)
 			      parser->expect = XOPERATOR;
 			}
-	|	PERLY_PAREN_OPEN expr[list] PERLY_PAREN_CLOSE PERLY_BRACKET_OPEN expr[slice] PERLY_BRACKET_CLOSE            /* list slice */
-			{ $$ = newSLICEOP(0, $slice, $list); }
-	|	QWLIST PERLY_BRACKET_OPEN expr PERLY_BRACKET_CLOSE            /* list literal slice */
-			{ $$ = newSLICEOP(0, $expr, $QWLIST); }
-	|	PERLY_PAREN_OPEN PERLY_PAREN_CLOSE PERLY_BRACKET_OPEN expr PERLY_BRACKET_CLOSE                 /* empty list slice! */
-			{ $$ = newSLICEOP(0, $expr, NULL); }
+	|	PERLY_PAREN_OPEN expr[list] PERLY_PAREN_CLOSE subscript_index[selector]            /* list slice */
+			{ $$ = newSLICEOP(0, $selector, $list); }
+	|	QWLIST subscript_index[selector]            /* list literal slice */
+			{ $$ = newSLICEOP(0, $selector, $QWLIST); }
+	|	PERLY_PAREN_OPEN PERLY_PAREN_CLOSE subscript_index[selector]                 /* empty list slice! */
+			{ $$ = newSLICEOP(0, $selector, NULL); }
     ;
 
 /* Binary operators between terms */
@@ -1591,41 +1620,41 @@ term[product]	:	termbinop
 			{ $$ = newUNOP(OP_AV2ARYLEN, 0, ref($arylen, OP_AV2ARYLEN));}
 	|       subscripted
 			{ $$ = $subscripted; }
-	|	sliceme PERLY_BRACKET_OPEN expr PERLY_BRACKET_CLOSE                     /* array slice */
+	|	sliceme subscript_index[selector]                     /* array slice */
 			{ $$ = op_prepend_elem(OP_ASLICE,
 				newOP(OP_PUSHMARK, 0),
 				    newLISTOP(OP_ASLICE, 0,
-					list($expr),
+					list($selector),
 					ref($sliceme, OP_ASLICE)));
 			  if ($$ && $sliceme)
 			      $$->op_private |=
 				  $sliceme->op_private & OPpSLICEWARNING;
 			}
-	|	kvslice PERLY_BRACKET_OPEN expr PERLY_BRACKET_CLOSE                 /* array key/value slice */
+	|	kvslice subscript_index[selector]                 /* array key/value slice */
 			{ $$ = op_prepend_elem(OP_KVASLICE,
 				newOP(OP_PUSHMARK, 0),
 				    newLISTOP(OP_KVASLICE, 0,
-					list($expr),
+					list($selector),
 					ref(oopsAV($kvslice), OP_KVASLICE)));
 			  if ($$ && $kvslice)
 			      $$->op_private |=
 				  $kvslice->op_private & OPpSLICEWARNING;
 			}
-	|	sliceme PERLY_BRACE_OPEN expr PERLY_SEMICOLON PERLY_BRACE_CLOSE                 /* @hash{@keys} */
+	|	sliceme subscript_keys[selector]                 /* @hash{@keys} */
 			{ $$ = op_prepend_elem(OP_HSLICE,
 				newOP(OP_PUSHMARK, 0),
 				    newLISTOP(OP_HSLICE, 0,
-					list($expr),
+					list($selector),
 					ref(oopsHV($sliceme), OP_HSLICE)));
 			  if ($$ && $sliceme)
 			      $$->op_private |=
 				  $sliceme->op_private & OPpSLICEWARNING;
 			}
-	|	kvslice PERLY_BRACE_OPEN expr PERLY_SEMICOLON PERLY_BRACE_CLOSE                 /* %hash{@keys} */
+	|	kvslice subscript_keys[selector]                 /* %hash{@keys} */
 			{ $$ = op_prepend_elem(OP_KVHSLICE,
 				newOP(OP_PUSHMARK, 0),
 				    newLISTOP(OP_KVHSLICE, 0,
-					list($expr),
+					list($selector),
 					ref($kvslice, OP_KVHSLICE)));
 			  if ($$ && $kvslice)
 			      $$->op_private |=

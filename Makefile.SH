@@ -55,6 +55,7 @@ true)
 
 	pldlflags="$cccdlflags"
 	static_ldflags=''
+	pwd_sans_UU="`pwd | sed 's/\/UU$//'`"
 	case "${osname}${osvers}" in
 	darwin*)
 		shrpldflags="${ldflags} -dynamiclib \
@@ -63,8 +64,9 @@ true)
 			     -current_version \
 				${revision}.${patchlevel}.${subversion}"
 		case "$osvers" in
-	        1[5-9]*|[2-9]*)
-			shrpldflags="$shrpldflags -install_name `pwd -P`/\$@ -Xlinker -headerpad_max_install_names"
+		1[5-9]*|[2-9]*)
+			pwdP="`pwd -P`"
+			shrpldflags="$shrpldflags -install_name `quote "$pwdP"`/\$@ -Xlinker -headerpad_max_install_names"
 			exeldflags="-Xlinker -headerpad_max_install_names"
 			;;
 		*)
@@ -105,7 +107,7 @@ true)
 				;;
 			esac
 			shrpldflags="$shrpldflags $ldflags $perllibs $cryptlib"
-			linklibperl="-L $archlibexp/CORE -L `pwd | sed 's/\/UU$//'` -lperl"
+			linklibperl="-L $archlibexp/CORE -L `quote "$pwd_sans_UU"` -lperl"
 			linklibperl_nonshr='-lperl_nonshr'
 			;;
 		*)
@@ -117,24 +119,17 @@ true)
 				;;
 			esac
 			shrpldflags="$shrpldflags $ldflags $perllibs $cryptlib"
-			linklibperl="-L $archlibexp/CORE -L `pwd | sed 's/\/UU$//'` -lperl"
+			linklibperl="-L $archlibexp/CORE -L `quote "$pwd_sans_UU"` -lperl"
 			linklibperl_nonshr='-lperl_nonshr'
 			;;
 		esac
 		;;
 	hpux*)
-		linklibperl="-L `pwd | sed 's/\/UU$//'` -Wl,+s -Wl,+b$archlibexp/CORE -lperl"
+		linklibperl="-L `quote "$pwd_sans_UU"` -Wl,+s -Wl,+b$archlibexp/CORE -lperl"
 		;;
 	os390*)
-            case "$use64bitall" in
-            define|true|[yY]*) shrpldflags='-Wl,LP64,dll'
-                   linklibperl='libperl.x'
-                   ;;
-            *)     shrpldflags='-Wl,XPLINK,dll'
-	           linklibperl='libperl.x'
-	           ;;
-            esac
-            ;;
+            shrpldflags='-shared'
+            linklibperl='libperl.x'
 	esac
 	case "$ldlibpthname" in
 	'') ;;
@@ -175,7 +170,7 @@ test -r $lib && export LD_PRELOAD="$lib $LD_PRELOAD"
 exec "$@"
 EOT
 		chmod 755 preload
-		ldlibpth="$ldlibpth `pwd`/preload `pwd`/$libperl"
+		ldlibpth="$ldlibpth `quote "$pwd"`/preload `quote "$pwd"`/$libperl"
 	    fi
 	    ;;
 	os390)	test -f /bin/env && ldlibpth="/bin/env $ldlibpth"
@@ -638,7 +633,7 @@ esac
 
 $spitshell >>$Makefile <<'!NO!SUBS!'
 
-perltoc_pod_prereqs = extra.pods pod/perl54311delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
+perltoc_pod_prereqs = extra.pods pod/perl5454delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
 generated_pods = pod/perltoc.pod $(perltoc_pod_prereqs)
 generated_headers = uudmap.h bitcount.h mg_data.h
 
@@ -1100,7 +1095,7 @@ $spitshell >>$Makefile <<!GROK!THIS!
 .PHONY: makeppport
 makeppport: \$(MINIPERL_EXE) \$(CONFIGPM)
 	-@for f in Makefile.PL PPPort_pm.PL RealPPPort_xs.PL ppport_h.PL; do \
-	(cd ext/Devel-PPPort && `pwd`/run.sh ../../$(MINIPERL_EXE) -I../../lib \$\$f); \
+	(cd ext/Devel-PPPort && `quote "$pwd"`/run.sh ../../$(MINIPERL_EXE) -I../../lib \$\$f); \
 	done
 
 !GROK!THIS!
@@ -1147,9 +1142,9 @@ pod/perlintern.pod: $(MINIPERL_EXE) autodoc.pl embed.fnc
 pod/perlmodlib.pod: $(MINIPERL_EXE) pod/perlmodlib.PL MANIFEST
 	$(MINIPERL) pod/perlmodlib.PL -q
 
-pod/perl54311delta.pod: pod/perldelta.pod
-	$(RMS) pod/perl54311delta.pod
-	$(LNS) perldelta.pod pod/perl54311delta.pod
+pod/perl5454delta.pod: pod/perldelta.pod
+	$(RMS) pod/perl5454delta.pod
+	$(LNS) perldelta.pod pod/perl5454delta.pod
 
 extra.pods: $(MINIPERL_EXE)
 	-@test ! -f extra.pods || rm -f `cat extra.pods`
@@ -1274,6 +1269,7 @@ CHMOD_W = chmod +w
 #	warnings.pl:	warnings.h lib/warnings.pm
 #	feature.pl:	feature.h lib/feature.pm
 #	locale.pl:	locale_table.h
+#	lock_definitions.pl: perl_lock_definitions.h
 # The correct versions should be already supplied with the perl kit,
 # in case you don't have perl available.
 # To force them to be regenerated, run
@@ -1281,7 +1277,10 @@ CHMOD_W = chmod +w
 # with your existing copy of perl
 # (make regen_headers is kept for backwards compatibility)
 
-.PHONY: regen_headers regen_all
+.PHONY: regen_headers regen-headers regen_perly regen-perly \
+	regen_keywords regen-keywords regen_invlist regen-invlist \
+	regen_charclass regen-charclass \
+	regen_meta regen-meta regen_all regen-all
 
 regen:	FORCE
 	-perl regen.pl
@@ -1291,6 +1290,16 @@ regen_headers regen-headers:	FORCE
 
 regen_meta regen-meta:  META.yml META.json
 
+# Requires Devel::Tokenizer::C 0.05 or newer in the installed Perl.
+regen_keywords regen-keywords:
+	perl regen/keywords.pl
+
+regen_invlist regen-invlist:
+	$(RUN_PERL) regen/mk_invlists.pl
+
+regen_charclass regen-charclass:
+	$(RUN_PERL) regen/regcharclass.pl
+
 META.yml:   FORCE
 	PATH="`pwd`:${PATH}" PERL5LIB="`pwd`/lib" $(RUN_PERL) Porting/makemeta -y
 
@@ -1298,7 +1307,22 @@ META.json:   FORCE
 	PATH="`pwd`:${PATH}" PERL5LIB="`pwd`/lib" $(RUN_PERL) Porting/makemeta -j
 
 
-regen_all regen-all: regen regen_meta
+regen_all regen-all:
+	@echo "If this fails, run the regeneration steps one at a time:"
+	@echo "  make regen"
+	@echo "  make regen_perly"
+	@echo "  make regen_keywords"
+	@echo "  make regen_invlist"
+	@echo "  make regen_charclass"
+	@echo "  make regen_meta"
+	$(MAKE)
+	$(MAKE) regen
+	$(MAKE) regen_perly
+	$(MAKE) regen_keywords
+	$(MAKE) regen_invlist
+	$(MAKE) regen_charclass
+	$(MAKE) regen_meta
+	$(MAKE)
 
 .PHONY:	manisort manicheck
 
@@ -1500,15 +1524,18 @@ cscope.out cscope: $(c) $(h)
 
 # $(FIRSTMAKEFILE) is generated by the makedepend script.
 # The makedepend script uses the makedependfile script.
-
-# Need to unset MAKEDEPEND during recursion to go out of loop.
-# The README below ensures that the dependency list is never empty and
-# that when MAKEDEPEND is empty $(FIRSTMAKEFILE) doesn't need rebuilding.
+#
+# We need to unset MAKEDEPEND during recursion to prevent an infinite loop.
+# The shell guard prevents a newer README from making that recursive invocation
+# call itself forever.
+# Note, this isn't particularly obvious: make itself adds $(FIRSTMAKEFILE) as
+# a dependency (because make just read it) without it being the default nor
+# mentioned on the command-line
 
 MAKEDEPEND = Makefile makedependfile makedepend
 
 $(FIRSTMAKEFILE):	README $(MAKEDEPEND)
-	$(MAKE) depend MAKEDEPEND=
+	@test -z "$(MAKEDEPEND)" || $(MAKE) depend MAKEDEPEND=
 !NO!SUBS!
 
 # Targets generating the underlying file from the scripts defined in SH variable.

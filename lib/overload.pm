@@ -1,9 +1,8 @@
-package overload;
+package overload 1.42;
 
-use strict;
+use v5.42;
+use warnings ();
 no strict 'refs';
-
-our $VERSION = '1.40';
 
 our %ops = (
     with_assign         => "+ - * / % ** << >> x .",
@@ -43,12 +42,19 @@ sub OVERLOAD {
             warnings::warnif("overload arg '$_' is invalid")
                 unless exists $ops_seen{$_};
             $sub = $arg{$_};
+            my $sym = $package . "::(" . $_;
             if (not ref $sub) {
-                $ {$package . "::(" . $_} = $sub;
+                ${$sym} = $sub;
                 $sub = \&nil;
             }
+            if (defined &$sym
+                && (\&$sym != \&nil ||
+                    defined $$sym && $$sym ne "")) {
+                warnings::warnif("redefine", "overload '$_' for $package redefined");
+            }
             #print STDERR "Setting '$ {'package'}::\cO$_' to \\&'$sub'.\n";
-            *{$package . "::(" . $_} = \&{ $sub };
+            no warnings 'redefine';
+            *$sym = \&{ $sub };
         }
     }
 }
@@ -99,7 +105,6 @@ sub OverloadedStringify {
 sub Method {
     my $package = shift;
     if (ref $package) {
-        no warnings 'experimental::builtin';
         $package = builtin::blessed($package);
         return undef if !defined $package;
     }
@@ -577,6 +582,23 @@ then it will not be called again - avoiding infinite recursion.
     nomethod  fallback  =
 
 See L</Special Keys for C<use overload>>.
+
+=back
+
+There are also some operators that perl does not allow to be directly
+overloaded.
+
+=over 5
+
+=item * I<Undef-aware Equality>
+
+    ===  !==  equ  neu
+
+The four undef-aware equality operators do not allow specific overloading.
+They are internally implemented in terms of a C<defined> test (which itself
+cannot be overloaded), combined with a following call to the base
+non undef-aware versions of those operators. This call will use any
+overloading behaviour defined by those regular operators.
 
 =back
 

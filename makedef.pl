@@ -381,9 +381,11 @@ unless ($define{'USE_ITHREADS'}) {
 		    PL_dollarzero_mutex
 		    PL_env_mutex
                     PL_env_mutex_depth
+                    PL_env_mutex_readers
                     PL_hints_mutex
 		    PL_locale_mutex
 		    PL_locale_mutex_depth
+		    PL_locale_mutex_readers
 		    PL_my_ctx_mutex
 		    PL_perlio_mutex
 		    PL_stashpad
@@ -416,6 +418,32 @@ unless ($define{USE_PL_CUR_LC_ALL})
 {
     ++$skip{$_} foreach qw(
         PL_cur_LC_ALL
+    );
+}
+
+unless ($define{USE_LOCALE} && (     $define{WIN32}
+                                || ! $define{USE_THREAD_SAFE_LOCALE}))
+{
+    ++$skip{$_} foreach qw(
+        PL_perl_controls_locale
+    );
+}
+
+unless ($define{EMULATE_THREAD_SAFE_LOCALES})
+{
+    ++$skip{$_} foreach qw(
+        PL_restore_locale
+        PL_restore_locale_depth
+        PL_NUMERIC_toggle_depth
+        Perl_category_lock
+        Perl_category_unlock
+    );
+}
+
+unless ($define{USE_PERL_SWITCH_LOCALE_CONTEXT})
+{
+    ++$skip{$_} foreach qw(
+        Perl_switch_locale_context
     );
 }
 
@@ -639,6 +667,14 @@ unless ($Config{d_mbrtowc}) {
 
 unless ($Config{d_wcrtomb}) {
     ++$skip{PL_wcrtomb_ps};
+}
+
+unless ($Config{d_double_has_inf}) {
+    ++$skip{PL_inf};
+}
+
+unless ($Config{d_double_has_nan}) {
+    ++$skip{PL_nan};
 }
 
 ###############################################################################
@@ -1081,7 +1117,7 @@ elsif (PLATFORM eq 'os2') {
 		 ));
 }
 
-if ($define{USE_ITHREADS} && $define{I_PTHREAD}) {
+if ($define{USE_ITHREADS} && $Config{i_pthread}) {
     try_symbols(qw(
 		      perl_tsa_mutex_lock
 		      perl_tsa_mutex_unlock

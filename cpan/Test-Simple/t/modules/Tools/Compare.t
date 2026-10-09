@@ -154,12 +154,12 @@ subtest is => sub {
 
             fail_table(
                 header => [qw/GOT OP CHECK/],
-                rows   => [["\N{U+1}\N{U+2}\N{U+3}", 'eq', "\N{U+1}\N{U+2}\N{U+4}"]],
+                rows   => [["\x{01}\x{02}\x{03}", 'eq', "\x{01}\x{02}\x{04}"]],
             );
 
             fail_table(
                 header => [qw/PATH GOT OP CHECK/],
-                rows   => [['$*', "\N{U+1}\N{U+2}\N{U+3}", 'eq', "\N{U+1}\N{U+2}\N{U+4}"]],
+                rows   => [['$*', "\x{01}\x{02}\x{03}", 'eq', "\x{01}\x{02}\x{04}"]],
             );
 
             event Ok => sub {
@@ -1779,6 +1779,8 @@ subtest all_items_on_bag => sub {
                     ['[0]', 'a',                '=~', "$regx", $lines[0]],
                     ['[1]', 'aa',               '=~', "$regx", $lines[0]],
                     ['[2]', 'aaa',              '=~', "$regx", $lines[0]],
+                    ['[0]', 'a',                '!exists', '<DOES NOT EXIST>', ''],
+                    ['[2]', 'aaa',              '!exists', '<DOES NOT EXIST>', ''],
                 ],
             );
         },

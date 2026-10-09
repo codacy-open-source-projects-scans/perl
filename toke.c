@@ -4537,7 +4537,7 @@ S_is_existing_identifier(pTHX_ char *s, Size_t len, char sigil, bool is_utf8)
 
     char save_sigil = s[0];
     s[0] = sigil;
-    PADOFFSET slot = pad_findmy_pv(s, 0);
+    PADOFFSET slot = pad_findmy_pvn(s, len, 0);
     s[0] = save_sigil;
 
     return   slot != NOT_IN_PAD
@@ -4581,11 +4581,11 @@ S_intuit_more(pTHX_ char *s, char *e,
 {
     PERL_ARGS_ASSERT_INTUIT_MORE;
 
-    /* This function has been mostly untouched for a long time, due to its,
+    /* This function has been mostly untouched for a long time, due to its
      * 'scariness', and lack of comments.  khw has gone through and done some
      * cleanup, while finding various instances of problematic behavior.
      * Rather than change this base-level function immediately, khw has added
-     * commentary to those areas. 
+     * commentary to those areas.
      *
      * khw: $0 in square brackets is never going to mean the expansion of $0.
      * How could that help in calculating a subscript?  And one would never
@@ -4597,6 +4597,10 @@ S_intuit_more(pTHX_ char *s, char *e,
     /* If recursed within brackets, there is more to the expression */
     if (PL_lex_brackets)
         return TRUE;
+
+    if (e <= s) {
+        return false;
+    }
 
     /* If begins with '->' ... */
     if (s[0] == '-' && s[1] == '>') {
@@ -4634,10 +4638,7 @@ S_intuit_more(pTHX_ char *s, char *e,
      * written, and regcurly never required a comma, as in {0}.  Probably it is
      * ok as-is */
     if (s[0] == '{') {
-        if (regcurly(s, e, NULL)) {
-            return FALSE;
-        }
-        return TRUE;
+        return ! regcurly(s, e, NULL);
     }
 
     /* Here is '[': maybe we have a character class.  Examine the guts */
@@ -4656,7 +4657,9 @@ S_intuit_more(pTHX_ char *s, char *e,
      * variables, so in that case it MUST be a character class.)  If the
      * situation is reversed, it is more likely to be (or must be) a
      * subscript.  */
-    if (caller_context == FROM_DOLLAR) {
+    if (   caller_context == FROM_DOLLAR
+        || (caller_context == FROM_INTERDEPENDMAYBE && caller_s[0] == '$'))
+    {
         assert (caller_s);
 
         /* See if there is a known scalar for the input identifier */
@@ -4689,26 +4692,32 @@ S_intuit_more(pTHX_ char *s, char *e,
             /* Here have both an array and a scalar with the same name.  Drop
              * down to use the heuristics to try to intuit which is meant */
         }
+     /* else {
+            // Here, there could be undeclared variables.  But khw believes if
+            // one is known to exist but not the other, it is more likely that
+            // the other doesn't exist, so we can factor this in to the
+            // heuristics below
+        }
+      */
     }
 
-    /* Find matching ']'.  khw: This means any s[1] below is guaranteed to
-     * exist */
-    const char * const send = (char *) memchr(s, ']', e - s);
-    if (! send)		/* has to be an expression */
-        return TRUE;
-
     /* Below here, the heuristics start.  One idea from alh is, given 'use
-     * 5.43.x', that for all digits, that if we have to resort to heuristics,
+     * 5.45.x', that for all digits, that if we have to resort to heuristics,
      * we instead raise an error with an explanation of how to make it
      * unambiguous: ${foo}[123] */
 
     /* If the construct consists entirely of one or two digits, call it a
      * subscript.
      *
-     * khw: No one writes 03 to mean 3.  Any string of digits beginning with
-     * '0' is likely to be a charclass, including length 2 ones. */
-    if (isDIGIT(s[0]) && send - s <= 2 && (send - s == 1 || (isDIGIT(s[1])))) {
-        return TRUE;
+     * khw: A string of digits beginning with 0 would be considered octal.  If
+     * that string contains 8 or 9, it has to be a character class.  And if
+     * it's exactly two digits long, it would would be very unlikely for
+     * someone to use octal to spell a number from 1-7, so would be a
+     * character class */
+    if (isDIGIT(s[0]) && (   (e - s >= 2 &&                  s[1] == ']')
+                          || (e - s >= 3 && isDIGIT(s[1]) && s[2] == ']')))
+    {
+        return true;
     }
 
     /* this is terrifying, and it mostly works.  See GH #16478.
@@ -4733,7 +4742,7 @@ S_intuit_more(pTHX_ char *s, char *e,
     }
 
     /* Unsigned version of current character */
-    unsigned char un_char = 0;
+    U8 un_char = 0;
 
     /* Keep track of how many multiple occurrences of the same character there
      * are */
@@ -4748,14 +4757,29 @@ S_intuit_more(pTHX_ char *s, char *e,
      * \xC2 or \xC3.  The heuristics below will count those as repeated bytes,
      * and thus lean more towards this being a character class than when not
      * in UTF-8. */
-    bool first_time = true;
-    for (; s < send; s++, first_time = false) {
-        unsigned char prev_un_char = un_char;
-        un_char = (unsigned char) s[0];
+    const char * start = s;
+    while (s < e) {
+        U8 prev_un_char = un_char;
+        un_char = (U8) s[0];
         switch (s[0]) {
+
+          case ']':     /* Terminates the construct */
+
+            /* khw: This has the bug that it could be inside a \Q, so
+             * shouldn't actually terminate the construct.
+             *
+             * People on #irc have suggested things that I think boil
+             * down to: under 'use 5.45.x', output a warning like existing
+             * warnings for similar situations "Ambiguous use of [], resolved
+             * as ..."  Perhaps suppress the message if all (or maybe almost
+             * all) the evidence points to the same outcome.  This would
+             * involve two weight variables */
+            return (weight < 0);
+
           case '@':
           case '&':
           case '$':
+           {
 
             /* Each additional occurrence of one of these three strongly
              * indicates it is a subscript */
@@ -4774,38 +4798,202 @@ S_intuit_more(pTHX_ char *s, char *e,
              * the chance of there being a pattern with that many capture
              * groups goes rapidly down.
              *
-             * khw: Using \w here misses the possibility of lots of other
-             * syntaxes of variables, like $::foo or ${foo}, that scan_ident
-             * looks for.
-             *
+             * khw: $z-a is definitely a subscript
              */
-            if (isWORDCHAR_lazy_if_safe(s+1, PL_bufend, UTF)) {
-                Size_t len;
 
-                /* khw: where did the magic number 4 come from?.  This buffer
-                 * was 4 times as large as tokenbuf in 1997, and had not
-                 * changed since the code was first added */
-                char tmpbuf[ C_ARRAY_LENGTH(PL_tokenbuf) * 4 ];
+            /* Place the sigil in tmpbuf[0], hence the identifier starts in
+             * tmpbuf[1] */
+            char tmpbuf[ C_ARRAY_LENGTH(PL_tokenbuf) + 1 ];
+            tmpbuf[0] = s[0];
 
-                if (! scan_ident(s, tmpbuf, C_ARRAY_END(tmpbuf), CHECK_ONLY))
-                {
-                    /* An illegal identifier means this can't be a subscript;
-                     * it's an error or it could be a charclass */
+            /* scan_ident returns NULL if the input looks like an identifier
+             * that is illegal, e.g., it is too long or is like $001. */
+            char * s_after_ident = scan_ident(s, tmpbuf + 1,
+                                              C_ARRAY_END(tmpbuf),
+                                              CHECK_ONLY);
+            if (s_after_ident == NULL) {
+
+                /* An illegal identifier means this can't be a subscript;
+                 * it's an error or it could be a charclass */
+                return false;
+            }
+
+            /* Here, is a syntactically valid identifier */
+            Size_t len = strlen(tmpbuf + 1);
+
+            /* If it doesn't look like an identifier at all, scan_ident will
+             * set tmpbuf[1] to NUL.  This is either an error or a character
+             * class. */
+            if (len == 0) {
+                return false;
+            }
+
+            /* If there is extra stuff in the source, like braces, it means
+             * this is almost definitely intended to be an identifier */
+            const bool is_embraced = memchr(s, '{', s_after_ident - s);
+
+            const bool is_multichar = len > 1;
+
+            /* Numeric identifier names are special */
+            if (isDIGIT_A(tmpbuf[1+0])) {
+
+                /* &41 and &6b are illegal subroutine names so is an error or
+                 * a charclass */
+                if (tmpbuf[0] == '&') {
                     return false;
                 }
 
-                len = strlen(tmpbuf);
-
-                /* khw: This only looks at global variables; lexicals came
-                 * later, and this hasn't been updated.  Ouch!! */
-                if (   len > 1
-                    && gv_fetchpvn_flags(tmpbuf,
-                                         len,
-                                         UTF ? SVf_UTF8 : 0,
-                                         SVt_PV))
+                /* scan_ident will stop at the first non-digit, which is
+                 * pointed to by 's_after_indent'.  If that is a \w, we would
+                 * have something like $456x, which is an illegal identifer,
+                 * so is an error or a charclass */
+                if ( ! is_embraced
+                    && isWORDCHAR_lazy_if_safe(s_after_ident,
+                                               PL_bufend, UTF))
                 {
-                    weight -= 100;
+                    return false;
+                }
 
+                /* We don't get here if this potential identifier starts with
+                 * leading zeros, due to the logic in scan_ident. */
+                assert(len == 1 || tmpbuf[1+0] != '0');
+
+                /* The chances are vanishingly small that someone is going to
+                 * want [$0] to expand to the program's name in a character
+                 * class -- this would mean to match on any character in the
+                 * its file path.  But, what would the program's name be doing
+                 * as part of a subscript either?  The only likely scenario is
+                 * that this is meant to be a charclass matching either '$' or
+                 * '0'.  */
+                if (tmpbuf[1+0] == '0') {
+                    return false;
+                }
+
+                /* Here it is either something like $1 which is supposed to
+                 * match either dollar or 1, or it is supposed to expand to
+                 * what is in $1 left over from a capturing group from the
+                 * previous pattern match.  In the latter case, it could be
+                 * either a part of wanting to calculate a subscript, or to
+                 * use as the contents of as part of the character class.
+                 * Larger (unembraced) numbers are much less likely to have
+                 * had capturing groups, so they lean more towards a
+                 * charclass.  weight 100 is what this function has
+                 * traditionally used for len>1; khw thinks there is no bias
+                 * one way or the other for length 1 ones; but has chosen 100
+                 * for embraced identifiers
+                 *
+                 * XXX long enough identifiers could probably return false
+                 * immediately here, rather than using weights. */
+                if (is_embraced || is_multichar) {
+                    weight -= 100;
+                }
+            }   /* Below is not a digit */
+            else if (   tmpbuf[0] == '$'
+                     && len == 1    /* 'len' doesn't include the sigil */
+                     && memCHRs("!\"%&'()*+,-./:;<=>?@[\\]^_`|~$",
+                                tmpbuf[1+0]))
+            {
+                /* Here we have what could be a punctuation variable.  (Note
+                 * '[' is deprecated, but unlikely to ever be removed.)  If
+                 * the next character after it is a closing bracket, it makes
+                 * it quite likely to be that, and hence a subscript.  If it
+                 * is something else, more mildly a subscript */
+                if (/*{*/ memCHRs("])} =", tmpbuf[1+1]))
+                    weight -= 10;
+                else
+                    weight -= 1;
+            }
+            else if (isWORDCHAR_lazy_if_safe(tmpbuf + 1, tmpbuf + 1 + len,
+                                             UTF))
+            {
+
+                /* See if there is a known identifier of the given kind.  For
+                 * arrays, this might also be a reference to one of its
+                 * elements.   XXX Maybe the latter should require a following
+                 * '[' or '->[' */
+                const bool is_known =
+                       is_existing_identifier(tmpbuf, len + 1, tmpbuf[0], UTF)
+                   || (   tmpbuf[0] == '$'
+                       && is_existing_identifier(tmpbuf, len + 1, '@', UTF));
+
+                /* Under strict, an unknown variable means an error or a
+                 * character class */
+                if (under_strict_vars && ! is_known) {
+                    return false;
+                }
+
+                /* Look at all possible combinations of the conditions.
+                 *
+                 * This code takes the stance that it could easily be
+                 * coincidence that a single character name coincides with a
+                 * known identifier.  But much less so for two or more
+                 * characters. */
+
+#               define embraced    1 << 0
+#               define unembraced  0
+#               define unknown     0
+#               define known       1 << 1
+#               define len1        0
+#               define multi       1 << 2
+
+                const unsigned switch_on = (is_embraced << 0)
+                                         | (is_known << 1)
+                                         | (is_multichar << 2);
+                switch (switch_on) {
+                  case len1 | unknown | unembraced:
+                    /* We don't infer anything for something like [...$n...]
+                     * where n is not a known identifier.
+                     *
+                     * khw: Our test suite contains several constructs like
+                     * [$A-Z].  I would argue that if the next character is a
+                     * '-' followed by an alpha, that would make it much more
+                     * likely to be a charclass.  It would only make sense to
+                     * be an expression if that alpha string is a bareword
+                     * with meaning; something like [$A-ord] */
+                    break;
+
+                  case len1 | unknown | embraced:
+
+                    /* Bias something like [...${n}...] slightly towards n
+                     * meaning an identifier, even though n isn't known to be
+                     * one. */
+                    weight -= 5;
+                    break;
+
+                  case len1 | known | unembraced:
+
+                    /* Bias something like [...$n...] where n is a known
+                     * identifier, slightly towards n meaning an identifier */
+                    weight -= 10;
+                    break;
+
+                  case len1 | known | embraced:
+
+                    /* Bias something like [...${n}...] where n is a known
+                     * identifier, fairly strongly towards n meaning an
+                     * identifier */
+                    weight -= 50;
+                    break;
+
+                  case multi | unknown | unembraced:
+
+                    /* We don't infer anything for something like [...$ab...]
+                     * where ab is not a known identifier. */
+                    break;
+
+                  case multi | unknown | embraced:
+
+                    /* Bias something like [...${ab}...] where there is no
+                     * known identifier named ab, slightly towards ab meaning
+                     * an identifier */
+                    weight -= 10;
+                    break;
+
+                  case multi | known | unembraced:
+
+                    /* Bias something like [...$ab...] where ab is a known
+                     * identifier, strongly towards ab meaning an identifier.
+                     * */
                     /* khw: Below we keep track of repeated characters;  People
                      * rarely say qr/[aba]/, as the second a is pointless.
                      * (Some do it though as a mnemonic that is meaningful to
@@ -4816,36 +5004,35 @@ S_intuit_more(pTHX_ char *s, char *e,
                      * should advance past it.  Suppose it is a hash element,
                      * like $subscripts{$which}.  We should advance past the
                      * braces and key */
+                    weight -= 100;
+                    break;
+
+                  case multi | known | embraced:
+
+                    /* Bias something like [...${ab}...] where ab is a known
+                     * identifier, strongly towards ab meaning an identifier.
+                     * */
+                    weight -= 100;
+                    break;
+
+                  default:
+                    croak("panic: Unexpected case %x in switch in"
+                          " %s, line %" LINE_Tf,
+                          switch_on, __FILE__, (line_t) __LINE__);
                 }
-                else {
-                    /* Not a multi-char identifier already known in the
-                     * program; is somewhat likely to be a subscript.
-                     *
-                     * khw: Our test suite contains several constructs like
-                     * [$A-Z].  Excluding length 1 identifiers in the
-                     * conditional above means such are much less likely to be
-                     * mistaken for subscripts.  I would argue that if the next
-                     * character is a '-' followed by an alpha, that would make
-                     * it much more likely to be a charclass.  It would only
-                     * make sense to be an expression if that alpha string is a
-                     * bareword with meaning; something like [$A-ord] */
-                    weight -= 10;
-                }
+
+#               undef embraced
+#               undef unembraced
+#               undef unknown
+#               undef known
+#               undef len1
+#               undef multi
+
             }
-            else if (   s[0] == '$'
-                     && s[1]
-                     && memCHRs("[#!%*<>()-=", s[1]))
-            {
-                /* Here we have what could be a punctuation variable.  If the
-                 * next character after it is a closing bracket, it makes it
-                 * quite likely to be that, and hence a subscript.  If it is
-                 * something else, more mildly a subscript */
-                if (/*{*/ memCHRs("])} =", s[2]))
-                    weight -= 10;
-                else
-                    weight -= 1;
-            }
+         /* else {  We don't weight any other case }*/
+
             break;
+           }
 
           /* khw:  [:blank:] strongly indicates a charclass */
           /* khw: Z-A definitely subscript
@@ -4856,66 +5043,93 @@ S_intuit_more(pTHX_ char *s, char *e,
            *      \? must be subscript for things like \d, but not \a.
            */
 
-
           case '\\':
-            if (s[1]) {
-                if (memCHRs("wds]", s[1])) {
-                    weight += 100;  /* \w \d \s => strongly charclass */
-                    /* khw: \] can't happen, as any ']' is beyond our search.
-                     * Why not \W \D \S \h \v, etc as well?  Should they have
-                     * the same weights as \w \d \s or should all or some be
-                     * in the 'abcfnrtvx' below? */
-                } else if (seen[(U8)'\''] || seen[(U8)'"']) {
-                    weight += 1;
-                    /* khw: This is problematic.  Enough so, that I misread
-                     * it, and added a wrong comment about what it does in
-                     * 57ae1f3a8e669082e3d5ec6a8cdffbdc39d87bee.  Note that it
-                     * doesn't look at the current character.  What it
-                     * actually does is: if any quote has been seen in the
-                     * parse, don't do the rest of the else's below, but for
-                     * every subsequent backslashed character encountered
-                     * (except \0 \w \s \d), increment the weight to lean a
-                     * bit more towards being a charclass.  That means that
-                     * every backslash sequence following the first occurrence
-                     * of a quote increments the weight regardless of what the
-                     * sequence is.  Again, \0 \w \d and \s are not controlled
-                     * by this else, so they change the weight by a lot more.
-                     * But what makes them so special that they aren't subject
-                     * to this.  Any why does having a quote change the
-                     * behavior from then on.  And why only backslashed
-                     * sequences get this treatment?  This code has been
-                     * unchanged since this function was added in 1993.  I
-                     * don't get it.  Instead, it does seem to me that it is
-                     * especially unlikely to repeat a quote in a charclass,
-                     * but that having just a single quote is indicative of a
-                     * charclass, and having pairs of quotes is indicative of
-                     * a subscript.  Similarly for things that could indicate
-                     * nesting of braces or parens. */
-                }
-                else if (memCHRs("abcfnrtvx", s[1]))
-                    weight += 40;   /* \n, etc => charclass */
-                    /* khw: Why not \e etc as well? */
-                else if (isDIGIT(s[1])) {
-                    weight += 40;   /* \123 => charclass */
-                    while (s[1] && isDIGIT(s[1]))
-                        s++;
-                }
 
-                /* khw: There are lots more possible escape sequences.  Some,
-                 * like \A,\z have no special meaning to charclasses, so might
-                 * indicate a subscript, but I don't know what they would be
-                 * doing there either.  Some have been added to the language
-                 * after this code was written, but no one thought to, or
-                 * could wade through this function, to add them.  Things like
-                 * \p{} for properties, \N and \N{}, for example.
-                 *
-                 * It's problematic that \a is treated as plain 'a' for
-                 * purposes of the 'seen' array.  Whatever is matched by these
-                 * backslashed sequences should not be added to 'seen'.  That
-                 * includes the backslash. */
+            if (s[1] == '\\') {
+                /* Escaped backslash is treated as a single literal */
+                s++;
+                break;
             }
-            else /* \ followed by NUL strongly indicates character class */
+
+            if (s[1] == '\0') {
+                /* \ followed by NUL strongly indicates character class */
                 weight += 100;
+                break;
+            }
+
+            if (s[1] == ']') {
+                /* The intent of the code was to do this:
+                 *      weight += 100;  // ] strongly charclass
+                 * But, due to a bug in setting up the loop terminating
+                 * condition, a ']' would never occur.  That bug was fixed so
+                 * late in the development cycle that we didn't want to
+                 * possibly break anything, so this is commented out to retain
+                 * previous (unintended) behavior */
+                break;
+            }
+
+            if (memCHRs("wds", s[1])) {
+                weight += 100;  /* \w \d \s => strongly charclass */
+                /* khw:
+                 * Should \W \D \S have the same weights as \w \d \s or should
+                 * all or some be in the abcfnrtvx below?  Why not \h etc as
+                 * well? \v is below, adding 40; \h should add at least that
+                 * much */
+                break;
+            }
+
+            if (seen[(U8)'\''] || seen[(U8)'"']) {
+                weight += 1;
+                /* khw: This is problematic.  Enough so, that I misread it,
+                 * and added a wrong comment about what it does in
+                 * 57ae1f3a8e669082e3d5ec6a8cdffbdc39d87bee.  Note that it
+                 * doesn't look at the current character.  What it actually
+                 * does is: if any quote has been seen in the parse, don't do
+                 * the rest of the else's below, but for every subsequent
+                 * backslashed character encountered (except \0 \w \s \d),
+                 * increment the weight to lean a bit more towards being a
+                 * charclass.  That means that every backslash sequence
+                 * following the first occurrence of a quote increments the
+                 * weight regardless of what the sequence is.  Again, \0 \w \d
+                 * and \s are not controlled by this else, so they change the
+                 * weight by a lot more.  But what makes them so special that
+                 * they aren't subject to this.  Any why does having a quote
+                 * change the behavior from then on.  And why only backslashed
+                 * sequences get this treatment?  This code has been unchanged
+                 * since this function was added in 1993.  I don't get it.
+                 * Instead, it does seem to me that it is especially unlikely
+                 * to repeat a quote in a charclass, but that having just a
+                 * single quote is indicative of a charclass, and having pairs
+                 * of quotes is indicative of a subscript.  Similarly for
+                 * things that could indicate nesting of braces or parens. */
+                break;
+            }
+
+            if (memCHRs("abcfnrtvx", s[1])) {
+                weight += 40;   /* \n, etc => charclass */
+                    /* This is missing \e; could use isMNEMONIC_CNTRL; others
+                     * are missing from perlrebackslash */
+                break;
+            }
+
+            if (isDIGIT(s[1])) {
+                weight += 40;   /* \123 => charclass */
+                while (s < e - 1 && isDIGIT(s[1]))
+                    s++;
+            }
+
+            /* khw: There are lots more possible escape sequences.  Some, like
+             * \A,\z have no special meaning to charclasses, so might indicate
+             * a subscript, but I don't know what they would be doing there
+             * either.  Some have been added to the language after this code
+             * was written, but no one thought to, or could wade through this
+             * function, to add them.  Things like \p{} for properties, \N and
+             * \N{}, for example.
+             *
+             * It's problematic that \a is treated as plain 'a' for purposes
+             * of the 'seen' array.  Whatever is matched by these backslashed
+             * sequences should not be added to 'seen'.  That includes the
+             * backslash. */
             break;
 
           case '-':
@@ -4927,30 +5141,30 @@ S_intuit_more(pTHX_ char *s, char *e,
             if (s[1] == '\\')
                 weight += 50;
 
-            /* If it is something like 'a-' or '0-', it is more likely to
-             * be a character class. '!' is the first ASCII graphic, so '!-'
-             * would be the start of a range of graphics. */
-            if (! first_time && memCHRs("aA01! ", prev_un_char))
+            /* If it is something like 'a-' or '0-', it is more likely to be a
+             * character class. '!' is the first ASCII graphic, so '!-' would
+             * be the start of a range of graphics. */
+            if (s > start && memCHRs("aA01! ", prev_un_char))
                 weight += 30;
 
-            /* If it is something like '-Z' or '-7' (for octal) or '-9' it
-             * is more likely to be a character class. '~' is the final ASCII
+            /* If it is something like '-Z' or '-7' (for octal) or '-9' it is
+             * more likely to be a character class. '~' is the final ASCII
              * graphic, so '-~' would be the end of a range of graphics.
              *
              * khw: Having [-z] really doesn't imply what the comments above
-             * indicate, so this should only be tested when '! first_time' */
+             * indicate, so this should only be tested when s > start */
             if (memCHRs("zZ79~", s[1]))
                 weight += 30;
 
-            /* If it is something like -1 or -$foo, it is more likely to be a
-             * subscript.  */
-            if (first_time && (isDIGIT(s[1]) || s[1] == '$')) {
+            /* If it is something like -1 or -$foo, it is more likely to be
+             * a subscript.  */
+            if (s == start && (isDIGIT(s[1]) || s[1] == '$')) {
                 weight -= 5;	/* cope with negative subscript */
             }
             break;
 
           default:
-            if (  (first_time || (  ! isWORDCHAR(prev_un_char)
+            if (  (s == start || (  ! isWORDCHAR(prev_un_char)
                                   &&  prev_un_char != '$'
                                   &&  prev_un_char != '@'
                                   &&  prev_un_char != '&'))
@@ -4978,12 +5192,12 @@ S_intuit_more(pTHX_ char *s, char *e,
                  * bugs have surfaced since indicates this whole thing doesn't
                  * get applied very much */
                 char *d = s;
-                while (isALPHA(s[0]))
+                while (s < e - 1 && isALPHA(s[1]))
                     s++;
 
                 /* If those alphas spell a keyword, it's almost certainly not a
                  * character class */
-                if (keyword(d, s - d, 0))
+                if (keyword(d, s + 1 - d, 0))
                     weight -= 150;
 
                 /* khw: Barewords could also be subroutine calls, and these
@@ -4996,7 +5210,7 @@ S_intuit_more(pTHX_ char *s, char *e,
 
             /* Consecutive chars like [...12...] and [...ab...] are presumed
              * more likely to be character classes */
-            if (    ! first_time
+            if (    s > start
                 && (   NATIVE_TO_LATIN1(un_char)
                     == NATIVE_TO_LATIN1(prev_un_char) + 1))
             {
@@ -5029,16 +5243,10 @@ S_intuit_more(pTHX_ char *s, char *e,
          * repeated characters.  There may be others, like I have mentioned
          * quotes and paired delimiters  */
         seen[un_char]++;
+        s++;
     }   /* End of loop through each character of the construct */
 
-    /* khw: People on #irc have suggested things that I think boil down to:
-     * under 'use 5.43.x', output a warning like existing warnings for
-     * similar situations "Ambiguous use of [], resolved as ..."  Perhaps
-     * suppress the message if all (or maybe almost all) the evidence points
-     * to the same outcome.  This would involve two weight variables */
-    if (weight >= 0)	/* probably a character class */
-        return FALSE;
-
+    /* No terminating ']', has to be an expression */
     return TRUE;
 }
 
@@ -6844,7 +7052,13 @@ yyl_leftcurly(pTHX_ char *s, const U8 formbrack)
         break;
     }
 
-    pl_yylval.ival = CopLINE(PL_curcop);
+    /* PL_copline contains the line number of the last-seen COP.
+     * CopLINE(PL_curcop) could have advanced past that. We
+     * likely want to save PL_curcop where possible to get
+     * more accurate line numbering for diagnostics/caller. */
+    pl_yylval.ival = (PL_copline == NOLINE)
+                     ? CopLINE(PL_curcop) : PL_copline;
+
     PL_copline = NOLINE;   /* invalidate current command line number */
     TOKEN(formbrack ? PERLY_EQUAL_SIGN : PERLY_BRACE_OPEN);
 }
@@ -7009,6 +7223,13 @@ yyl_bang(pTHX_ char *s)
         if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE) {
             s -= 2;
             TOKEN(0);
+        }
+
+        if (s[0] == '=') {
+            ck_warner_d(packWARN(WARN_EXPERIMENTAL__EQU),
+                    "The '!==' operator is experimental");
+            s++;
+            ChEop(OP_NEU);
         }
 
         ChEop(OP_NE);
@@ -7369,7 +7590,7 @@ yyl_croak_unrecognised(pTHX_ char *s)
                            10, UNI_DISPLAY_ISPRINT);
     }
     else {
-        c = form("\\x%02X", (unsigned char)*s);
+        c = form("\\x%02X", (U8)*s);
     }
 
     if (s >= PL_linestart) {
@@ -8440,6 +8661,7 @@ yyl_word_or_keyword(pTHX_ char *s, STRLEN len, I32 key, I32 orig_keyword, struct
 
     case KEY_defer:
         ck_warner_d(packWARN(WARN_EXPERIMENTAL__DEFER), "defer is experimental");
+        PL_hints |= HINT_BLOCK_SCOPE;
         PREBLOCK(KW_DEFER);
 
     case KEY_do:
@@ -8482,6 +8704,13 @@ yyl_word_or_keyword(pTHX_ char *s, STRLEN len, I32 key, I32 orig_keyword, struct
         if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE)
             return REPORT(0);
         ChEop(OP_SEQ);
+
+    case KEY_equ:
+        ck_warner_d(packWARN(WARN_EXPERIMENTAL__EQU),
+                    "The 'equ' operator is experimental");
+        if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE)
+            return REPORT(0);
+        ChEop(OP_SEQU);
 
     case KEY_exists:
         UNI(OP_EXISTS);
@@ -8773,6 +9002,7 @@ yyl_word_or_keyword(pTHX_ char *s, STRLEN len, I32 key, I32 orig_keyword, struct
     case KEY_our:
     case KEY_my:
     case KEY_state:
+        PL_hints |= HINT_BLOCK_SCOPE;
         return yyl_my(aTHX_ s, key);
 
     case KEY_next:
@@ -8782,6 +9012,13 @@ yyl_word_or_keyword(pTHX_ char *s, STRLEN len, I32 key, I32 orig_keyword, struct
         if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE)
             return REPORT(0);
         ChEop(OP_SNE);
+
+    case KEY_neu:
+        ck_warner_d(packWARN(WARN_EXPERIMENTAL__EQU),
+                    "The 'neu' operator is experimental");
+        if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE)
+            return REPORT(0);
+        ChEop(OP_SNEU);
 
     case KEY_no:
         s = tokenize_use(0, s);
@@ -9707,6 +9944,12 @@ yyl_try(pTHX_ char *s)
                     s -= 2;
                     TOKEN(0);
                 }
+                if (s[0] == '=') {
+                    ck_warner_d(packWARN(WARN_EXPERIMENTAL__EQU),
+                            "The '===' operator is experimental");
+                    s++;
+                    ChEop(OP_EQU);
+                }
                 ChEop(OP_EQ);
             }
             if (tmp == '>') {
@@ -10126,7 +10369,8 @@ Perl_yylex(pTHX)
         return yylex();
 
     case LEX_INTERPENDMAYBE:
-        if (intuit_more(PL_bufptr, PL_bufend, FROM_INTERDEPENDMAYBE, NULL, 0))
+        if (intuit_more(PL_bufptr, PL_bufend, FROM_INTERDEPENDMAYBE,
+                        PL_oldbufptr, PL_bufptr - PL_oldbufptr))
         {
             PL_lex_state = LEX_INTERPNORMAL;	/* false alarm, more expr */
             break;
@@ -10900,6 +11144,11 @@ characters).
 
 If 'error_detail' is not NULL, when a serious error is found, it creates a
 mortal hash containing details of the error, as follows:
+
+ {
+   'text'     => The error message
+   'position' => The byte offset into C<*s> that the error was found
+ }
 
 =cut
 */
@@ -12616,14 +12865,11 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
     PERL_ARGS_ASSERT_SCAN_NUM;
 
     const char *s = start;	/* current position in buffer */
-    char *d;			/* destination in temp buffer */
-    char *e;			/* end of temp buffer */
+    const char *s_end = s + strlen(s);
     NV nv;				/* number read, as a double */
     SV *sv = NULL;			/* place to put the converted number */
-    bool floatit;			/* boolean: int or float? */
-    static const char* const number_too_long = "Number too long";
     bool warned_about_underscore = 0;
-    I32 shift = 0; /* shift per digit for hex/oct/bin, hoisted here for fp */
+    uint_fast8_t base = 10; /* Number base 2, 8, 10, 16 */
 
 #define WARN_ABOUT_UNDERSCORE()                         \
         STMT_START {                                    \
@@ -12636,7 +12882,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
 
 /* Call this when we're not expecting an underscore, but are willing to
  * tolerate one if found, but raising a warning about it.  It absorbs any
- * adjacent underscores up to PL_bufend, advancing 's' to point to the byte
+ * adjacent underscores up to s_end, advancing 's' to point to the byte
  * after the final underscore */
 #define SUFFER_AN_UNDERSCORE_HERE(s)                        \
         STMT_START {                                        \
@@ -12646,7 +12892,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
                 /* Absorb any adjacent underscores */       \
                 do {                                        \
                     (s)++;                                  \
-                } while ((s) < PL_bufend && *(s) == '_');   \
+                } while ((s) < s_end && *(s) == '_');   \
             }                                               \
         } STMT_END
 
@@ -12682,7 +12928,6 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
      * using long doubles), in which case we have to resort to NV,
      * which will probably mean horrible loss of precision due to
      * multiple fp operations. */
-    bool hexfp = FALSE;
     int significant_bits = 0;
 #if NVSIZE == 8 && defined(HAS_QUAD) && defined(Uquad_t)
 #  define HEXFP_UQUAD
@@ -12693,7 +12938,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
     NV hexfp_nv = 0.0;
 #endif
     int hexfp_exp = 0;
-    bool new_octal = FALSE;     /* octal with "0o" prefix */
+    bool octal_with_0o = false;     /* octal with "0o" prefix */
 
     /* Make sure "int" is wide enough to hold exponent of NV.
        We use "int" (rather than I32 etc.) to be compatible with ldexp() */
@@ -12702,17 +12947,22 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
 
     /* We use the first character to decide what type of number this is */
 
-    if (*s == 'v') {
+    switch (*s) {
+      default:
+        croak("panic: scan_num, *s=%c", *s);
+
+      case 'v':
       vstring:
         sv = newSV(5); /* preallocate storage space */
         ENTER_with_name("scan_vstring");
         SAVEFREESV(sv);
-        s = scan_vstring(s, PL_bufend, sv);
+        s = scan_vstring(s, s_end, sv);
         SvREFCNT_inc_simple_void_NN(sv);
         LEAVE_with_name("scan_vstring");
-    }
-    else if (*s == '0') {
+        break;
 
+      case '0':
+       {
         /* if it starts with a 0, it could be an octal number, a decimal in
            0.13 disguise, or a hexadecimal number, or a binary number.
          *
@@ -12729,32 +12979,62 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
         bool overflowed = FALSE;
         bool just_zero  = TRUE;	/* just plain 0 or binary number? */
         bool has_digs = FALSE;
-        static const NV nvshift[5] = { 1.0, 2.0, 4.0, 8.0, 16.0 };
         static const char* const bases[5] =
           { "", "binary", "", "octal", "hexadecimal" };
+        I32 shift = 0; /* shift per digit for hex/oct/bin */
 
-        /* check for hex */
-        if (isALPHA_FOLD_EQ(s[1], 'x')) {
-            shift = 4;
-            s += 2;
-            just_zero = FALSE;
-        } else if (isALPHA_FOLD_EQ(s[1], 'b')) {
-            shift = 1;
-            s += 2;
-            just_zero = FALSE;
-        }
-        /* check for a decimal in disguise */
-        else if (s[1] == '.' || isALPHA_FOLD_EQ(s[1], 'e'))
+        switch (toFOLD_A(s[1])) {
+          case 'e': /* check for a decimal in disguise */
+          case '.':
             goto decimal;
-        /* so it must be octal */
-        else {
-            shift = 3;
-            s++;
-            if (isALPHA_FOLD_EQ(*s, 'o')) {
+
+          case 'x':
+            shift = 4;
+            base = 16;
+            s += 2;
+            just_zero = FALSE;
+            break;
+
+          case 'b':
+            shift = 1;
+            base = 2;
+            s += 2;
+            just_zero = FALSE;
+            break;
+
+          default: /* Any other leading zero means it could be octal */
+
+            /* Looking at the next character may resolve this */
+            if (isDIGIT_A(s[1])) {
+
+                /* 01..07 are octal.  We treat even 08 or 09 as an attempt at
+                 * octal, and will raise an error */
+                has_digs = true;
+                just_zero = false;
+            }
+            else switch (toFOLD_A(s[1])) {
+              case 'o':     /* Definitely octal */
                 s++;
                 just_zero = FALSE;
-                new_octal = TRUE;
+                octal_with_0o = TRUE;
+                break;
+
+              case '_':
+                /* An underscore needs more look ahead, in part to see if a
+                 * warning should be raised, so treat it as octal for now */
+                break;
+
+              default:
+                /* Anything else including a '.' or 'e' means this was just a
+                 * single zero, not indicating an octal, so is a decimal.  0p4
+                 * also isn't considered an octal. */
+                goto decimal;
             }
+
+            shift = 3;
+            base = 8;
+            s++;
+            break;
         }
 
         SUFFER_AN_UNDERSCORE_HERE(s);
@@ -12769,7 +13049,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
 
             /* if we don't mention it, we're done */
             default:
-                goto out;
+                goto finish_integer;
 
             /* _ are ignored -- but warned about if consecutive */
             case '_':
@@ -12798,7 +13078,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
             case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
                 /* make sure they said 0x */
                 if (shift != 4)
-                    goto out;
+                    goto finish_integer;
                 b = (*s++ & 7) + 9;
 
                 /* Prepare to put the digit we have onto the end
@@ -12823,7 +13103,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
                         u = x | b;		/* add the digit to the end */
                 }
                 if (overflowed) {
-                    n *= nvshift[shift];
+                    n *= (NV) base;
                     /* If an NV has not enough bits in its
                      * mantissa to represent an UV this summing of
                      * small low-order numbers is a waste of time
@@ -12839,7 +13119,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
                 /* this could be hexfp, but peek ahead
                  * to avoid matching ".." */
                 if (UNLIKELY(HEXFP_PEEK(s))) {
-                    goto out;
+                    goto finish_integer;
                 }
 
                 break;
@@ -12849,14 +13129,14 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
       /* if we get here, we had success: make a scalar value from
          the number.
       */
-      out:
+      finish_integer:
 
                 /* final misplaced underbar check */
                 SUFFER_AN_UNDERSCORE_JUST_BEFORE_HERE(s);
 
                 if (UNLIKELY(HEXFP_PEEK(s))) {
                     /* Do sloppy (on the underbars) but quick detection
-                     * (and value construction) for hexfp, the decimal
+                     * (and value construction); the decimal
                      * detection will shortly be more thorough with the
                      * underbar checks. */
                     const char* h = s;
@@ -12943,7 +13223,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
                                 }
 #else /* HEXFP_NV */
                                 if (accumulate) {
-                                    nv_mult /= nvshift[shift];
+                                    nv_mult /= (NV) base;
                                     if (nv_mult > 0.0)
                                         hexfp_nv += b * nv_mult;
                                     else
@@ -13006,7 +13286,6 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
 #ifdef HEXFP_UQUAD
                             hexfp_exp -= hexfp_frac_bits;
 #endif
-                            hexfp = TRUE;
                             goto decimal;
                         }
                     }
@@ -13029,13 +13308,13 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
 
             if (overflowed) {
                 if (n > 4294967295.0)
-                    output_non_portable(1 << shift);
+                    output_non_portable(base);
                 sv = newSVnv(n);
             }
             else {
 #if UVSIZE > 4
                 if (u > 0xffffffff)
-                    output_non_portable(1 << shift);
+                    output_non_portable(base);
 #endif
                 sv = newSVuv(u);
             }
@@ -13045,33 +13324,40 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
         else if (PL_hints & HINT_NEW_BINARY)
             sv = new_constant(start, s - start, "binary",
                               sv, NULL, NULL, 0, NULL);
-    }
-    else if (isDIGIT_A(*s) || *s == '.') {
+        break;
+       }
+
+      case '1': case '2': case '3': case '4': case '5': case '6':
+      case '7': case '8': case '9':
+      case '.':
       decimal:
+       {
+        static const char* const number_too_long = "Number too long";
 
         /* handle decimal numbers.
            we're also sent here when we read a 0 as the first digit
          */
-        d = PL_tokenbuf;
-        e = C_ARRAY_END(PL_tokenbuf) - 6; /* room for various punctuation */
-        floatit = FALSE;
-        if (hexfp) {
+        char *d = PL_tokenbuf;
+        char *e = C_ARRAY_END(PL_tokenbuf) - 6; /* room for various punct */
+        bool floatit = FALSE;       /* boolean: int or float? */
+
+        if (base != 10) {
             floatit = TRUE;
             *d++ = '0';
-            switch (shift) {
-            case 4:
+            switch (base) {
+            case 16:
                 *d++ = 'x';
                 s = start + 2;
                 break;
-            case 3:
-                if (new_octal) {
+            case 8:
+                if (octal_with_0o) {
                     *d++ = 'o';
                     s = start + 2;
                     break;
                 }
                 s = start + 1;
                 break;
-            case 1:
+            case 2:
                 *d++ = 'b';
                 s = start + 2;
                 break;
@@ -13082,7 +13368,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
 
         /* read next group of digits and _ and copy into d */
         while (   isDIGIT_or_UNDERSCORE(*s)
-               || UNLIKELY(hexfp && isXDIGIT(*s)))
+               || UNLIKELY(base != 10 && isXDIGIT(*s)))
         {
             /* skip underscores, checking for misplaced ones
                if -w is on
@@ -13117,7 +13403,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
             /* copy, ignoring underbars, until we run out of digits.
             */
             while (   isDIGIT_or_UNDERSCORE(*s)
-                   || UNLIKELY(hexfp && isXDIGIT(*s)))
+                   || UNLIKELY(base != 10 && isXDIGIT(*s)))
             {
                 /* fixed length buffer check */
                 if (d >= e)
@@ -13140,7 +13426,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
 
         /* read exponent part, if present */
         if ((isALPHA_FOLD_EQ(*s, 'e')
-              || UNLIKELY(hexfp && isALPHA_FOLD_EQ(*s, 'p')))
+              || UNLIKELY(base != 10 && isALPHA_FOLD_EQ(*s, 'p')))
             && memCHRs("+-0123456789_", s[1]))
         {
             int exp_digits = 0;
@@ -13153,7 +13439,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
                 /* At least some Mach atof()s don't grok 'E' */
                 *d++ = 'e';
             }
-            else if (UNLIKELY(hexfp && (isALPHA_FOLD_EQ(*s, 'p')))) {
+            else if (UNLIKELY(base != 10 && (isALPHA_FOLD_EQ(*s, 'p')))) {
                 *d++ = 'p';
             }
 
@@ -13223,7 +13509,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
         if (floatit) {
             /* terminate the string */
             *d = '\0';
-            if (UNLIKELY(hexfp)) {
+            if (UNLIKELY(base != 10)) {
 #  ifdef NV_MANT_DIG
                 if (significant_bits > NV_MANT_DIG)
                     ck_warner(packWARN(WARN_OVERFLOW),
@@ -13252,13 +13538,12 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
             sv = S_new_constant(aTHX_ PL_tokenbuf, d - PL_tokenbuf,
                                 key, keylen, sv, NULL, NULL, 0, NULL);
         }
-    }
-    else {
-        croak("panic: scan_num, *s=%c", *s);
-    }
+
+        break;
+     } /* End of floating/decimal case */
+    }  /* End of switch on first character */
 
     /* make the op for the constant and return */
-
     if (sv)
         lvalp->opval = newSVOP(OP_CONST, 0, sv);
     else
@@ -13396,7 +13681,7 @@ Perl_start_subparse(pTHX_ I32 is_format, U32 flags)
     save_item(PL_subname);
     SAVESPTR(PL_compcv);
 
-    PL_compcv = MUTABLE_CV(newSV_type(is_format ? SVt_PVFM : SVt_PVCV));
+    PL_compcv = MUTABLE_CV(newSV_type_generic(is_format ? SVt_PVFM : SVt_PVCV));
     CvFLAGS(PL_compcv) |= flags;
 
     PL_subline = CopLINE(PL_curcop);
@@ -13504,7 +13789,16 @@ Perl_init_named_cv(pTHX_ CV *cv, OP *nameop)
     PERL_ARGS_ASSERT_INIT_NAMED_CV;
 
     if (nameop->op_type == OP_CONST) {
-        const char *const name = SvPV_nolen_const(((SVOP*)nameop)->op_sv);
+        SV *namesv = ((SVOP*)nameop)->op_sv;
+        STRLEN namlen;
+        const char *const name = SvPV_const(namesv, namlen);
+        bool name_is_utf8 = SvUTF8(namesv);
+
+        U32 hash;
+        PERL_HASH(hash, name, namlen);
+        CvNAME_HEK_set(cv, share_hek(
+            name, name_is_utf8 ? -(SSize_t)namlen : (SSize_t)namlen, hash));
+
         if (   strEQ(name, "BEGIN")
             || strEQ(name, "END")
             || strEQ(name, "INIT")
@@ -14045,7 +14339,6 @@ Perl_keyword_plugin_standard(pTHX_
         char *keyword_ptr, STRLEN keyword_len, OP **op_ptr)
 {
     PERL_ARGS_ASSERT_KEYWORD_PLUGIN_STANDARD;
-    PERL_UNUSED_CONTEXT;
     PERL_UNUSED_ARG(keyword_ptr);
     PERL_UNUSED_ARG(keyword_len);
     PERL_UNUSED_ARG(op_ptr);
@@ -14057,7 +14350,6 @@ Perl_infix_plugin_standard(pTHX_
         char *operator_ptr, STRLEN operator_len, struct Perl_custom_infix **def)
 {
     PERL_ARGS_ASSERT_INFIX_PLUGIN_STANDARD;
-    PERL_UNUSED_CONTEXT;
     PERL_UNUSED_ARG(operator_ptr);
     PERL_UNUSED_ARG(operator_len);
     PERL_UNUSED_ARG(def);
@@ -14126,7 +14418,6 @@ Perl_wrap_keyword_plugin(pTHX_
     Perl_keyword_plugin_t new_plugin, Perl_keyword_plugin_t *old_plugin_p)
 {
 
-    PERL_UNUSED_CONTEXT;
     PERL_ARGS_ASSERT_WRAP_KEYWORD_PLUGIN;
     if (*old_plugin_p) return;
     KEYWORD_PLUGIN_MUTEX_LOCK;
@@ -14163,7 +14454,6 @@ Perl_wrap_infix_plugin(pTHX_
     Perl_infix_plugin_t new_plugin, Perl_infix_plugin_t *old_plugin_p)
 {
 
-    PERL_UNUSED_CONTEXT;
     PERL_ARGS_ASSERT_WRAP_INFIX_PLUGIN;
     if (*old_plugin_p) return;
     /* We use the same mutex as for PL_keyword_plugin as it's so rare either

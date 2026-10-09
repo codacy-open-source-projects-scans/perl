@@ -43,6 +43,13 @@ the need to cast the result to the appropriate type.
 
 #define GvXPVGV(gv)	((XPVGV*)SvANY(gv))
 
+/*
+=for apidoc Am|HEK *|GvNAME_HEK|GV *gv
+Returns the package name directly as a hash key structure, or C<NULL> if
+there is no name associated.
+
+=cut
+*/
 
 #if defined (DEBUGGING) && defined(PERL_USE_GCC_BRACE_GROUPS) && !defined(__INTEL_COMPILER)
 #  define GvGP(gv)							\
@@ -229,6 +236,24 @@ Return the CV from the GV.
 #define GvONCE_FATAL_off(gv)	(GvFLAGS(gv) &= ~GVf_ONCE_FATAL)
 
 #ifndef PERL_CORE
+
+/*
+=for apidoc ABm|bool|GvIN_PAD|GV* gv
+
+Now always returns C<false>.
+
+=for apidoc  ABm||GvIN_PAD_on|GV* gv
+=for apidoc_item||GvIN_PAD_off|GV* gv
+
+Now are no-ops
+
+=for apidoc ABmn|GV*|Nullgv
+
+Null GV pointer
+
+=cut
+*/
+
 #  define GvIN_PAD(gv)		0
 #  define GvIN_PAD_on(gv)	NOOP
 #  define GvIN_PAD_off(gv)	NOOP

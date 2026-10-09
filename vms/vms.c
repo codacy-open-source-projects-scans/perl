@@ -119,10 +119,6 @@ static int (*decw_term_port)
     void * char_buffer,
     void * char_change_buffer) = 0;
 
-#if defined(NEED_AN_H_ERRNO)
-dEXT int h_errno;
-#endif
-
 #if defined(__DECC) || defined(__DECCXX)
 #pragma member_alignment save
 #pragma nomember_alignment longword
@@ -11208,10 +11204,8 @@ Perl_my_flush(pTHX_ FILE *fp)
 {
     int res;
     if ((res = fflush(fp)) == 0 && fp) {
-#ifdef VMS_DO_SOCKETS
         Stat_t s;
         if (fstat(fileno(fp), &s.crtl_stat) == 0 && !S_ISSOCK(s.st_mode))
-#endif
             res = fsync(fileno(fp));
     }
 /*

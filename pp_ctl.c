@@ -243,6 +243,8 @@ PP(pp_substcont)
 
         /* See "how taint works": pp_subst() in pp_hot.c */
         sv_catsv_nomg(dstr, *PL_stack_sp);
+        if (sv_has_valuemagic(*PL_stack_sp))
+            mg_propagate(*PL_stack_sp, dstr);
         rpp_popfree_1_NN();
         if (UNLIKELY(TAINT_get))
             cx->sb_rxtainted |= SUBST_TAINT_REPL;
@@ -281,6 +283,8 @@ PP(pp_substcont)
                 if (DO_UTF8(dstr))
                     SvUTF8_on(targ);
                 SvPV_set(dstr, NULL);
+                if (sv_has_valuemagic(dstr))
+                    mg_propagate(dstr, targ);
 
                 PL_tainted = 0;
                 retval = sv_newmortal();
@@ -422,7 +426,6 @@ Perl_rxres_save(pTHX_ void **rsp, REGEXP *rx)
     UV *p = (UV*)*rsp;
     U32 i;
 
-    PERL_UNUSED_CONTEXT;
 
     /* deal with regexp_paren_pair items */
     if (!p || p[1] < RX_NPARENS(rx)) {
@@ -466,7 +469,6 @@ S_rxres_restore(pTHX_ void **rsp, REGEXP *rx)
     UV *p = (UV*)*rsp;
     U32 i;
 
-    PERL_UNUSED_CONTEXT;
     RX_MATCH_COPY_FREE(rx);
     RX_MATCH_COPIED_set(rx, *p);
     *p++ = 0;
@@ -493,7 +495,6 @@ static void
 S_rxres_free(pTHX_ void **rsp)
 {
     PERL_ARGS_ASSERT_RXRES_FREE;
-    PERL_UNUSED_CONTEXT;
 
     UV * const p = (UV*)*rsp;
 
@@ -1713,10 +1714,6 @@ S_dopoptosub_at(pTHX_ const PERL_CONTEXT *cxstk, I32 startingblock)
 
     I32 i;
 
-#ifndef DEBUGGING
-    PERL_UNUSED_CONTEXT;
-#endif
-
     for (i = startingblock; i >= 0; i--) {
         const PERL_CONTEXT * const cx = &cxstk[i];
         switch (CxTYPE(cx)) {
@@ -2312,30 +2309,117 @@ Perl_caller_cx(pTHX_ I32 count, const PERL_CONTEXT **dbcxp)
     return cx;
 }
 
-PP_wrapped(pp_caller, MAXARG, 0)
+static void
+S_caller_push_pkg(pTHX_ const HEK *stash_hek)
 {
-    dSP;
+    if (!stash_hek)
+        rpp_push_IMM(&PL_sv_undef);
+    else {
+        dTARGET;
+        sv_sethek(TARG, stash_hek);
+        rpp_push_1(TARG);
+    }
+}
+
+static void
+S_caller_push_line(pTHX_ const PERL_CONTEXT *cx)
+{
+    const COP *blk_old = cx->blk_oldcop;
+    const COP *lcop = closest_cop(blk_old, OpSIBLING(blk_old),
+                                           cx->blk_sub.retop, TRUE);
+    if (!lcop)
+        lcop = blk_old;
+    rpp_push_1_norc( newSVuv( (UV)(CopLINE(lcop)) ) );
+}
+
+static void
+S_caller_push_sub_hasargs(pTHX_ const PERL_CONTEXT *cx, const PERL_CONTEXT *dbcx, const bool want_hasargs)
+{
+    if (CxTYPE(cx) == CXt_SUB || CxTYPE(cx) == CXt_FORMAT) {
+        /* So is ccstack[dbcxix]. */
+        if (CvHasNAME(dbcx->blk_sub.cv)) {
+            rpp_push_1(cv_name(dbcx->blk_sub.cv, 0, 0));
+            if (want_hasargs)
+                rpp_push_IMM(boolSV(CxHASARGS(cx)));
+        }
+        else {
+            rpp_push_1_norc( newSVpvs("(unknown)"));
+            if (want_hasargs)
+                rpp_push_IMM(boolSV(CxHASARGS(cx)));
+        }
+    }
+    else {
+        rpp_push_1_norc( newSVpvs("(eval)") );
+        if (want_hasargs)
+            rpp_push_IMM(&PL_sv_zero);
+    }
+}
+
+static void
+S_caller_push_bitmask(pTHX_ const PERL_CONTEXT *cx)
+{
+    SV * mask ;
+    char *old_warnings = cx->blk_oldcop->cop_warnings;
+
+    if  (old_warnings == pWARN_NONE)
+        mask = newSVpvn(WARN_NONEstring, WARNsize) ;
+    else if (old_warnings == pWARN_STD && (PL_dowarn & G_WARN_ON) == 0)
+        mask = &PL_sv_undef ;
+    else if (old_warnings == pWARN_ALL ||
+              (old_warnings == pWARN_STD && PL_dowarn & G_WARN_ON)) {
+        mask = newSVpvn(WARN_ALLstring, WARNsize) ;
+    }
+    else
+        mask = newSVpvn(old_warnings, RCPV_LEN(old_warnings));
+    rpp_push_1_norc(mask);
+}
+
+static void
+S_caller_push_cop_hints_hash(pTHX_ const PERL_CONTEXT *cx)
+{
+    if (cx->blk_oldcop->cop_hints_hash) {
+        rpp_push_1_norc( newRV_noinc(MUTABLE_SV(cop_hints_2hv(cx->blk_oldcop, 0))) );
+    } else {
+        rpp_push_IMM(&PL_sv_undef);
+    }
+}
+
+PP(pp_caller)
+{
     const PERL_CONTEXT *cx;
     const PERL_CONTEXT *dbcx;
     U8 gimme = GIMME_V;
     const HEK *stash_hek;
-    I32 count = 0;
-    bool has_arg = MAXARG && TOPs;
-    const COP *lcop;
+    bool has_arg = false;
+    I32 count = cBOOL(PL_op->op_private & OPpOFFBYONE);
 
-    if (MAXARG) {
-      if (has_arg)
-        count = POPi;
-      else (void)POPs;
+    if (PL_op->op_flags & OPf_KIDS) {
+        if (PL_stack_sp[0]) {
+            has_arg = true;
+            count += SvIV(PL_stack_sp[0]);
+        }
+        rpp_popfree_1();
     }
 
-    cx = caller_cx(count + cBOOL(PL_op->op_private & OPpOFFBYONE), &dbcx);
+    /* pp_caller traditionally had separate EXTEND(SP, 1) checks where
+     * that was all that was needed, with this larger check occuring later.
+     * However, when an application reaches a steady stack size - and often
+     * prior to that, the stack will already have space to accomodate 11
+     * more pointers. For example, during a perl build and run of the test
+     * harness, gcov showed that pp_caller never had to extend the stack.
+     * Consolidating the EXTENDs was found to shrink pp_caller by 46
+     * instructions on a non-DEBUGGING, non-threaded gcc build.
+     * Additionally, optimization of the caller-lslice pattern can now
+     * cause pp_caller a varying assortment of SV*s to the stack, so an
+     * early catch-all check is definitely preferable.*/
+    rpp_extend(11);
+
+    cx = caller_cx(count, &dbcx);
     if (!cx) {
         if (gimme != G_LIST) {
-            EXTEND(SP, 1);
-            RETPUSHUNDEF;
+            rpp_push_IMM(&PL_sv_undef);
         }
-        RETURN;
+        return NORMAL;
     }
 
     /* populate @DB::args ? */
@@ -2379,108 +2463,146 @@ PP_wrapped(pp_caller, MAXARG, 0)
     stash_hek = SvTYPE(CopSTASH(cx->blk_oldcop)) == SVt_PVHV
       ? HvNAME_HEK((HV*)CopSTASH(cx->blk_oldcop))
       : NULL;
-    if (gimme != G_LIST) {
-        EXTEND(SP, 1);
-        if (!stash_hek)
-            PUSHs(&PL_sv_undef);
+
+    if (UNLIKELY(gimme == G_VOID))
+        return NORMAL;
+
+    /* Non-zero subscripts means that a caller->lslice optree has been
+     * optimized away. Only the indicated subscripts must be returned. */
+    U8 subscripts = PL_op->op_private &~ OPpOFFBYONE;
+
+    if (gimme == G_SCALAR) {
+        if(!subscripts)
+            S_caller_push_pkg(aTHX_ stash_hek);
         else {
-            dTARGET;
-            sv_sethek(TARG, stash_hek);
-            PUSHs(TARG);
+            /* Perl_scalarvoid might have toggled off superfluous bits
+             * at compile time, but just in case execution is somewhere
+             * where context is determined at runtime...*/
+            U32 msb_subscript = 1 << msbit_pos32((U32)subscripts);
+
+            switch(msb_subscript) {
+                case OPpCALLER_PKG:
+                    S_caller_push_pkg(aTHX_ stash_hek);
+                    break;
+                case OPpCALLER_FILE:
+                    rpp_push_1_norc(newSVpv(OutCopFILE(cx->blk_oldcop), 0));
+                    break;
+                case OPpCALLER_LINE:
+                    S_caller_push_line(aTHX_ cx);
+                    break;
+                case OPpCALLER_SUB:
+                    if (!has_arg) {
+                        rpp_push_IMM(&PL_sv_undef);
+                    } else S_caller_push_sub_hasargs(aTHX_ cx, dbcx, false);
+                    break;
+                case OPpCALLER_HINTS:
+                    if (!has_arg) {
+                        rpp_push_IMM(&PL_sv_undef);
+                    } else {
+                        rpp_push_1_norc(newSViv( (IV)(CopHINTS_get(cx->blk_oldcop)) ));
+                    }
+                    break;
+                case OPpCALLER_BITS:
+                    if (!has_arg) {
+                        rpp_push_IMM(&PL_sv_undef);
+                    } else S_caller_push_bitmask(aTHX_ cx);
+                    break;
+                case OPpCALLER_HINTH:
+                    if (!has_arg)
+                        rpp_push_IMM(&PL_sv_undef);
+                    else S_caller_push_cop_hints_hash(aTHX_ cx);
+                    break;
+                default:
+                    NOT_REACHED;
+            }
         }
-        RETURN;
+        return NORMAL;
     }
 
-    EXTEND(SP, 11);
+    if (subscripts) {
+        if (subscripts & OPpCALLER_PKG)
+            S_caller_push_pkg(aTHX_ stash_hek);
+        if (subscripts & OPpCALLER_FILE)
+            rpp_push_1_norc(newSVpv(OutCopFILE(cx->blk_oldcop), 0));
+        if (subscripts & OPpCALLER_LINE)
+            S_caller_push_line(aTHX_ cx);
 
-    if (!stash_hek)
-        PUSHs(&PL_sv_undef);
-    else {
-        dTARGET;
-        sv_sethek(TARG, stash_hek);
-        PUSHTARG;
+        if (!has_arg) {
+            U32 f = (subscripts & (OPpCALLER_SUB|OPpCALLER_HINTS|OPpCALLER_BITS|OPpCALLER_HINTH));
+            U32 cnt = bitcount32( f );
+
+            while (cnt) {
+                rpp_push_IMM(&PL_sv_undef);
+                cnt--;
+            }
+        } else {
+            if (subscripts & OPpCALLER_SUB)
+                S_caller_push_sub_hasargs(aTHX_ cx, dbcx, false);
+            if (subscripts & OPpCALLER_HINTS)
+                rpp_push_1_norc(newSViv( (IV)(CopHINTS_get(cx->blk_oldcop)) ));
+            if (subscripts & OPpCALLER_BITS)
+                S_caller_push_bitmask(aTHX_ cx);
+            if (subscripts & OPpCALLER_HINTH)
+                S_caller_push_cop_hints_hash(aTHX_ cx);
+        }
+        return NORMAL;
     }
-    mPUSHs(newSVpv(OutCopFILE(cx->blk_oldcop), 0));
-    lcop = closest_cop(cx->blk_oldcop, OpSIBLING(cx->blk_oldcop),
-                       cx->blk_sub.retop, TRUE);
-    if (!lcop)
-        lcop = cx->blk_oldcop;
-    mPUSHu(CopLINE(lcop));
+
+    /* No lslice optimization is in effect. This is straightforward
+     * pp_caller from here onwards. */
+    S_caller_push_pkg(aTHX_ stash_hek);
+
+    rpp_push_1_norc(newSVpv(OutCopFILE(cx->blk_oldcop), 0));
+
+    S_caller_push_line(aTHX_ cx);
+
     if (!has_arg)
-        RETURN;
-    if (CxTYPE(cx) == CXt_SUB || CxTYPE(cx) == CXt_FORMAT) {
-        /* So is ccstack[dbcxix]. */
-        if (CvHASGV(dbcx->blk_sub.cv)) {
-            PUSHs(cv_name(dbcx->blk_sub.cv, 0, 0));
-            PUSHs(boolSV(CxHASARGS(cx)));
-        }
-        else {
-            PUSHs(newSVpvs_flags("(unknown)", SVs_TEMP));
-            PUSHs(boolSV(CxHASARGS(cx)));
-        }
-    }
-    else {
-        PUSHs(newSVpvs_flags("(eval)", SVs_TEMP));
-        PUSHs(&PL_sv_zero);
-    }
+        return NORMAL;
+
+    S_caller_push_sub_hasargs(aTHX_ cx, dbcx, true);
+
     gimme = cx->blk_gimme;
     if (gimme == G_VOID)
-        PUSHs(&PL_sv_undef);
+        rpp_push_IMM(&PL_sv_undef);
     else
-        PUSHs(boolSV((gimme & G_WANT) == G_LIST));
+        rpp_push_IMM(boolSV((gimme & G_WANT) == G_LIST));
     if (CxTYPE(cx) == CXt_EVAL) {
         /* eval STRING */
         if (CxOLD_OP_TYPE(cx) == OP_ENTEREVAL) {
             SV *cur_text = cx->blk_eval.cur_text;
             if (SvCUR(cur_text) >= 2) {
-                PUSHs(newSVpvn_flags(SvPVX(cur_text), SvCUR(cur_text)-2,
-                                     SvUTF8(cur_text)|SVs_TEMP));
+                rpp_push_1_norc( newSVpvn_flags(SvPVX(cur_text), SvCUR(cur_text)-2,
+                                     SvUTF8(cur_text)) );
             }
             else {
                 /* I think this is will always be "", but be sure */
-                PUSHs(sv_mortalcopy_flags(cur_text, SV_GMAGIC|SV_NOSTEAL));
+                rpp_push_1_norc(newSVsv_flags(cur_text, SV_GMAGIC|SV_NOSTEAL));
             }
 
-            PUSHs(&PL_sv_no);
+            rpp_push_IMM(&PL_sv_no);
         }
         /* require */
         else if (cx->blk_eval.old_namesv) {
-            mPUSHs(newSVsv(cx->blk_eval.old_namesv));
-            PUSHs(&PL_sv_yes);
+            rpp_push_1_norc(newSVsv(cx->blk_eval.old_namesv));
+            rpp_push_IMM(&PL_sv_yes);
         }
         /* eval BLOCK (eval blocks have old_namesv == 0) */
         else {
-            PUSHs(&PL_sv_undef);
-            PUSHs(&PL_sv_undef);
+            rpp_push_IMM(&PL_sv_undef);
+            rpp_push_IMM(&PL_sv_undef);
         }
     }
     else {
-        PUSHs(&PL_sv_undef);
-        PUSHs(&PL_sv_undef);
+        rpp_push_IMM(&PL_sv_undef);
+        rpp_push_IMM(&PL_sv_undef);
     }
 
-    mPUSHi(CopHINTS_get(cx->blk_oldcop));
-    {
-        SV * mask ;
-        char *old_warnings = cx->blk_oldcop->cop_warnings;
+    rpp_push_1_norc(newSViv( (IV)(CopHINTS_get(cx->blk_oldcop)) ));
 
-        if  (old_warnings == pWARN_NONE)
-            mask = newSVpvn(WARN_NONEstring, WARNsize) ;
-        else if (old_warnings == pWARN_STD && (PL_dowarn & G_WARN_ON) == 0)
-            mask = &PL_sv_undef ;
-        else if (old_warnings == pWARN_ALL ||
-                  (old_warnings == pWARN_STD && PL_dowarn & G_WARN_ON)) {
-            mask = newSVpvn(WARN_ALLstring, WARNsize) ;
-        }
-        else
-            mask = newSVpvn(old_warnings, RCPV_LEN(old_warnings));
-        mPUSHs(mask);
-    }
+    S_caller_push_bitmask(aTHX_ cx);
+    S_caller_push_cop_hints_hash(aTHX_ cx);
 
-    PUSHs(cx->blk_oldcop->cop_hints_hash ?
-          sv_2mortal(newRV_noinc(MUTABLE_SV(cop_hints_2hv(cx->blk_oldcop, 0))))
-          : &PL_sv_undef);
-    RETURN;
+    return NORMAL;
 }
 
 
@@ -3699,7 +3821,12 @@ PP(pp_goto)
                 continue;
             case CXt_BLOCK:
                 if (ix) {
-                    gotoprobe = OpSIBLING(cx->blk_oldcop);
+                    PERL_CONTEXT *encl = &cxstack[ix - 1];
+                    /* CXt_DEFER includes finally{} blocks */
+                    if (CxTYPE(encl) == CXt_DEFER)
+                        gotoprobe = encl->blk_defer.defer_root;
+                    else
+                        gotoprobe = OpSIBLING(cx->blk_oldcop);
                     in_block = TRUE;
                 } else
                     gotoprobe = PL_main_root;
@@ -5556,7 +5683,7 @@ PP(pp_entereval)
         lex_flags |= LEX_START_COPIED;
     }
 
-    TAINT_IF(SvTAINTED(sv));
+    TAINT_IF_SV(sv);
     TAINT_PROPER("eval");
 
     old_savestack_ix = PL_savestack_ix;
@@ -6599,12 +6726,14 @@ PP(pp_break)
 static void
 invoke_defer_block_(pTHX_ U8 type, void * arg_)
 {
-    OP *start = (OP *) arg_;
+    OP *start = cLOGOPx(arg_)->op_other;
 #ifdef DEBUGGING
     I32 was_cxstack_ix = cxstack_ix;
 #endif
 
     cx_pushblock(type, G_VOID, PL_stack_sp, PL_savestack_ix);
+    CX_CUR()->blk_defer.defer_root =
+        cUNOPx(cLOGOPx(arg_)->op_first)->op_first;
     ENTER;
     SAVETMPS;
 
@@ -6684,9 +6813,9 @@ invoke_finally_block(pTHX_ void * arg_)
 PP(pp_pushdefer)
 {
     if(PL_op->op_private & OPpDEFER_FINALLY)
-        SAVEDESTRUCTOR_X(invoke_finally_block, cLOGOP->op_other);
+        SAVEDESTRUCTOR_X(invoke_finally_block, PL_op);
     else
-        SAVEDESTRUCTOR_X(invoke_defer_block, cLOGOP->op_other);
+        SAVEDESTRUCTOR_X(invoke_defer_block, PL_op);
 
     return NORMAL;
 }

@@ -13,15 +13,15 @@ package ExtUtils::ParseXS::CountLines;
 
 use strict;
 use warnings;
+use ExtUtils::ParseXS::Utilities ();
 
-our $VERSION = '3.63';
+our $VERSION = '3.65';
 
 our $SECTION_END_MARKER;
 
 sub TIEHANDLE {
   my ($class, $cfile, $fh) = @_;
-  $cfile =~ s/\\/\\\\/g;
-  $cfile =~ s/"/\\"/g;
+  $cfile = ExtUtils::ParseXS::Utilities::escape_file_for_line_directive $cfile;
   $SECTION_END_MARKER = qq{#line --- "$cfile"};
 
   return bless {
@@ -62,6 +62,14 @@ sub UNTIE {
 
 sub end_marker {
   return $SECTION_END_MARKER;
+}
+
+sub file_marker {
+    shift;
+    my $file = shift;
+    my $marker = $SECTION_END_MARKER;
+    $marker =~ s|".*"| '"' . ExtUtils::ParseXS::Utilities::escape_file_for_line_directive($file) . '"' |e;
+    return $marker;
 }
 
 1;

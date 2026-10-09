@@ -14,8 +14,7 @@ BEGIN {
     require './loc_tools.pl';
 }
 
-use strict;
-use warnings;
+use v5.36; # not 5.40 because we don't want to stomp on `is_tainted`
 use Config;
 
 my $NoTaintSupport = exists($Config{taint_support}) && !$Config{taint_support};
@@ -25,7 +24,7 @@ if ($NoTaintSupport) {
     exit 0;
 }
 
-plan tests => 1065;
+plan tests => 1071;
 
 $| = 1;
 
@@ -103,11 +102,8 @@ sub taint_these :prototype(@) {
     for (@_) { $_ .= $TAINT }
 }
 
-# How to identify taint when you see it
-sub tainted :prototype($) {
-    local $@;   # Don't pollute caller's value.
-    not eval { no warnings; join("", @_), kill 0; 1 };
-}
+# just import the one from 'builtin' as a different name
+BEGIN { *tainted = \&builtin::is_tainted; }
 
 sub is_tainted {
     my $thing = shift;
@@ -2980,6 +2976,29 @@ is_tainted("$ovtaint", "overload preserves taint");
 	is($r3, $u, 'tainted string with utf8 s/.+//gre');
 	my $r4 = ("$u$TAINT" =~ s/./""/gre);
 	is($r4, '', 'tainted utf8 string with s///gre');
+}
+
+{
+    # GH 24705: newSVsv loses taint on plain IVs and NVs
+    my $strcopy = "$0";
+
+    no warnings 'numeric';
+    my $intcopy = $0 + 0;
+    my $numcopy = $0 + 0.1;
+
+    is_tainted($strcopy, 'tainted stringy copy of $0');
+    is_tainted($intcopy, 'tainted integer copy of $0');
+    is_tainted($numcopy, 'tainted numeric copy of $0');
+
+    my $anonhash = {
+        str => $strcopy,
+        int => $intcopy,
+        num => $numcopy,
+    };
+
+    is_tainted($anonhash->{str}, 'tainted stringy copy of $0 via pp_anonhash');
+    is_tainted($anonhash->{int}, 'tainted integer copy of $0 via pp_anonhash');
+    is_tainted($anonhash->{num}, 'tainted numeric copy of $0 via pp_anonhash');
 }
 
 # This may bomb out with the alarm signal so keep it last

@@ -521,9 +521,29 @@ case "$osvers" in
 esac
 
 # mkostemp() was autodetected as present but found to not be linkable
-# on 15.6.0.  Unknown what other OS versions are affected.
-d_mkostemp=undef
+# on El Capitan (10.11.6/darwin 15.6.0).
+# It is documented as available from Sierra (10.12/darwin 16) in mkostemp(3).
+case "$osvers" in
+    [1-9].*|1[0-5].*)
+        d_mkostemp=undef
+        ;;
+esac
 
 # Apparently the MACH-O format can't support _Thread_local in shared objects,
 # but clang isn't wise to this, so our probe works but the build fails...
 d_thread_local=undef
+
+# readdir_r() is noted as deprecated in directory(3) from Catalina onwards (10.15 / darwin 19)
+# https://github.com/apple-oss-distributions/Libc/blob/Libc-1353.11.2/gen/directory.3#L69-L74
+case "$osvers" in
+    [0-9].*|1[0-8].*) ;;
+    *) d_readdir_r=undef ;;
+esac
+
+# dup3() and pipe2() are marked as available in Golden Gate onwards (27.0 / darwin 27)
+case "$osvers" in
+    [0-9].*|1[0-9].*|2[0-5].*)
+        d_dup3=undef
+        d_pipe2=undef
+        ;;
+esac

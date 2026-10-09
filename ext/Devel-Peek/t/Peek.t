@@ -364,8 +364,8 @@ do_test('reference to named subroutine without prototype',
   RV = $ADDR
   SV = PVCV\\($ADDR\\) at $ADDR
     REFCNT = (3|4)
-    FLAGS = \\((?:HASEVAL(?:,NAMED)?)?\\)	# $] < 5.015 || !thr
-    FLAGS = \\(DYNFILE(?:,HASEVAL(?:,NAMED)?)?\\) # $] >= 5.015 && thr
+    FLAGS = \\((?:HASEVAL(?:,(?:NAMED|HasNAME_HEK))?)?\\)         # $] < 5.015 || !thr
+    FLAGS = \\(DYNFILE(?:,HASEVAL(?:,(?:NAMED|HasNAME_HEK))?)?\\) # $] >= 5.015 && thr
     COMP_STASH = $ADDR\\t"main"
     START = $ADDR ===> \\d+
     ROOT = $ADDR
@@ -493,6 +493,7 @@ do_test('typeglob',
   FLAGS = \\(MULTI(?:,IN_PAD)?\\)
   NAME = "a"
   NAMELEN = 1
+  GvNAME_HEK = $ADDR
   GvSTASH = $ADDR\\t"main"
   FLAGS = $ADDR					# $] >=5.021004
   GP = $ADDR

@@ -119,9 +119,7 @@ Perl_av_extend_guts(pTHX_ AV *av, SSize_t key, SSize_t *maxp, SV ***allocp,
 
             Move(*arrayp, *allocp, AvFILLp(av)+1, SV*);
 
-            if (key > *maxp - 10) {
-                newmax = key + *maxp;
-
+            if (key > *maxp) {
                 /* Zero everything above AvFILLp(av), which could be more
                  * elements than have actually been shifted. If we don't
                  * do this, trailing elements at the end of the resized
@@ -131,6 +129,7 @@ Perl_av_extend_guts(pTHX_ AV *av, SSize_t key, SSize_t *maxp, SV ***allocp,
                 goto resize;
             }
         } else if (*allocp) { /* a full SV* array exists */
+          resize:
 
 #ifdef Perl_safesysmalloc_size
             /* Whilst it would be quite possible to move this logic around
@@ -151,12 +150,30 @@ Perl_av_extend_guts(pTHX_ AV *av, SSize_t key, SSize_t *maxp, SV ***allocp,
 
             if (key <= newmax)
                 goto resized;
-#endif 
+#endif
             /* overflow-safe version of newmax = key + *maxp/5 */
             newmax = *maxp / 5;
+
+            if (newmax < 5) { /* This is a feels-about-right number. */
+                /* The newmax growth factor isn't making a meaningful
+                 * contribution yet. However, if an array has elements
+                 * added one-at-a-time, this means that it could undergo
+                 * multiple Renew() calls to add 1-2 elements at a time
+                 * until newmax helps to minimize that kind of churn.
+                 *
+                 * One example is Perl_sv_add_backreference, where if an
+                 * array has to be resized once, there's a very good
+                 * chance of it being resized multiple times in the
+                 * absence of a small-growth adjustment.
+                 *
+                 * This is an attempt at such an adjustment:
+                 */
+                 if (key - *maxp < 8)
+                     key = *maxp + 8; /* A feels-about-right number. */
+            }
+
             newmax = (key > SSize_t_MAX - newmax)
                         ? SSize_t_MAX : key + newmax;
-          resize:
         {
           /* it should really be newmax+1 here, but if newmax
            * happens to equal SSize_t_MAX, then newmax+1 is
@@ -515,9 +532,12 @@ Perl_newAVav(pTHX_ AV *oav)
 {
     PERL_ARGS_ASSERT_NEWAVAV;
 
+    if(UNLIKELY(!oav))
+        return newAV();
+
     Size_t count = av_count(oav);
 
-    if(UNLIKELY(!oav) || count == 0)
+    if(count == 0)
         return newAV();
 
     AV *ret = newAV_alloc_x(count);

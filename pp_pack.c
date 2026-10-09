@@ -311,7 +311,7 @@ S_utf8_to_bytes(pTHX_ const char **s, const char *end, U8 *buf, SSize_t buf_len,
                 Perl_av_create_and_push(aTHX_ &msgs, av_shift(this_msgs));
             }
 
-            Safefree(this_msgs);
+            SvREFCNT_dec(this_msgs);
         }
 
         if (UNLIKELY(needs_swap))
@@ -323,7 +323,10 @@ S_utf8_to_bytes(pTHX_ const char **s, const char *end, U8 *buf, SSize_t buf_len,
     /* We have enough characters for the buffer. Did we have problems ? */
     if (msgs) {
         while (av_count(msgs) > 0) {
-            HV * msg_hash = (HV *) av_shift(msgs);
+            SV * msg_rv = av_shift(msgs);
+            assert(SvROK(msg_rv));
+            assert(SvTYPE(SvRV(msg_rv)) == SVt_PVHV);
+            HV * msg_hash = (HV *)SvRV(msg_rv);
             SV ** packed_categories_p = hv_fetchs(msg_hash, "warn_categories", 0);
             if (packed_categories_p == NULL) {
                 continue;
@@ -340,7 +343,7 @@ S_utf8_to_bytes(pTHX_ const char **s, const char *end, U8 *buf, SSize_t buf_len,
             }
         }
 
-        Safefree(msgs);
+        SvREFCNT_dec(msgs);
     }
 
     if (bad) {
@@ -543,12 +546,12 @@ S_measure_struct(pTHX_ tempsym_t* symptr)
                 break;
             case 'B':
             case 'b':
-                len = (len + 7)/8;
+                len = (len / 8) + !!(len % 8);
                 size = 1;
                 break;
             case 'H':
             case 'h':
-                len = (len + 1)/2;
+                len = (len / 2) + !!(len % 2);
                 size = 1;
                 break;
 
@@ -558,6 +561,10 @@ S_measure_struct(pTHX_ tempsym_t* symptr)
                 break;
             }
         }
+        if ((size > 0) &&
+                ((len > SSize_t_MAX / size) ||         /* detect overflow of len * size */
+                 (len * size > SSize_t_MAX - total)))  /* detect overflow of total + len * size */
+            croak("Pack template structure size is too large");
         total += len * size;
     }
     return total;

@@ -1,5 +1,8 @@
 #ifndef PERL_REGCOMP_INTERNAL_H
 #define PERL_REGCOMP_INTERNAL_H
+
+#if defined(PERL_CORE) || defined(PERL_EXT_RE_BUILD)
+
 #ifndef RE_OPTIMIZE_CURLYX_TO_CURLYM
 #define RE_OPTIMIZE_CURLYX_TO_CURLYM 1
 #endif
@@ -46,7 +49,6 @@ struct RExC_state_t {
                                            and restoring 'copy_start' */
     char        *copy_start_in_input;   /* Position in input string
                                            corresponding to copy_start */
-    SSize_t     whilem_seen;            /* number of WHILEM in this expr */
     regnode     *emit_start;            /* Start of emitted-code area */
     regnode_offset emit;                /* Code-emit pointer */
     I32         naughty;                /* How bad is this pattern? */
@@ -157,6 +159,8 @@ struct RExC_state_t {
     HV         *unlexed_names;
     SV          *runtime_code_qr;       /* qr with the runtime code blocks */
     bool        use_BRANCHJ;
+    bool        have_flattened;
+    bool        unsafe_flatten;
     bool        sWARN_EXPERIMENTAL__VLB;
     bool        sWARN_EXPERIMENTAL__REGEX_SETS;
     /* DEBUGGING only fields, keep these LAST so that we do not
@@ -201,7 +205,6 @@ struct RExC_state_t {
 #define RExC_end        (pRExC_state->end)
 #define RExC_parse      (pRExC_state->parse)
 #define RExC_latest_warn_offset (pRExC_state->latest_warn_offset )
-#define RExC_whilem_seen        (pRExC_state->whilem_seen)
 #define RExC_seen_d_op (pRExC_state->seen_d_op) /* Seen something that differs
                                                    under /d from /u ? */
 
@@ -254,6 +257,8 @@ struct RExC_state_t {
 #define RExC_warn_text (pRExC_state->warn_text)
 #define RExC_in_script_run      (pRExC_state->in_script_run)
 #define RExC_use_BRANCHJ        (pRExC_state->use_BRANCHJ)
+#define RExC_have_flattened          (pRExC_state->have_flattened)
+#define RExC_unsafe_flatten          (pRExC_state->unsafe_flatten)
 #define RExC_warned_WARN_EXPERIMENTAL__VLB (pRExC_state->sWARN_EXPERIMENTAL__VLB)
 #define RExC_warned_WARN_EXPERIMENTAL__REGEX_SETS (pRExC_state->sWARN_EXPERIMENTAL__REGEX_SETS)
 #define RExC_unlexed_names (pRExC_state->unlexed_names)
@@ -684,7 +689,6 @@ struct scan_data_t {
     struct scan_data_substrs  substrs[2];
 
     I32 flags;             /* common SF_* and SCF_* flags */
-    I32 whilem_c;
     SSize_t *last_closep;
     regnode **last_close_opp; /* pointer to pointer to last CLOSE regop
                                  seen. DO NOT DEREFERENCE the regnode
@@ -703,10 +707,18 @@ static const scan_data_t zero_scan_data = {
         { NULL, 0, 0, 0, 0, 0 },
         { NULL, 0, 0, 0, 0, 0 },
     },
-    0, 0, NULL, NULL, NULL
+    0, NULL, NULL, NULL
 };
 
-/* study flags */
+
+/* Flags for studying.
+ *
+ * The SF_  (scan)        flags are for the scan_data_t->data field.
+ * The SCF_ (study_chunk) flags are mainly for the flags parameter
+ *                        to Perl_study_chunk(), but some can also be used
+ *                        in scan_data_t->data, which is why they share a
+ *                        common bit space.
+ */
 
 #define SF_BEFORE_SEOL          0x0001
 #define SF_BEFORE_MEOL          0x0002
@@ -733,6 +745,12 @@ static const scan_data_t zero_scan_data = {
 #define SCF_DO_STCLASS_AND      0x0800
 #define SCF_DO_STCLASS_OR       0x1000
 #define SCF_DO_STCLASS          (SCF_DO_STCLASS_AND|SCF_DO_STCLASS_OR)
+
+/* SCF_WHILEM_VISITED_POS indicates to study_chunk() that either its
+ * caller is a CURLYX/WHILEM of a type which allows inner CURLYX/WHILEMs
+ * to partake in the super-linear cache, or that there is no enclosing
+ * CURLYX. See L<perlreguts/The super-linear cache> for more details.
+ */
 #define SCF_WHILEM_VISITED_POS  0x2000
 
 #define SCF_TRIE_RESTUDY        0x4000 /* Need to do restudy in study_chunk()?
@@ -1213,4 +1231,5 @@ static const scan_data_t zero_scan_data = {
 #define REGNODE_STEP_OVER(ret,t1,t2) \
     NEXT_OFF_set(REGNODE_p(ret), ((sizeof(t1)+sizeof(t2))/sizeof(regnode)));
 
+#endif /* #if defined(PERL_CORE) || defined(PERL_EXT_RE_BUILD) */
 #endif /* PERL_REGCOMP_INTERNAL_H */

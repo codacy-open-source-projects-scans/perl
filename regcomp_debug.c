@@ -1,3 +1,12 @@
+/*
+ *      How often have I said to you that when you have eliminated
+ *      the impossible, whatever remains, however improbable,
+ *      must be the truth?
+ *              --Sherlock Holmes
+ *
+ *     [Chapter VI of _The Sign of the Four_]
+ */
+
 #ifdef PERL_EXT_RE_BUILD
 #include "re_top.h"
 #endif
@@ -100,8 +109,7 @@ Perl_debug_studydata(pTHX_ const char *where, scan_data_t *data,
         debug_show_study_flags(data->flags," [","]");
 
         re_printf(
-            " Whilem_c: %" IVdf " Lcp: %" IVdf " %s",
-            (IV)data->whilem_c,
+            "Lcp: %" IVdf " %s",
             (IV)(data->last_closep ? *((data)->last_closep) : -1),
             is_inf ? "INF " : ""
         );
@@ -227,15 +235,15 @@ Perl_dumpuntil(pTHX_ const regexp *r, const regnode *start, const regnode *node,
         }
         else if ( REGNODE_TYPE(op)  == TRIE ) {
             const regnode *this_trie = node;
-            const U32 n = ARG1u(node);
-            const reg_ac_data * const ac = op >= AHOCORASICK ?
-               (reg_ac_data *)ri->data->data[n] :
+            const U32 slot = TRIE_DATA_SLOT(node);
+            const reg_ac_data * const ac = IS_TRIE_AC(op) ?
+               (reg_ac_data *)ri->data->data[slot] :
                NULL;
             const reg_trie_data * const trie =
-                (reg_trie_data*)ri->data->data[op < AHOCORASICK ? n : ac->trie];
+                (reg_trie_data*)ri->data->data[!IS_TRIE_AC(op) ? slot : ac->trie];
 #ifdef DEBUGGING
             AV *const trie_words
-                           = MUTABLE_AV(ri->data->data[n + TRIE_WORDS_OFFSET]);
+                           = MUTABLE_AV(ri->data->data[slot + TRIE_WORDS_OFFSET]);
 #endif
             const regnode *nextbranch= NULL;
             I32 word_idx;
@@ -258,13 +266,20 @@ Perl_dumpuntil(pTHX_ const regexp *r, const regnode *start, const regnode *node,
                            : "???"
                 );
                 if (trie->jump) {
-                    U16 dist = trie->jump[word_idx+1];
+                    TRIE_JUMP_TYPE dist = trie->jump[word_idx+1];
                     re_printf("(%" UVuf ")\n",
-                               (UV)((dist ? this_trie + dist : next) - start));
+                               (UV)((dist
+                                     ? TRIE_JUMP_TARGET(this_trie, trie->jump,
+                                                       trie->jump_correction,
+                                                       word_idx+1)
+                                     : next) - start));
                     if (dist) {
                         if (!nextbranch)
-                            nextbranch = this_trie + trie->jump[0];
-                        DUMPUNTIL(this_trie + dist, nextbranch);
+                            nextbranch = TRIE_JUMP_FIRST_UNABSORBED_BRANCH(
+                                this_trie, trie->jump, trie->jump_correction);
+                        DUMPUNTIL(TRIE_JUMP_TARGET(this_trie, trie->jump,
+                                                   trie->jump_correction,
+                                                   word_idx+1), nextbranch);
                     }
                     if (nextbranch && REGNODE_TYPE(OP(nextbranch))==BRANCH)
                         nextbranch = regnext((regnode *)nextbranch);
@@ -477,7 +492,6 @@ Perl_regdump(pTHX_ const regexp *r)
         regdump_intflags("r->intflags: ", r->intflags);
     });
 #else
-    PERL_UNUSED_CONTEXT;
     PERL_UNUSED_ARG(r);
 #endif  /* DEBUGGING */
 
@@ -568,10 +582,9 @@ Perl_regprop(pTHX_ const regexp *prog, SV *sv, const regnode *o, const regmatch_
     }
     else if (k == EXACT) {
         sv_catpvs(sv, " ");
-        /* Using is_utf8_string() (via PERL_PV_UNI_DETECT)
-         * is a crude hack but it may be the best for now since
-         * we have no flag "this EXACTish node was UTF-8"
-         * --jhi */
+        /* This is only diagnostic formatting.  Trie construction uses the
+         * node type and the pattern flags to classify its source; it must not
+         * infer the encoding from the contents of the string. */
         pv_pretty(sv, STRING(o), STR_LEN(o), PL_dump_re_max_len,
                   PL_colors[0], PL_colors[1],
                   PERL_PV_ESCAPE_UNI_DETECT |
@@ -583,7 +596,7 @@ Perl_regprop(pTHX_ const regexp *prog, SV *sv, const regnode *o, const regmatch_
     } else if (k == TRIE) {
         /* print the details of the trie in dumpuntil instead, as
          * progi->data isn't available here */
-        const U32 n = ARG1u(o);
+        const U32 n = TRIE_DATA_SLOT(o);
         const reg_ac_data * const ac = IS_TRIE_AC(op) ?
                (reg_ac_data *)progi->data->data[n] :
                NULL;
@@ -594,31 +607,28 @@ Perl_regprop(pTHX_ const regexp *prog, SV *sv, const regnode *o, const regmatch_
         DEBUG_TRIE_COMPILE_r({
           if (trie->jump)
             sv_catpvs(sv, "(JUMP)");
-          sv_catpvf(sv,
-            "<S:%" UVuf "/%" IVdf " W:%" UVuf " L:%" UVuf "/%" UVuf " C:%" UVuf "/%" UVuf ">",
-            (UV)trie->startstate,
-            (IV)trie->statecount-1, /* -1 because of the unused 0 element */
-            (UV)trie->wordcount,
-            (UV)trie->minlen,
-            (UV)trie->maxlen,
-            (UV)TRIE_CHARCOUNT(trie),
-            (UV)trie->uniquecharcount
-          );
+          if (!TRIE_RAW_INPUT_MODE(trie, FALSE)) {
+            sv_catpvf(sv,
+                "<S:%" UVuf "/%" IVdf " W:%" UVuf " L:%" UVuf "/%" UVuf " C:%" UVuf ">",
+                (UV)trie->startstate,
+                (IV)trie->statecount-1,
+                (UV)trie->wordcount,
+                (UV)trie->minlen,
+                (UV)trie->maxlen,
+                (UV)TRIE_CHARCOUNT(trie));
+          }
+          else {
+            sv_catpvf(sv,
+                "<S:%" UVuf "/%" IVdf " W:%" UVuf " L:%" UVuf "/%" UVuf " C:%" UVuf "/%" UVuf ">",
+                (UV)trie->startstate,
+                (IV)trie->statecount-1,
+                (UV)trie->wordcount,
+                (UV)trie->minlen,
+                (UV)trie->maxlen,
+                (UV)TRIE_CHARCOUNT(trie),
+                (UV)TRIE_ALPHABET_SIZE);
+          }
         });
-        if ( IS_ANYOF_TRIE(op) || trie->bitmap ) {
-            sv_catpvs(sv, "[");
-            (void) put_charclass_bitmap_innards(sv,
-                                                ((IS_ANYOF_TRIE(op))
-                                                 ? ANYOF_BITMAP(o)
-                                                 : TRIE_BITMAP(trie)),
-                                                NULL,
-                                                NULL,
-                                                NULL,
-                                                0,
-                                                false
-                                               );
-            sv_catpvs(sv, "]");
-        }
         if (trie->before_paren || trie->after_paren)
             sv_catpvf(sv, " (buf:%" IVdf "/%" IVdf ")",
                     (IV)trie->before_paren,(IV)trie->after_paren);
@@ -636,7 +646,7 @@ Perl_regprop(pTHX_ const regexp *prog, SV *sv, const regnode *o, const regmatch_
         sv_catpvs(sv, "}");
     }
     else if (k == WHILEM && FLAGS(o))                   /* Ordinal/of */
-        sv_catpvf(sv, "[%d/%d]", FLAGS(o) & 0xf, FLAGS(o)>>4);
+        sv_catpvf(sv, "[%d/%d]", (int)FLAGS(o), (int)progi->slc_whilem_seen);
     else if (k == REF || k == OPEN || k == CLOSE
              || k == GROUPP || op == ACCEPT)
     {
@@ -746,7 +756,7 @@ Perl_regprop(pTHX_ const regexp *prog, SV *sv, const regnode *o, const regmatch_
         sv_catpvf(sv, "[%d]", FLAGS(o));
     else if (k == ANYOF || k == ANYOFH || k == ANYOFR) {
         U8 flags;
-        char * bitmap;
+        U8 * bitmap;
         U8 do_sep = 0;    /* Do we need to separate various components of the
                              output? */
         /* Set if there is still an unresolved user-defined property */
@@ -996,6 +1006,10 @@ Perl_regprop(pTHX_ const regexp *prog, SV *sv, const regnode *o, const regmatch_
 
         SvREFCNT_dec(cp_list);
     }
+    else if (op == NEXACTb) {
+        sv_catpvf(sv, "[%s%c%s]",
+                       PL_colors[0], (int) ARG1u(o), PL_colors[1]);
+    }
     else if (k == ANYOFHbbm) {
         SV * cp_list = get_ANYOFHbbm_contents(o);
         sv_catpvf(sv, "[%s", PL_colors[0]);
@@ -1057,7 +1071,6 @@ Perl_regprop(pTHX_ const regexp *prog, SV *sv, const regnode *o, const regmatch_
             sv_catpvs(sv, ":NULL");
     }
 #else
-    PERL_UNUSED_CONTEXT;
     PERL_UNUSED_ARG(sv);
     PERL_UNUSED_ARG(o);
     PERL_UNUSED_ARG(prog);
@@ -1411,7 +1424,7 @@ S_put_charclass_bitmap_innards_common(pTHX_
 
 static U8
 S_put_charclass_bitmap_innards(pTHX_ SV *sv,
-                                     char *bitmap,
+                                     U8 *bitmap,
                                      SV *nonbitmap_invlist,
                                      SV *only_utf8_locale_invlist,
                                      const regnode * const node,

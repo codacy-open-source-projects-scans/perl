@@ -75,17 +75,17 @@ use strict;
 use warnings;
 
 my $known_flags_re =
-         qr/[ aA bC dD eE fF h iI mM nN oO pP rR sS T uU v W xX y ;@\#? ] /xx;
+    qr/[ aA bB C dD eE fF h iI mM nN oO Q pP rR sS tT uU v W xX y ;@\#? ] /xx;
 
 # Flags that don't apply to this program, like implementation details.
-my $irrelevant_flags_re = qr/[ ab eE iI P rR X? ]/xx;
+my $irrelevant_flags_re = qr/[ ab eE iI P Q rR X? ]/xx;
 
 # Only certain flags dealing with what gets displayed, are acceptable for
 # apidoc_item
-my $item_flags_re = qr/[dD fF mM nN oO pT uU Wx;]/xx;
+my $item_flags_re = qr/[B dD fF mM nN oO pT uU Wx;]/xx;
 
 # Only certain flags are acceptable for apidoc_flag
-my $flag_flags_re = qr/[ A C dD eE h m n p u X ] /xx;
+my $flag_flags_re = qr/[ A C dD eE h m n p Q u X ] /xx;
 
 # Certain functions have plain and no_context versions, and meet the criteria
 # stated here.  Each of their pods has been modified to have a marker line
@@ -216,6 +216,7 @@ my $magic_scn = 'Magic';
 my $memory_scn = 'Memory Management';
 my $MRO_scn = 'MRO';
 my $multicall_scn = 'Multicall Functions';
+my $mutex_scn = 'Mutex locking macros';
 my $numeric_scn = 'Numeric Functions';
 my $rpp_scn = 'Reference-counted stack manipulation';
 
@@ -253,22 +254,31 @@ my $undocumented_scn = 'Undocumented elements';
 my @has_defs;
 my @has_r_defs;     # Reentrant symbols
 my @include_defs;
+my @mutex_locks;
 my %list_only = (
       has_defs     => {
+                        section => $genconfig_scn,
                         list => \@has_defs,
                         header => "List of capability C<HAS_I<foo>> symbols",
                         placement => '__HAS_LIST__',
                       },
       has_r_defs   => {
+                        section => $genconfig_scn,
                         list => \@has_r_defs,
                         header => "List of capability C<HAS_I<foo>> symbols",
                         placement => '__HAS_R_LIST__',
                        },
       include_defs => {
+                        section => $genconfig_scn,
                         list => \@include_defs,
                         header => "List of C<#include> needed symbols",
                         placement => '__INCLUDE_LIST__',
                        },
+      mutex_locks => {
+                        section => $mutex_scn,
+                        list => \@mutex_locks,
+                        placement => '__MUTEX_LIST__',
+                      },
 );
 
 my %valid_sections = (
@@ -301,7 +311,14 @@ my %valid_sections = (
     $custom_scn => {},
     $debugging_scn => {},
     $display_scn => {},
-    $embedding_scn => {},
+    $embedding_scn => {
+        header => <<~EOT,
+            See also L</$mutex_scn> for macros to make many libc functions
+            thread-safe
+
+            EOT
+        },
+
     $errno_scn => {},
     $exceptions_scn => {},
     $filesystem_scn => {
@@ -456,6 +473,49 @@ my %valid_sections = (
     $memory_scn => {},
     $MRO_scn => {},
     $multicall_scn => {},
+    $mutex_scn => {
+        header => <<~"EOT",
+            Below is a list of libc functions for which Perl furnishes mutex
+            locking/unlocking macros.  Functions on this list can be made
+            thread-safe by wrapping their calls with these macros.  All these
+            macros expand to no-ops unless threading is in effect.
+
+            In some cases, the functions return pointers to static data that
+            must be copied to a safe place before the unlock occurs.
+
+            If a function is not on the list, it is because of one of several
+            reasons:
+
+                1) We believe it is thread-safe
+                2) It cannot be made thread safe
+                3) It is used in conjunction with other functions which have
+                   to be executed in one atomic unit, and that is beyond our
+                   capabilities for automatically generating locks.
+                4) We don't know about it.
+
+            See L<perlclib/Dealing with embedded perls and threads> for more
+            details.  The macro definitions are based on man pages (especially
+            Linux ones), and our experience.  We also know from experience
+            that man pages can be wrong or incomplete, and the behavior of any
+            given function may be platform dependent.  Patches to update our
+            knowledge base in F<regen/lock_definitions.pl> are welcome.
+
+            For a function 'foo', the locking/unlocking macros are named
+
+             PERL_FOO_LOCK
+             PERL_FOO_UNLOCK
+
+            Note that just because a function is on the list below, doesn't
+            mean it is a good idea for you to use it.  Some are obsolete; some
+            are implemented on only one or a few platforms; some have better
+            alternatives.  Before using a given lock, look it up in
+            F<perl_lock_definitions.h> to see what notes and cautions are
+            given for it.
+            EOT
+        footer => <<~EOT,
+            $list_only{mutex_locks}{placement}
+            EOT
+        },
     $numeric_scn => {},
     $optrees_scn => {},
     $optree_construction_scn => {},
@@ -646,6 +706,7 @@ sub check_and_add_proto_defn {
     $flags .= "U" if $flags =~ /@/;     # No usage output for @arrays
     $flags .= "n" if $flags =~ /[#v]/;  # No threads, arguments for #ifdef's,
                                         # plain values
+    my $aTHX_NULLOK = $flags =~ /t/;
 
     if ($flags =~ /N/) {
         state %escapes = (
@@ -715,6 +776,7 @@ sub check_and_add_proto_defn {
         $elements{$element}{args} = \@munged_args;
         $elements{$element}{file} = $file;
         $elements{$element}{line_num} = $line_num // 0;
+        $elements{$element}{aTHX_NULLOK} = $aTHX_NULLOK;
 
         # Don't reset expecting documentation.
         $elements{$element}{docs_expected} = $docs_expected
@@ -909,7 +971,7 @@ sub handle_apidoc_line ($file, $line_num, $type, $arg) {
         $ret_type = '#ifdef';
     }
 
-    warn ("'$name' not \\w+ in '$proto_as_written' "
+    die ("'$name' not \\w+ in '$proto_as_written' "
        .  where_from_string($file, $line_num))
                         if $flags !~ /N/
                         && $name !~ / ^ (?:struct\s+)? [_[:alpha:]] \w* $ /x;
@@ -1140,9 +1202,9 @@ sub autodoc ($fh, $file) {  # parse a file and extract documentation info
             if ($file_is_C && $inner_arg =~ m: ^ \s* \* / $ :x) {
 
                 # End of comment line in C files is a fall-back
-                # terminator, but warn only if there actually is some
+                # terminator, but die only if there actually is some
                 # accumulated text
-                warn "=cut missing? "
+                die "=cut missing? "
                    . where_from_string($file, $line_num)
                    . "\n$inner_arg"                             if $text =~ /\S/;
                 last;
@@ -1179,7 +1241,7 @@ sub autodoc ($fh, $file) {  # parse a file and extract documentation info
             if (   ! $is_link_only
                 && exists $docs{$destpod}{$section}{$element_name})
             {
-                warn "$0: duplicate API entry for '$element_name'"
+                die "$0: duplicate API entry for '$element_name'"
                    . " $destpod/$section "
                    . where_from_string($file, $line_num);
                 next;
@@ -1231,7 +1293,11 @@ sub parse_config_h {
     # Process config.h
     die "Can't find $config_h" unless -e $config_h;
     open my $fh, '<', $config_h or die "Can't open $config_h: $!";
+    my $seen_config_start = 0;
     while (<$fh>) {
+
+        $seen_config_start = 1 if m/^#define _config_h_/;
+        next unless $seen_config_start;
 
         # Look for lines like /* FOO_BAR:
         # By convention all config.h descriptions begin like that
@@ -1483,7 +1549,7 @@ sub parse_config_h {
                 }
             }
 
-            warn "$name has no documentation "
+            die "$name has no documentation "
                . where_from_string($config_h, $configs{$name}{defn_line_num});
 
             next;
@@ -1730,6 +1796,24 @@ sub parse_config_h {
     }
 }
 
+sub parse_lock_definitions_h {
+    use re '/aa';   # Everything is ASCII in this file
+
+    my %mutexes;
+
+    # Process lock_definitions.h
+    my $lock_definitions_h = 'perl_lock_definitions.h';
+    die "Can't find $lock_definitions_h" unless -e $lock_definitions_h;
+    open my $fh, '<', $lock_definitions_h
+                                or die "Can't open $lock_definitions_h: $!";
+    while (<$fh>) {
+        next unless $_ =~ s/ ^\# \s* define \s+ PERL_ (\w+) _LOCK \b .* //x;
+        $mutexes{lc $1} = 1;
+    }
+
+    @mutex_locks = keys %mutexes;
+}
+
 sub format_pod_indexes ($entries_ref) {
 
     # Output the X<> references to the names, packed since they don't get
@@ -1769,9 +1853,21 @@ sub docout ($fh, $section_name, $element_name, $docref) {
     my $flags = $item0->{flags};
 
     if ($pod !~ /\S/) {
-        warn "Empty pod for $element_name ("
-           . where_from_string($item0->{file}, $item0->{line_num})
-           . ')';
+        if ($flags !~ /B/) {
+            die "Empty pod for $element_name ("
+              . where_from_string($item0->{file}, $item0->{line_num})
+              . ')';
+        }
+        else {
+            # We accept empty pod for backwards compatibilty-only elements.  
+            # Doing so allows a modicum of documentation without us having to
+            # work at figuring out what to say for something that shouldn't be
+            # being used anyway.
+            $pod = <<~EOT;
+                No further documentation is currently available.
+                Patches welcome.
+                EOT
+        }
     }
 
     print $fh "\n=over $description_indent\n";
@@ -1780,6 +1876,7 @@ sub docout ($fh, $section_name, $element_name, $docref) {
     my @where_froms;
     my @deprecated;
     my @experimental;
+    my @back_compat;
     my @xrefs;
 
     for (my $i = 0; $i < @items; $i++) {
@@ -1797,6 +1894,7 @@ sub docout ($fh, $section_name, $element_name, $docref) {
 
             push @deprecated,   "C<$name>" if $item->{flags} =~ /D/;
             push @experimental, "C<$name>" if $item->{flags} =~ /x/;
+            push @back_compat, "C<$name>" if $item->{flags} =~ /B/;
         }
 
         # While we're going though the items, construct a nice list of where
@@ -1848,7 +1946,7 @@ sub docout ($fh, $section_name, $element_name, $docref) {
     print $fh format_pod_indexes(\@xrefs);
     print $fh "\n" if @xrefs;
 
-    for my $which (\@deprecated, \@experimental) {
+    for my $which (\@deprecated, \@experimental, \@back_compat) {
         next unless $which->@*;
 
         my $is;
@@ -1884,11 +1982,19 @@ sub docout ($fh, $section_name, $element_name, $docref) {
                 new code; remove $it from existing code.
                 EOT
         }
-        else {
+        elsif ($which == \@experimental) {
             print $fh <<~"EOT";
 
                 NOTE: $list $is B<experimental> and may change or be
                 removed without notice.
+                EOT
+        }
+        else {
+            $list = ucfirst($list) if $list =~ /form/;
+            print $fh <<~"EOT";
+
+                $list $is provided for backwards compatibility with
+                existing code, and should not be used for new code.
                 EOT
         }
     }
@@ -1906,6 +2012,7 @@ sub docout ($fh, $section_name, $element_name, $docref) {
     # Accumulate the usage section of the entry into this array.  Output below
     # only when non-empty
     my @usage;
+    my @allowed_pTHX_NULL;
     if (defined $docref->{usage}) {
 
         # A complete override of the usage section.  Note that the O flag
@@ -1951,7 +2058,7 @@ sub docout ($fh, $section_name, $element_name, $docref) {
             if (! $additional_long_form && $flags =~ /O/) {
                 my $real_proto = delete $protos{"perl_$name"};
                 if (! $real_proto) {
-                    warn "Unexpectedly there isn't a 'perl_$name' even though"
+                    die "Unexpectedly there isn't a 'perl_$name' even though"
                        . " there is an 'O' flag "
                        . where_from_string($item->{file}, $item->{line_num})
                        . "; omitting the deprecation warning";
@@ -1968,7 +2075,7 @@ sub docout ($fh, $section_name, $element_name, $docref) {
                                         if $flags =~ /u/ && $flags !~ /[my]/;
 
             my $has_semicolon = $flags =~ /;/;
-            warn "'U' and ';' flags are incompatible"
+            die "'U' and ';' flags are incompatible "
                . where_from_string($item->{file}, $item->{line_num})
                                             if $flags =~ /U/ && $has_semicolon;
 
@@ -1979,17 +2086,21 @@ sub docout ($fh, $section_name, $element_name, $docref) {
 
             my $has_args = $flags !~ /n/;
             if (! $has_args) {
-                warn "$name: n flag without [mv#] "
+                die "$name: n flag without [mv#] "
                    . where_from_string($item->{file}, $item->{line_num})
                                                      unless $flags =~ /[mv#]/;
 
                 if ($item->{args} && $item->{args}->@*) {
-                    warn "$name: n flag but apparently has args"
+                    die "$name: n flag but apparently has args"
                        . where_from_string($item->{file}, $item->{line_num});
                     $flags =~ s/n//g;
                     $has_args = 1;
                 }
             }
+
+            die "'B' and 'D' flags are incompatible "
+               . where_from_string($item->{file}, $item->{line_num})
+                                            if $flags =~ tr/BD// > 1;
 
             my $ret = $item->{ret_type} // "";
             my @args;
@@ -2039,6 +2150,8 @@ sub docout ($fh, $section_name, $element_name, $docref) {
                         $this_has_pTHX = 1;
                         unshift @args, "pTHX";
                         $any_has_pTHX_ = 1 if @args > 1;
+                        push @allowed_pTHX_NULL, $name
+                                                     if $item->{aTHX_NULLOK};
                     }
 
                     $additional_long_form = 0;
@@ -2060,7 +2173,7 @@ sub docout ($fh, $section_name, $element_name, $docref) {
                         $any_has_additional_long_form = 1;
                     }
                     else {
-                        warn "$name unexpectedly doesn't have a long name;"
+                        die "$name unexpectedly doesn't have a long name;"
                            . " only short name used\n("
                            . where_from_string($item->{file}, $item->{line_num})
                            . ')';
@@ -2307,6 +2420,13 @@ sub docout ($fh, $section_name, $element_name, $docref) {
         }
     }
 
+    if (@allowed_pTHX_NULL) {
+        print $fh "\n";
+        foreach my $name (@allowed_pTHX_NULL) {
+            print $fh " $name accepts a NULL value for the pTHX parameter\n";
+        }
+    }
+
     if (grep { /\S/ } @usage) {
         print $fh "\n=over $usage_indent\n\n";
         print $fh join "", @usage;
@@ -2411,13 +2531,14 @@ sub output ($destpod) {  # Output a complete pod file
 
     for my $section_name (sort dictionary_order keys %valid_sections) {
         my $section_info = $dochash->{$section_name};
+        my $has_list = $valid_sections{$section_name}{has_list};
 
-        if (! $section_info) {
+        if (! $section_info && ! $has_list) {
             # We always allow empty sections in perlintern.
             if (   $podname eq $api
                 && ! $valid_sections{$section_name}{may_be_empty_in_perlapi})
             {
-                warn "Empty section '$section_name' for $podname; skipped";
+                die "Empty section '$section_name' for $podname; skipped";
                 next;
             }
         }
@@ -2431,7 +2552,7 @@ sub output ($destpod) {  # Output a complete pod file
         }
 
         my $has_entries = $section_info && keys $section_info->%*;
-        if ($has_entries) {
+        if ($has_entries || $has_list) {
             print $fh "\n", $valid_sections{$section_name}{header}, "\n"
                  if defined $valid_sections{$section_name}{header};
 
@@ -2443,7 +2564,7 @@ sub output ($destpod) {  # Output a complete pod file
             }
         }
 
-        if (! $has_entries) {
+        if (! $has_entries && ! $has_list) {
             my $pod_type = ($podname eq $api) ? "public" : "internal";
             print $fh "\nThere are currently no $pod_type API items in ",
                       $section_name, "\n";
@@ -2743,6 +2864,8 @@ for my $file (@headers, @non_headers) {
     close $fh or die "Error closing $file: $!\n";
 }
 
+parse_lock_definitions_h();
+
 # Code in this file depends on doing config.h last.
 parse_config_h();
 
@@ -2767,7 +2890,7 @@ foreach my $section_name (keys $unknown->%*) {
         }
 
         my $destpod = destination_pod($corrected->{flags});
-        warn "The destination pod for $item_name remains unknown."
+        die "The destination pod for $item_name remains unknown."
           . "  It should have been determined by now" if $destpod eq "unknown";
 
         # $destpod now gives the correct pod for this group.  Prepare to move it
@@ -2849,12 +2972,12 @@ for my $which (\%api, \%intern) {
         next if $which == \%intern && $element->{flags} =~ /A/;
 
         if ($element->{docs_found}) {
-            warn "'$name' missing 'd' flag "
+            die "'$name' missing 'd' flag "
                . where_from_string($element->{file}, $element->{line_num})
                                                if ! $element->{docs_expected};
         }
         elsif ($element->{docs_expected}) { # But no docs found
-            warn "No documentation was found for $name, even though "
+            die "No documentation was found for $name, even though "
                . where_from_string($element->{file}, $element->{line_num})
                . " says there should be some available"
         }
@@ -2891,9 +3014,11 @@ my $places_other_than_api = join ", ",
 
 
 foreach my $name (keys %list_only) {
+    my $section = $list_only{$name}{section};
     my $text = make_verbatim_list($list_only{$name}{list}->@*);
-    $valid_sections{$genconfig_scn}{footer}
+    $valid_sections{$section}{footer}
                                     =~ s/$list_only{$name}{placement}/$text/;
+    $valid_sections{$section}{has_list} = 1;
 }
 
 my $section_list = join "\n\n", map { "=item L</$_>" }

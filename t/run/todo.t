@@ -103,8 +103,6 @@ use warnings;
 
 my $switches = "";
 
-my $is_debugging_build = $Config{config_args} =~ /\bDDEBUGGING\b(*nla:=none)/;
-
 our $TODO;
 
 TODO: {
@@ -294,7 +292,7 @@ TODO: {
 }
 
 TODO: {
-    todo_skip "Test needs -DDEBUGGING", 1 unless $is_debugging_build;
+    todo_skip "Test needs -DDEBUGGING", 1 unless Config::DEBUGGING;
     local $::TODO = 'GH 16522';
     fresh_perl(<<~'HERE', { stderr => 'devnull' });
         END { exit 0 } # Consider compilation errors a success
@@ -304,7 +302,7 @@ TODO: {
 }
 
 TODO: {
-    todo_skip "Test needs -DDEBUGGING", 1 unless $is_debugging_build;
+    todo_skip "Test needs -DDEBUGGING", 1 unless Config::DEBUGGING;
     local $::TODO = 'GH 16863';
     fresh_perl(<<~'HERE', { stderr => 'devnull' });
         END { exit 0 }
@@ -320,7 +318,12 @@ TODO: {
 }
 
 TODO: {
-    todo_skip "Test needs -DDEBUGGING", 1 unless $is_debugging_build;
+    todo_skip "Test needs -DDEBUGGING on Linux and on Cygwin, no miniperl", 1
+        unless (
+            Config::DEBUGGING and
+            ($Config{osname} eq 'linux' or $Config{osname} eq 'cygwin') and
+            ! is_miniperl()
+        );
     local $::TODO = 'GH 16869';
     fresh_perl(<<~'HERE', {});
         my $glob = ("0" x 4094) . "?";
@@ -330,19 +333,11 @@ TODO: {
 }
 
 TODO: {
-    todo_skip "Test needs -DDEBUGGING", 1 unless $is_debugging_build;
+    todo_skip "Test needs -DDEBUGGING", 1 unless Config::DEBUGGING;
     local $::TODO = 'GH 16876';
     fresh_perl('$_ = "a"; s{ x | (?{ s{}{x} }) }{}gx;',
                { stderr => 'devnull' });
     is($?, 0, "No assertion failure; GH 16876");
-}
-
-TODO: {
-    todo_skip "Test needs -DDEBUGGING", 1 unless $is_debugging_build;
-    local $::TODO = 'GH 16952';
-    fresh_perl('s/d|(?{})!//.$&>0for$0,l..a0,0..0',
-               { stderr => 'devnull' });
-    is($?, 0, "No assertion failure; GH 16952");
 }
 
 TODO: {
@@ -364,16 +359,6 @@ TODO: {
         "'sub () { !0 }' does not prevent 'Modification of a read-only value' error; GH 19378"
     );
     isnt($?, 0, 'Compilation fails; GH 19378');
-}
-
-TODO: {
-    local $::TODO = 'GH 20491';
-    use experimental 'defer';
-    my $deferred = 0;
-    do {
-        defer { $deferred = 1 };
-    };
-    is($deferred, 1, 'defer in single-expression do block runs when exiting block; GH 20491');
 }
 
 TODO: {

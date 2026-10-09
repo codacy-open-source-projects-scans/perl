@@ -7,6 +7,13 @@
  *
  */
 
+/*
+ *      I ought to be thy Adam, but I am rather the fallen angel.
+ *              --The Creature
+ *
+ *     [Chapter X of _Frankenstein_]
+ */
+
 /* This file contains the code that implements perl's new `use feature 'class'`
  * object model
  */
@@ -550,9 +557,8 @@ apply_class_attribute_isa(pTHX_ HV *stash, SV *value)
         superstash = gv_stashsv(superclassname, 0);
     }
     if(!superstash || !HvSTASH_IS_CLASS(superstash))
-        /* TODO: This would be a useful feature addition */
-        croak("Class :isa attribute requires a class but %" HvNAMEf_QUOTEDPREFIX " is not one",
-            HvNAMEfARG(superstash));
+        croak("Class :isa attribute requires a class but %" SVf_QUOTEDPREFIX " is not one",
+            superclassname);
 
     if(superclassver && SvOK(superclassver))
         ensure_module_version(superclassname, superclassver);
@@ -688,6 +694,10 @@ S_class_cleanup_definition(pTHX_ HV *stash)
     SvREFCNT_dec(aux->xhv_class_subclasses_pending_seal);
     aux->xhv_class_subclasses_pending_seal = NULL;
 
+    /* need to release the saved initializer ops in the context
+       of the CV any pad entries were created in */
+    resume_compcv_final(aux->xhv_class_suspended_initfields_compcv);
+
     /* clean up the ops for defaults for fields, if any, since
        padname_free() doesn't.
     */
@@ -727,7 +737,6 @@ S_class_cleanup_definition(pTHX_ HV *stash)
     }
 
     /* field clean up */
-    resume_compcv_final(aux->xhv_class_suspended_initfields_compcv);
     SvREFCNT_dec(PL_compcv);
     Safefree(aux->xhv_class_suspended_initfields_compcv);
     aux->xhv_class_suspended_initfields_compcv = NULL;
@@ -974,6 +983,37 @@ Perl_class_prepare_method_parse(pTHX_ CV *cv)
     assert(cv == PL_compcv);
     assert(HvSTASH_IS_CLASS(PL_curstash));
 
+    CvNOWARN_AMBIGUOUS_on(cv);
+    CvIsMETHOD_on(cv);
+}
+
+/*
+=for apidoc_section $optree_construction
+
+=for apidoc class_method_parse_post_blockstart
+
+Performs the steps necessary at compile-time of a C<method> subroutine that
+must be deferred until after the call to L</block_start>.  Only valid during
+parsing and compiling of a method subroutine, after having called
+L</start_subparse> with the C<CVf_IsMETHOD> flag set.
+
+Currently, its only purpose is to declare the C<$self> lexical variable,
+though in future versions it may perform any other steps that are necessary
+at this time.
+
+=cut
+*/
+
+void
+Perl_class_method_parse_post_blockstart(pTHX_ CV *cv)
+{
+    PERL_ARGS_ASSERT_CLASS_METHOD_PARSE_POST_BLOCKSTART;
+    PERL_UNUSED_ARG(cv);
+
+    assert(cv == PL_compcv);
+    assert(CvIsMETHOD(cv));
+    assert(HvSTASH_IS_CLASS(PL_curstash));
+
     /* We expect this to be at the start of sub parsing, so there won't be
      * anything in the pad yet
      */
@@ -986,9 +1026,6 @@ Perl_class_prepare_method_parse(pTHX_ CV *cv)
     PERL_UNUSED_VAR(padix);
 
     intro_my();
-
-    CvNOWARN_AMBIGUOUS_on(cv);
-    CvIsMETHOD_on(cv);
 }
 
 #define find_op_methstart(o)  S_find_op_methstart(aTHX_ o)
@@ -1132,11 +1169,28 @@ S_pad_import_field(pTHX_ PADNAME *fieldpn)
 }
 
 static void
+padname_skip_underscore(const PADNAME *pn, const char **pname, STRLEN *plen) {
+    /* skip sigil */
+    const char *name = PadnamePV(pn) + 1;
+    STRLEN len = PadnameLEN(pn) - 1;
+    if (len > 0 && *name == '_') {
+        name++;
+        len--;
+    }
+    *pname = name;
+    *plen = len;
+}
+
+static void
 apply_field_attribute_param(pTHX_ PADNAME *pn, SV *value)
 {
-    if(!value)
-        /* Default to name minus the sigil */
-        value = newSVpvn_utf8(PadnamePV(pn) + 1, PadnameLEN(pn) - 1, PadnameUTF8(pn));
+    if(!value) {
+        /* Default to name minus the sigil (and one underscore if present) */
+        const char *name;
+        STRLEN len;
+        padname_skip_underscore(pn, &name, &len);
+        value = newSVpvn_utf8(name, len, PadnameUTF8(pn));
+    }
 
     if(PadnamePV(pn)[0] != '$')
         croak("Only scalar fields can take a :param attribute");
@@ -1166,9 +1220,13 @@ apply_field_attribute_reader(pTHX_ PADNAME *pn, SV *value)
 {
     if(value)
         SvREFCNT_inc(value);
-    else
-        /* Default to name minus the sigil */
-        value = newSVpvn_utf8(PadnamePV(pn) + 1, PadnameLEN(pn) - 1, PadnameUTF8(pn));
+    else {
+        /* Default to name minus the sigil (and one underscore if present) */
+        const char *name;
+        STRLEN len;
+        padname_skip_underscore(pn, &name, &len);
+        value = newSVpvn_utf8(name, len, PadnameUTF8(pn));
+    }
 
     if(!valid_identifier_sv(value))
         croak("%" SVf_QUOTEDPREFIX " is not a valid name for a generated method", value);
@@ -1232,10 +1290,12 @@ apply_field_attribute_writer(pTHX_ PADNAME *pn, SV *value)
     if(value)
         SvREFCNT_inc(value);
     else {
-        /* Default to "set_" . name minus the sigil */
+        /* Default to "set_" . name minus the sigil (and one underscore if present) */
+        const char *name;
+        STRLEN len;
+        padname_skip_underscore(pn, &name, &len);
         value = newSVpvs("set_");
-        sv_catpvn_flags(value, PadnamePV(pn) + 1, PadnameLEN(pn) - 1,
-                PadnameUTF8(pn) ? SV_CATUTF8 : 0);
+        sv_catpvn_flags(value, name, len, PadnameUTF8(pn) ? SV_CATUTF8 : 0);
     }
 
     if(!valid_identifier_sv(value))

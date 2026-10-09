@@ -241,7 +241,7 @@ Perl_CvGV(pTHX_ CV *sv)
 {
     PERL_ARGS_ASSERT_CVGV;
 
-    return CvNAMED(sv)
+    return CvHasNAME_HEK(sv)
         ? Perl_cvgv_from_hek(aTHX_ sv)
         : ((XPVCV*)MUTABLE_PTR(SvANY(sv)))->xcv_gv_u.xcv_gv;
 }
@@ -329,6 +329,52 @@ S_PerlEnv_putenv(pTHX_ char * str)
     ENV_UNLOCK;
 
     return retval;
+}
+
+#endif
+
+/* ------------------------------- handy.h ------------------------------- */
+
+#ifdef EMULATE_THREAD_SAFE_LOCALES
+
+PERL_STATIC_INLINE int
+Perl_posix_LC_foo(pTHX_ const int c, const U8 classnum) {
+    PERL_ARGS_ASSERT_POSIX_LC_FOO;
+
+    int result;
+
+    PERL_LCx_LOCK(PERL_LC_INDEX_TO_BIT(LC_CTYPE_INDEX_));
+
+    /* All calls to this (so far) are with a 'classnum' known at compile time,
+     * so the compiler should constant fold this down to a single assignment */
+    switch (classnum) {
+      case CC_ALPHANUMERIC_:result = (bool) is_posix_ALPHANUMERIC(c); break;
+      case CC_ALPHA_:       result = (bool) is_posix_ALPHA(c);        break;
+      case CC_ASCII_:       result = (bool) is_posix_ASCII(c);        break;
+      case CC_BLANK_:       result = (bool) is_posix_BLANK(c);        break;
+      case CC_CASED_:       result = (bool) is_posix_CASED(c);        break;
+      case CC_CNTRL_:       result = (bool) is_posix_CNTRL(c);        break;
+      case CC_DIGIT_:       result = (bool) is_posix_DIGIT(c);        break;
+      case CC_GRAPH_:       result = (bool) is_posix_GRAPH(c);        break;
+      case CC_LOWER_:       result = (bool) is_posix_LOWER(c);        break;
+      case CC_PRINT_:       result = (bool) is_posix_PRINT(c);        break;
+      case CC_PUNCT_:       result = (bool) is_posix_PUNCT(c);        break;
+      case CC_SPACE_:       result = (bool) is_posix_SPACE(c);        break;
+      case CC_UPPER_:       result = (bool) is_posix_UPPER(c);        break;
+      case CC_WORDCHAR_:    result = (bool) is_posix_WORDCHAR(c);     break;
+      case CC_XDIGIT_:      result = (bool) is_posix_XDIGIT(c);       break;
+      case CC_IDFIRST_:     result = (bool) is_posix_IDFIRST(c);      break;
+      case CC_TOLOWER_:     result =        to_posix_LOWER(c);        break;
+      case CC_TOUPPER_:     result =        to_posix_UPPER(c);        break;
+
+      default:
+        PERL_LCx_UNLOCK(PERL_LC_INDEX_TO_BIT(LC_CTYPE_INDEX_));
+        locale_panic_(Perl_form(aTHX_ "Unknown charclass %d", classnum));
+    }
+
+    PERL_LCx_UNLOCK(PERL_LC_INDEX_TO_BIT(LC_CTYPE_INDEX_));
+
+    return result;
 }
 
 #endif
@@ -663,7 +709,7 @@ Perl_rpp_pop_1_norc(pTHX)
 Push one or two SVs onto the stack, incrementing their reference counts
 and updating C<PL_stack_sp>. With the C<x> variants, it extends the stack
 first. The C<IMM> variants assume that the single argument is an immortal
-such as <&PL_sv_undef> and, for efficiency, will skip incrementing its
+such as C<&PL_sv_undef> and, for efficiency, will skip incrementing its
 reference count.
 
 =cut
@@ -774,7 +820,7 @@ The C<_NN> variant assumes that the pointer on the stack to the SV being
 freed is non-NULL.
 
 The C<IMM_NN> variant is like the C<_NN> variant, but in addition, assumes
-that the single argument is an immortal such as <&PL_sv_undef> and, for
+that the single argument is an immortal such as C<&PL_sv_undef> and, for
 efficiency, will skip incrementing its reference count.
 
 =cut
@@ -849,7 +895,7 @@ The C<_NN> variant assumes that the pointers on the stack to the SVs being
 freed are non-NULL.
 
 The C<IMM_NN> variant is like the C<_NN> variant, but in addition, assumes
-that the single argument is an immortal such as <&PL_sv_undef> and, for
+that the single argument is an immortal such as C<&PL_sv_undef> and, for
 efficiency, will skip incrementing its reference count.
 =cut
 */
@@ -1528,7 +1574,8 @@ Perl_valid_utf8_to_uv(const U8 *s, STRLEN *retlen)
  * platform. */
 #  define WORTH_PER_WORD_LOOP_BINMODE(s, e, full_words_needed)      \
        /* Note multiple evaluations of 's' */                       \
-       ( ( ( (s) + BYTES_REMAINING_IN_WORD(s)                       \
+         (assert(full_words_needed > 0),                            \
+         ( ( (s) + BYTES_REMAINING_IN_WORD(s)                       \
                  + (full_words_needed) * PERL_WORDSIZE) < (e) )     \
         ? ((s) + BYTES_REMAINING_IN_WORD(s))                        \
         : NULL)
@@ -4418,7 +4465,6 @@ PERL_STATIC_INLINE void
 Perl_cx_popwhen(pTHX_ PERL_CONTEXT *cx)
 {
     PERL_ARGS_ASSERT_CX_POPWHEN;
-    PERL_UNUSED_CONTEXT;
     PERL_UNUSED_ARG(cx);
     assert(CxTYPE(cx) == CXt_WHEN);
 
@@ -4630,7 +4676,6 @@ PERL_STATIC_INLINE I32
 Perl_foldEQ(pTHX_ const char *s1, const char *s2, I32 len)
 {
     PERL_ARGS_ASSERT_FOLDEQ;
-    PERL_UNUSED_CONTEXT;
 
     const U8 *a = (const U8 *)s1;
     const U8 *b = (const U8 *)s2;
@@ -4654,8 +4699,6 @@ Perl_foldEQ_latin1(pTHX_ const char *s1, const char *s2, I32 len)
      * representable without UTF-8, except for LATIN_SMALL_LETTER_SHARP_S, and
      * does not check for this.  Nor does it check that the strings each have
      * at least 'len' characters. */
-
-    PERL_UNUSED_CONTEXT;
 
     const U8 *a = (const U8 *)s1;
     const U8 *b = (const U8 *)s2;
@@ -4953,7 +4996,8 @@ Perl_mortal_getenv(const char * str)
 PERL_STATIC_INLINE bool
 Perl_sv_isbool(pTHX_ const SV *sv)
 {
-    PERL_UNUSED_CONTEXT;
+    PERL_ARGS_ASSERT_SV_ISBOOL;
+
     return SvBoolFlagsOK(sv) && BOOL_INTERNALS_sv_isbool(sv);
 }
 
@@ -5073,7 +5117,6 @@ PERL_STATIC_INLINE char *
 Perl_savepv(pTHX_ const char *pv)
 {
     PERL_ARGS_ASSERT_SAVEPV;
-    PERL_UNUSED_CONTEXT;
 
     if (!pv)
         return NULL;
@@ -5093,7 +5136,6 @@ Perl_savepvn(pTHX_ const char *pv, Size_t len)
     PERL_ARGS_ASSERT_SAVEPVN;
 
     char *newaddr;
-    PERL_UNUSED_CONTEXT;
 
     Newx(newaddr,len+1,char);
     /* Give a meaning to NULL pointer mainly for the use in sv_magic() */
@@ -5171,7 +5213,6 @@ PERL_STATIC_INLINE MGVTBL*
 Perl_get_vtbl(pTHX_ int vtbl_id)
 {
     PERL_ARGS_ASSERT_GET_VTBL;
-    PERL_UNUSED_CONTEXT;
 
     return (vtbl_id < 0 || vtbl_id >= magic_vtable_max)
         ? NULL : (MGVTBL*)PL_magic_vtables + vtbl_id;
@@ -5255,6 +5296,50 @@ Perl_my_strlcpy(char *dst, const char *src, Size_t size)
     return length;
 }
 #endif
+
+/*
+=for apidoc bitcount64
+=for apidoc_item bitcount32
+
+Functions for finding the number of set bits in a C<uint64_t> or
+C<uint32_t>. The exact implementation may vary depending upon
+compiler, architecture level, and CPU.
+
+Some compilers may recognize the baseline C implementations and
+automatically replace them with CPU instructions such as
+C<popcnt> (for C<x86-64>) or C<cnt> + C<addv> (for C<ARM64>).
+
+=cut
+
+*/
+
+PERL_STATIC_INLINE U32
+Perl_bitcount64(U64 v) {
+    PERL_ARGS_ASSERT_BITCOUNT64;
+
+#ifdef HAS_BUILTIN_POPCOUNTLL
+    return __builtin_popcountll(v);
+#else
+    v = v - ((v >> 1) & 0x5555555555555555ULL);
+    v = (v & 0x3333333333333333ULL) + ((v >> 2) & 0x3333333333333333ULL);
+    v = (v + (v >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
+    return (U32)((v * 0x0101010101010101ULL) >> 56);
+#endif
+}
+
+
+PERL_STATIC_INLINE U32
+Perl_bitcount32(U32 v) {
+    PERL_ARGS_ASSERT_BITCOUNT32;
+#ifdef HAS_BUILTIN_POPCOUNT
+    return __builtin_popcount(v);
+#else
+    v = v - ((v >> 1) & 0x55555555U);
+    v = (v & 0x33333333U) + ((v >> 2) & 0x33333333U);
+    v = (v + (v >> 4)) & 0x0F0F0F0FU;
+    return (U32)((v * 0x01010101U) >> 24);
+#endif
+}
 
 /*
  * ex: set ts=8 sts=4 sw=4 et:

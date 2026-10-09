@@ -39,7 +39,7 @@
 #include <stdlib.h>
 
 /* For get_entropy() on non-Linux systems (MacOS, Android) we need sys/random.h */
-#ifdef HAS_SYSRANDOM
+#ifdef I_SYS_RANDOM
 #include <sys/random.h>
 #endif
 
@@ -1353,7 +1353,6 @@ Perl_savesharedpv(pTHX_ const char *pv)
     char *newaddr;
     STRLEN pvlen;
 
-    PERL_UNUSED_CONTEXT;
 
     if (!pv)
         return NULL;
@@ -1370,7 +1369,6 @@ char *
 Perl_savesharedpvn(pTHX_ const char *const pv, const STRLEN len)
 {
     PERL_ARGS_ASSERT_SAVESHAREDPVN;
-    PERL_UNUSED_CONTEXT;
 
     char *const newaddr = (char*)PerlMemShared_malloc(len + 1);
 
@@ -1413,8 +1411,8 @@ char *
 Perl_form_nocontext(const char* pat, ...)
 {
     PERL_ARGS_ASSERT_FORM_NOCONTEXT;
+    dTHXa(NULL);
 
-    dTHX;
     char *retval;
     va_list args;
     va_start(args, pat);
@@ -1473,6 +1471,7 @@ char *
 Perl_vform(pTHX_ const char *pat, va_list *args)
 {
     PERL_ARGS_ASSERT_VFORM;
+    GET_aTHX_if_NULL;
 
     SV * const sv = mess_alloc();
     sv_vsetpvfn(sv, pat, strlen(pat), args, NULL, 0, NULL);
@@ -1507,9 +1506,10 @@ SV *
 Perl_mess_nocontext(const char *pat, ...)
 {
     PERL_ARGS_ASSERT_MESS_NOCONTEXT;
+    dTHXa(NULL);
 
-    dTHX;
     SV *retval;
+
     va_list args;
     va_start(args, pat);
     retval = vmess(pat, &args);
@@ -1531,6 +1531,35 @@ Perl_mess(pTHX_ const char *pat, ...)
     return retval;
 }
 
+/*
+=for apidoc closest_cop
+
+Returns the closest COP to the current OP (C<curop>), given the last COP
+seen (C<cop>), a starting OP (C<o>), and a traversal option (C<opnext>).
+
+The function walks the optree from the starting OP, calling itself
+recursively if required, until the walk is exhausted. The best candidate
+COP should then be returned.
+
+This function is typically used by C<Perl_sv_mess> to find the correct
+source code file name and line number to emit in a warning or fatal
+message, or by C<pp_caller> to populate its return values.
+
+The most recently seen COP (C<cop>) is unsuitable in situations such as:
+
+=over
+
+=item *
+C<caller()> needs the most recent COP in a sub I<caller's> context.
+
+=item *
+A closer COP existed, but was nulled out during compilation.
+
+=back
+
+=cut
+*/
+
 const COP*
 Perl_closest_cop(pTHX_ const COP *cop, const OP *o, const OP *curop,
                        bool opnext)
@@ -1541,10 +1570,37 @@ Perl_closest_cop(pTHX_ const COP *cop, const OP *o, const OP *curop,
     /* opnext means that curop is actually the ->op_next of the op we are
        seeking. */
 
-    if (!o || !curop || (
-        opnext ? o->op_next == curop && o->op_type != OP_SCOPE : o == curop
-    ))
+    if (!o || !curop || (!opnext && o == curop) )
         return cop;
+
+    if (opnext && o->op_next == curop) {
+        /* COPs in branches of LOGOPs are frequently nulled out during
+         * compilation/optimization, so these branches should definitely
+         * be checked to pick up any relevent such COP, as otherwise it's
+         * easy for the returned cop to refer to a line in source code
+         * far away from the line where PL_op came from.
+         *
+         * For example, consider the elsif branch here:
+         *     if ($condition) {
+         *         # Many lines
+         *     } elsif ($other) {
+         *         warn "Boop";
+         *     }
+         *
+         * cop is likely to be the OP_NEXTSTATE prior to the this optree.
+         * o is likely to be an OP_NULL with a LOGOP kid. The elsif
+         * branch will start with an OP_SCOPE, and the first OP_NEXTSTATE
+         * inside it will have been nulled out and is an ex-nextstate.
+         * */
+        if (! ( (o->op_flags & OPf_KIDS) && (
+                     o->op_type  == OP_NULL
+                  || o->op_type  == OP_SCOPE
+                  || o->op_type  == OP_LINESEQ
+                  || OP_CLASS(o) == OA_LOGOP
+            )))
+            return cop;
+    }
+
 
     if (o->op_flags & OPf_KIDS) {
         const OP *kid;
@@ -1678,6 +1734,7 @@ SV *
 Perl_vmess(pTHX_ const char *pat, va_list *args)
 {
     PERL_ARGS_ASSERT_VMESS;
+    GET_aTHX_if_NULL;
 
     SV * const sv = mess_alloc();
 
@@ -1834,6 +1891,7 @@ void
 Perl_vcroak(pTHX_ const char* pat, va_list *args)
 {
     PERL_ARGS_ASSERT_VCROAK;
+    GET_aTHX_if_NULL;
 
     SV *ex = with_queued_errors(pat ? vmess(pat, args) : mess_sv(ERRSV, 0));
     invoke_exception_hook(ex, FALSE);
@@ -1997,10 +2055,27 @@ void
 Perl_vwarn(pTHX_ const char* pat, va_list *args)
 {
     PERL_ARGS_ASSERT_VWARN;
+    GET_aTHX_if_NULL;
+
+    bool must_leave = PL_valuemagic_annotations;
+    if (must_leave) {
+        /* Disable value magic annotations while generating the message itself
+         * otherwise infinite recursion is easily possible
+         * TODO: This means we lose annotations during warnings. It'd be nice
+         * to permit one level of recursion but no further, but that requires
+         * more complex tracking of what's going on.
+         */
+        ENTER;
+        SAVESPTR(PL_valuemagic_annotations);
+        PL_valuemagic_annotations = NULL;
+    }
 
     SV *ex = vmess(pat, args);
     if (!invoke_exception_hook(ex, TRUE))
         write_to_stderr(ex);
+
+    if (must_leave)
+        LEAVE;
 }
 
 /*
@@ -2038,8 +2113,8 @@ void
 Perl_warn_nocontext(const char *pat, ...)
 {
     PERL_ARGS_ASSERT_WARN_NOCONTEXT;
+    dTHXa(NULL);
 
-    dTHX;
     va_list args;
     va_start(args, pat);
     vwarn(pat, &args);
@@ -2124,8 +2199,8 @@ void
 Perl_warner_nocontext(U32 err, const char *pat, ...)
 {
     PERL_ARGS_ASSERT_WARNER_NOCONTEXT;
+    dTHXa(NULL);
 
-    dTHX;
     va_list args;
     va_start(args, pat);
     vwarner(err, pat, &args);
@@ -2137,6 +2212,7 @@ void
 Perl_ck_warner_d(pTHX_ U32 err, const char* pat, ...)
 {
     PERL_ARGS_ASSERT_CK_WARNER_D;
+    GET_aTHX_if_NULL;
 
     if (Perl_ckwarn_d(aTHX_ err)) {
         va_list args;
@@ -2150,6 +2226,7 @@ void
 Perl_ck_warner(pTHX_ U32 err, const char* pat, ...)
 {
     PERL_ARGS_ASSERT_CK_WARNER;
+    GET_aTHX_if_NULL;
 
     if (Perl_ckwarn(aTHX_ err)) {
         va_list args;
@@ -2174,6 +2251,8 @@ void
 Perl_vwarner(pTHX_ U32  err, const char* pat, va_list* args)
 {
     PERL_ARGS_ASSERT_VWARNER;
+    GET_aTHX_if_NULL;
+
     if (
         (PL_warnhook == PERL_WARNHOOK_FATAL || ckDEAD(err)) &&
         !(PL_in_eval & EVAL_KEEPERR)
@@ -2197,11 +2276,10 @@ Perl_fatal_warner(pTHX_ U32 err, const char *pat, ...)
 }
 
 void
-Perl_vfatal_warner(pTHX_ U32 err, const char *pat, va_list *args)
+Perl_vfatal_warner(pTHX_ U32 err UNUSED, const char *pat, va_list *args)
 {
     PERL_ARGS_ASSERT_VFATAL_WARNER;
-
-    PERL_UNUSED_ARG(err);
+    GET_aTHX_if_NULL;
 
     SV * const msv = vmess(pat, args);
 
@@ -2220,6 +2298,7 @@ bool
 Perl_ckwarn(pTHX_ U32 w)
 {
     PERL_ARGS_ASSERT_CKWARN;
+    GET_aTHX_if_NULL;
 
     /* If lexical warnings have not been set, use $^W.  */
     if (isLEXWARN_off)
@@ -2234,6 +2313,7 @@ bool
 Perl_ckwarn_d(pTHX_ U32 w)
 {
     PERL_ARGS_ASSERT_CKWARN_D;
+    GET_aTHX_if_NULL;
 
     /* If lexical warnings have not been set then default classes warn.  */
     if (isLEXWARN_off)
@@ -2279,7 +2359,6 @@ char *
 Perl_new_warnings_bitfield(pTHX_ char *buffer, const char *const bits,
                            STRLEN size) {
     PERL_ARGS_ASSERT_NEW_WARNINGS_BITFIELD;
-    PERL_UNUSED_CONTEXT;
 
     const MEM_SIZE len_wanted = (size > WARNsize ? size : WARNsize);
 
@@ -2946,7 +3025,6 @@ Perl_rsignal_state(pTHX_ int signo)
     PERL_ARGS_ASSERT_RSIGNAL_STATE;
 
     struct sigaction oact;
-    PERL_UNUSED_CONTEXT;
 
     if (sigaction(signo, (struct sigaction *)NULL, &oact) == -1)
         return (Sighandler_t) SIG_ERR;
@@ -2985,7 +3063,6 @@ int
 Perl_rsignal_restore(pTHX_ int signo, Sigsave_t *save)
 {
     PERL_ARGS_ASSERT_RSIGNAL_RESTORE;
-    PERL_UNUSED_CONTEXT;
 
 #ifdef USE_ITHREADS
     /* only "parent" interpreter can diddle signals */
@@ -3655,7 +3732,6 @@ Perl_get_op_names(pTHX)
 {
     PERL_ARGS_ASSERT_GET_OP_NAMES;
 
-    PERL_UNUSED_CONTEXT;
     return (char **)PL_op_name;
 }
 
@@ -3676,34 +3752,30 @@ Perl_get_op_descs(pTHX)
 {
     PERL_ARGS_ASSERT_GET_OP_DESCS;
 
-    PERL_UNUSED_CONTEXT;
     return (char **)PL_op_desc;
 }
 
 const char *
 Perl_get_no_modify(pTHX)
 {
-    PERL_ARGS_ASSERT_GET_NO_MODIFY;
+    PERL_ARGS_ASSERT_GET_NO_MODIFY; /* Deprecated since 5.38 */
 
-    PERL_UNUSED_CONTEXT;    /* Deprecated since 5.38 */
     return PL_no_modify;
 }
 
 U32 *
 Perl_get_opargs(pTHX)
 {
-    PERL_ARGS_ASSERT_GET_OPARGS;
+    PERL_ARGS_ASSERT_GET_OPARGS;    /* Deprecated since 5.38 */
 
-    PERL_UNUSED_CONTEXT;    /* Deprecated since 5.38 */
     return (U32 *)PL_opargs;
 }
 
 PPADDR_t*
 Perl_get_ppaddr(pTHX)
 {
-    PERL_ARGS_ASSERT_GET_PPADDR;
+    PERL_ARGS_ASSERT_GET_PPADDR;    /* Deprecated since 5.38 */
 
-    PERL_UNUSED_CONTEXT;    /* Deprecated since 5.38 */
     return (PPADDR_t*)PL_ppaddr;
 }
 
@@ -3712,7 +3784,6 @@ char *
 Perl_getenv_len(pTHX_ const char *env_elem, unsigned long *len)
 {
     PERL_ARGS_ASSERT_GETENV_LEN;
-    PERL_UNUSED_CONTEXT;
 
     char * const env_trans = PerlEnv_getenv(env_elem);
     if (env_trans)
@@ -3871,7 +3942,6 @@ void
 Perl_init_tm(pTHX_ struct tm *ptm)	/* see mktime, strftime and asctime */
 {
     PERL_ARGS_ASSERT_INIT_TM;
-    PERL_UNUSED_CONTEXT;
 
 #ifdef HAS_TM_TM_ZONE
     Time_t now;
@@ -4546,7 +4616,6 @@ void
 Perl_sv_nosharing(pTHX_ SV *sv)
 {
     PERL_ARGS_ASSERT_SV_NOSHARING;
-    PERL_UNUSED_CONTEXT;
     PERL_UNUSED_ARG(sv);
 }
 
@@ -4566,7 +4635,6 @@ bool
 Perl_sv_destroyable(pTHX_ SV *sv)
 {
     PERL_ARGS_ASSERT_SV_DESTROYABLE;
-    PERL_UNUSED_CONTEXT;
     PERL_UNUSED_ARG(sv);
 
     return TRUE;
@@ -4649,6 +4717,9 @@ Perl_parse_unicode_opts(pTHX_ const char **popt)
 #ifdef VMS
 #  include <starlet.h>
 #endif
+#ifdef WIN32
+BOOLEAN NTAPI SystemFunction036(PVOID RandomBuffer, ULONG RandomBufferLength);
+#endif
 
 /* Splitmix64 is a simple PRNG and integer hashing function. It was
  * introduced in 2015: https://gee.cs.oswego.edu/dl/papers/oopsla14.pdf
@@ -4670,10 +4741,14 @@ Perl_seed(pTHX)
     PERL_ARGS_ASSERT_SEED;
 
    /*
-    * Attempt to read from /dev/urandom to generate a pseudo-random number.
-    * If that does not work, or it is unavailable, we fall back to gathering
+    * Attempt to read from the OS CSPRNG to generate a pseudo-random number.
+    * On Windows this is RtlGenRandom (SystemFunction036 from advapi32.dll);
+    * on Unix-like systems we try getentropy() and then /dev/urandom. If
+    * none of those are available or they fail, we fall back to gathering
     * several state variables and hashing them into a seed value.
     */
+
+    U64 seed;
 
 /* This test is an escape hatch, this symbol isn't set by Configure. */
 #ifndef PERL_NO_DEV_RANDOM
@@ -4689,7 +4764,6 @@ Perl_seed(pTHX)
 #    define PERL_RANDOM_DEVICE "/dev/urandom"
 #  endif
 #endif
-    U64 seed;
 
 #ifdef HAS_GETENTROPY
     U8 ok = (getentropy(&seed, sizeof(seed)) == 0);
@@ -4713,6 +4787,14 @@ Perl_seed(pTHX)
     }
 #endif
 
+#ifdef WIN32
+    /* Ask the Windows OS CSPRNG (available since XP, already linked via
+     * advapi32) for seed material. */
+    if (SystemFunction036((PVOID)&seed, (ULONG)sizeof(seed))) {
+        return seed;
+    }
+#endif
+
     /* We only get this far if /dev/urandom is not available or the read fails.
      * Grab several state variables and hash those for randomness instead. */
 
@@ -4730,12 +4812,13 @@ Perl_seed(pTHX)
     U64 epoch = when;
 #endif
 
-    UV pid      = PerlProc_getpid();
-    UV time_ptr = PTR2UV(&when);
+    UV pid       = PerlProc_getpid();
+    UV time_ptr  = PTR2UV(&when);
+    UV stack_ptr = PTR2UV(PL_stack_sp);
 
     /* epoch in microseconds is ~52 bits, PIDs are ~22 bits, PTRs are ~48 bits.
-     * We mix the bits for all three together to get a good spread of entropy */
-    U64 tmp = (time_ptr << 16) | (pid << 8) | (epoch);
+     * We mix the bits for all four together to get a good spread of entropy */
+    U64 tmp = ROTL64(time_ptr, 16) ^ ROTL32(pid, 8) ^ epoch ^ stack_ptr;
     U64 ret = splitmix64(&tmp);
 
     /* PerlIO_printf(Perl_debug_log, "XXXX: TIME:%lu PID:%lu PTR:%lu\n", epoch, pid, time_ptr); */
@@ -5245,7 +5328,7 @@ Perl_my_snprintf(char *buffer, const Size_t len, const char *format, ...)
     dTHX;
 
 #ifndef HAS_VSNPRINTF
-    PERL_UNUSED_VAR(len);
+    PERL_UNUSED_ARG(len);
 #endif
     va_start(ap, format);
 #ifdef USE_QUADMATH
@@ -6793,7 +6876,7 @@ Perl_dtrace_probe_call(pTHX_ CV *cv, bool is_call)
     const COP  *start;
     line_t      line;
 
-    if (CvNAMED(cv)) {
+    if (CvHasNAME_HEK(cv)) {
         HEK *hek = CvNAME_HEK(cv);
         func = HEK_KEY(hek);
     }

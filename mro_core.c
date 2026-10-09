@@ -162,7 +162,6 @@ Perl_mro_meta_init(pTHX_ HV* stash)
 
     struct mro_meta* newmeta;
 
-    PERL_UNUSED_CONTEXT;
     assert(HvAUX(stash));
     assert(!(HvAUX(stash)->xhv_mro_meta));
     Newxz(newmeta, 1, struct mro_meta);
@@ -563,7 +562,7 @@ Perl_mro_isa_changed_in(pTHX_ HV* stash)
     if(meta->mro_nextmethod) hv_clear(meta->mro_nextmethod);
 
     /* Changes to @ISA might turn overloading on */
-    HvAMAGIC_on(stash);
+    HvOVERLOAD_on(stash);
     /* pessimise derefs for now. Will get recalculated by Gv_AMupdate() */
     HvAUX(stash)->xhv_aux_flags &= ~HvAUXf_NO_DEREF;
 
@@ -1383,7 +1382,7 @@ Perl_mro_method_changed_in(pTHX_ HV *stash)
 
     /* The method change may be due to *{$package . "::()"} = \&nil; in
        overload.pm. */
-    HvAMAGIC_on(stash);
+    HvOVERLOAD_on(stash);
     /* pessimise derefs for now. Will get recalculated by Gv_AMupdate() */
     HvAUX(stash)->xhv_aux_flags &= ~HvAUXf_NO_DEREF;
 }

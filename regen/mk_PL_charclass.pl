@@ -56,8 +56,7 @@ my %bit_names = (
             # These are the control characters that there are mnemonics for
             MNEMONIC_CNTRL          => [ ord "\a", ord "\b", ord "\e", ord "\f",
                                          ord "\n", ord "\r", ord "\t" ],
-            MAGICAL => [ 001, 003, 004, 005, 006, 007, 010, 011, 014, 015,
-                         016, 017, 020, 023, 024, 025, 026, 027,
+            MAGICAL => [
                          ord('0'), ord('1'), ord('2'), ord('3'), ord('4'),
                          ord('5'), ord('6'), ord('7'), ord('8'), ord('9'),
                          ord('a'), ord('b'),
@@ -70,6 +69,19 @@ my %bit_names = (
                          ord('$'),
                        ],
             UNDERSCORE => [ ord('_') ],
+);
+
+# The control characters are the same on all platforms, regardless of
+# character set, so are defined in absolute terms in a separate table, which
+# is not subject to conversion to native.
+my %abs_bit_names = (
+            MAGICAL => [
+                         ord("\cA"), ord("\cC"), ord("\cD"), ord("\cE"),
+                         ord("\cF"), ord("\cG"), ord("\cH"), ord("\cI"),
+                         ord("\cL"), ord("\cM"), ord("\cN"), ord("\cO"),
+                         ord("\cP"), ord("\cR"), ord("\cS"), ord("\cT"),
+                         ord("\cU"), ord("\cV"), ord("\cW"),
+                       ],
 );
 
 sub uniques {
@@ -103,8 +115,8 @@ sub expand_invlist {
 # Read in the case fold mappings.
 my %folded_closure;
 my %simple_folded_closure;
-my @non_final_folds;
-my @non_latin1_simple_folds;
+my %non_final_folds;
+my %non_latin1_simple_folds;
 my @folds;
 use Unicode::UCD;
 
@@ -183,19 +195,17 @@ for (@folds) {
             # above is mutualy exclusive from the 'if below) and crosses
             # 255/256 boundary.  We keep track of the Latin1 code points
             # in such folds.
-            push @non_latin1_simple_folds, ($fold < 256)
-                                            ? $fold
-                                            : $from;
+            $non_latin1_simple_folds{ ($fold < 256)
+                                      ? $fold
+                                      : $from
+                                    } = $i;
         }
-        elsif ($i < @folded-1
-                && $fold < 256
-                && ! grep { $_ == $fold } @non_final_folds)
-        {
-            push @non_final_folds, $fold;
+        elsif ($i < @folded-1 && $fold < 256) {
+            $non_final_folds{$fold} = $i;
 
             # Also add the upper case, which in the latin1 range folds to
             # $fold
-            push @non_final_folds, ord uc chr $fold;
+            $non_final_folds{ord uc chr $fold} = $i;
         }
     }
 }
@@ -216,11 +226,9 @@ foreach my $folded (keys %simple_folded_closure) {
 
 # We have the single-character folds that cross the 255/256, like KELVIN
 # SIGN => 'k', but we need the closure, so add like 'K' to it
-foreach my $folded (@non_latin1_simple_folds) {
+foreach my $folded (keys %non_latin1_simple_folds) {
     foreach my $fold (@{$simple_folded_closure{$folded}}) {
-        if ($fold < 256 && ! grep { $fold == $_ } @non_latin1_simple_folds) {
-            push @non_latin1_simple_folds, $fold;
-        }
+        $non_latin1_simple_folds{$fold} = $folded if $fold < 256;
     }
 }
 
@@ -243,11 +251,11 @@ sub Non_Latin1_Folds {
 sub Non_Latin1_Simple_Folds { # Latin1 code points that are folded to by
                               # non-Latin1 code points as single character
                               # folds
-    return @non_latin1_simple_folds;
+    return keys %non_latin1_simple_folds;
 }
 
 sub Non_Final_Folds {
-    return @non_final_folds;
+    return keys %non_final_folds;
 }
 
 sub Punct_and_Symbols {
@@ -270,7 +278,7 @@ sub Punct_and_Symbols {
 my @bits;   # Each element is a bit map for a single code point
 
 # For each bit type, calculate which code points should have it set
-foreach my $bit_name (sort keys %bit_names) {
+foreach my $bit_name (keys %bit_names) {
     my @code_points;
 
     my $property = $bit_name;   # The bit name is the same as its property,
@@ -292,6 +300,14 @@ foreach my $bit_name (sort keys %bit_names) {
         last if $cp > 0xFF;
         $bits[$cp] .= '|' if $bits[$cp];
         $bits[$cp] .= "(1U<<CC_${bit_name}_)";
+    }
+}
+
+my @abs_bits;
+foreach my $bit_name (keys %abs_bit_names) {
+    foreach my $cp ($abs_bit_names{$bit_name}->@*) {
+        $abs_bits[$cp] .= '|' if $abs_bits[$cp];
+        $abs_bits[$cp] .= "(1U<<CC_${bit_name}_)";
     }
 }
 
@@ -383,13 +399,24 @@ foreach my $charset (get_supported_code_pages()) {
         my $i8;
         $i8 = $utf_to_i8[$index] if @utf_to_i8;
 
+        # This entry is to contain both the translated values, and the
+        # absolute ones
+        my @this_bits;
+        push @this_bits, split /\|/, $bits[$ord] if $bits[$ord];
+        push @this_bits, split /\|/, $abs_bits[$index] if $abs_bits[$index];
+
         $out[$index] = "/* ";
         $out[$index] .= sprintf "0x%02X ", $index if $ord != $index;
         $out[$index] .= sprintf "U+%02X ", $ord;
         $out[$index] .= sprintf "I8=%02X ", $i8 if defined $i8 && $i8 != $ord;
         $out[$index] .= "$name */ ";
-        $out[$index] .= $bits[$ord];
 
+        # Sort the class names alphabetically in the entry; ignoring the
+        # trailing underscore keeps the same ordering as has always been the
+        # case for this table.
+        $out[$index] .= join '|', sort {     $a =~ s/\B_\b//r
+                                         cmp $b =~ s/\B_\b//r
+                                       } @this_bits;
         $out[$index] .= ",\n";
     }
     $out[-1] =~ s/,$//;     # No trailing comma in the final entry

@@ -2,7 +2,7 @@ package Testing;
 use 5.10.0;
 use warnings;
 use Exporter 'import';
-our $VERSION = 1.36; # Let's keep this same as lib/Pod/Html.pm
+our $VERSION = 1.37; # Met's keep this same as lib/Pod/Html.pm
 $VERSION = eval $VERSION;
 our @EXPORT_OK = qw(
     setup_testing_dir
@@ -302,18 +302,16 @@ versions of F<perl> up through 5.32.
 
 sub setup_testing_dir {
     my $args = shift;
-    my $cwd = cwd();
     my $toptempdir = $args->{debug} ? tempdir() : tempdir( CLEANUP => 1 );
     if ($args->{debug}) {
         print STDERR "toptempdir: $toptempdir\n";
     }
-    chdir $toptempdir or die "Unable to change to $toptempdir: $!";
 
     my $ephdir = catdir($toptempdir, 'ext', 'Pod-Html');
     my ($fromdir, $targetdir, $pod_glob, @testfiles);
 
     # Copy ext/Pod-Html/t/*.pod files into position under tempdir
-    $fromdir = catdir($cwd, 't');
+    $fromdir = catdir(curdir, 't');
     # Per Craig Berry: Avoid hard-coded '/' to keep VMS happy
     $pod_glob = catfile($fromdir, '*.pod');
     @testfiles = glob($pod_glob);
@@ -325,7 +323,7 @@ sub setup_testing_dir {
     }
 
     # Copy ext/Pod-Html/corpus/*.pod files into position under tempdir
-    $fromdir = catdir($cwd, 'corpus');
+    $fromdir = catdir(curdir, 'corpus');
     # Per Craig Berry: Avoid hard-coded '/' to keep VMS happy
     $pod_glob = catfile($fromdir, '*.pod');
     @testfiles = glob($pod_glob);

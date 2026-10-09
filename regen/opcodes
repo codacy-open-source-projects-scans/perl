@@ -1,4 +1,7 @@
-# New ops always go at the end
+# New ops usually go at the end, except in situations where related ops must
+# be grouped together, such as for float vs. integer numerical pairs which
+# must be adjacent, or groups of related ops that are detected by numerical
+# range comparison.
 # The restriction on having custom as the last op has been removed
 
 # A recapitulation of the format of this file:
@@ -70,6 +73,7 @@ prototype	subroutine prototype	ck_prototype	su%	S?
 refgen		reference constructor	ck_spair	m1	L
 srefgen		single ref constructor	ck_null		fs1	S
 ref		reference-type operator	ck_fun		stu%	S?
+ref_cmp		reference-type comparison	ck_fun		su%	S?
 bless		bless			ck_fun		s@	S S?
 
 # Pushy I/O.
@@ -151,6 +155,10 @@ eq		numeric eq (==)		ck_cmp		Iifs2	S S<
 i_eq		integer eq (==)		ck_cmp		ifs2	S S<
 ne		numeric ne (!=)		ck_cmp		Iifs2	S S<
 i_ne		integer ne (!=)		ck_cmp		ifs2	S S<
+equ		undef-aware numeric eq (===)	ck_cmp		Iifs2	S S<
+i_equ		undef-aware integer eq (===)	ck_cmp		ifs2	S S<
+neu		undef-aware numeric ne (!==)	ck_cmp		Iifs2	S S<
+i_neu		undef-aware integer ne (!==)	ck_cmp		ifs2	S S<
 ncmp		numeric comparison (<=>)	ck_null		Iifst2	S S<
 i_ncmp		integer comparison (<=>)	ck_null		ifst2	S S<
 
@@ -160,6 +168,8 @@ sle		string le		ck_scmp		ifs2	S S
 sge		string ge		ck_scmp		ifs2	S S
 seq		string eq		ck_scmp		ifs2	S S
 sne		string ne		ck_scmp		ifs2	S S
+sequ		undef-aware string eq		ck_scmp		ifs2	S S
+sneu		undef-aware string ne		ck_scmp		ifs2	S S
 scmp		string comparison (cmp)	ck_null		ifst2	S S
 
 bit_and		bitwise and (&)		ck_bitop	fst2	S S|
@@ -307,7 +317,7 @@ leavesublv	lvalue subroutine return	ck_null		1
 argcheck	check subroutine arguments	ck_null		+
 argelem		subroutine argument	ck_null		+
 argdefelem	subroutine argument default value	ck_null		|
-caller		caller			ck_fun		t%	S?
+caller		caller			ck_caller	t%	S?
 warn		warn			ck_fun		imst@	L
 die		die			ck_fun		imst@	L
 reset		symbol reset		ck_fun		is%	S?
@@ -600,7 +610,7 @@ weaken		reference weaken	ck_null		1
 unweaken	reference unweaken	ck_null		1
 blessed		blessed			ck_null		fs1
 refaddr		refaddr			ck_null		fsT1
-reftype		reftype			ck_null		fsT1
+reftype		reftype			ck_null		sT1
 ceil		ceil			ck_null		fsT1
 floor		floor			ck_null		fsT1
 is_tainted	is_tainted		ck_null		fs1
