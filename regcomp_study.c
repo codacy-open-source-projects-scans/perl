@@ -2508,8 +2508,8 @@ Perl_study_chunk(pTHX_
                     mincount = 1;
                     maxcount = 1;
                 } else {
-                    mincount = ARG1i(scan);
-                    maxcount = ARG2i(scan);
+                    mincount = CURLY_MIN_REPEAT(scan);
+                    maxcount = CURLY_MAX_REPEAT(scan);
                 }
                 next = regnext(scan);
                 if (OP(scan) == CURLYX) {
@@ -2704,6 +2704,15 @@ Perl_study_chunk(pTHX_
                                                             non optimistic eval is seen
                                                             anywhere.*/
                      && !(data->flags & SF_HAS_PAR) /* no parens! */
+                     /* CURLYM can emulate a capture around its whole body,
+                      * but cannot restore captures inside a nested quantifier
+                      * when an iteration fails or is backtracked. */
+                     && (!CURLY_HAS_CAPTURES(oscan)
+                         || ((data->flags & SF_IN_PAR)
+                             && CURLY_FIRST_CAPTURE(oscan)
+                                == CURLY_LAST_CAPTURE(oscan)
+                             && OP(REGNODE_AFTER_type(oscan,
+                                                tregnode_CURLYX)) == OPEN))
                      && !deltanext     /* atom is fixed width */
                      && minnext != 0  /* CURLYM can't handle zero width */
                          /* Nor characters whose fold at run-time may be
@@ -3258,6 +3267,12 @@ Perl_study_chunk(pTHX_
                                       recursed_depth, NULL, f, depth+1,
                                       mutate_ok);
 
+                /* A lookahead body which can match without consuming any
+                 * characters cannot restrict the next input character to
+                 * its consuming paths.  Treat its start class as anything. */
+                if ((f & SCF_DO_STCLASS_AND) && minnext == 0)
+                    ssc_init(pRExC_state, &intrnl);
+
                 if (FLAGS(scan)) {
                     if (   deltanext < 0
                         || deltanext > (I32) U8_MAX
@@ -3376,6 +3391,8 @@ Perl_study_chunk(pTHX_
                                         &deltanext, last, &data_fake,
                                         stopparen, recursed_depth, NULL,
                                         f, depth+1, mutate_ok);
+                if ((f & SCF_DO_STCLASS_AND) && *minnextp == 0)
+                    ssc_init(pRExC_state, &intrnl);
                 if (FLAGS(scan)) {
                     assert(0);  /* This code has never been tested since this
                                    is normally not compiled */

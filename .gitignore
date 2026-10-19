@@ -79,6 +79,23 @@ perldtrace.h
 *.res
 *.RES
 
+# build products (VMS)
+*.EXE
+*.OLB
+*.lis
+*.LIS
+*.MAP
+*.MMS
+*.opt
+*.ts
+*.TS
+**/CXX_REPOSITORY/**
+perl_setup.com
+t/vmspipe.com
+vms.c
+vmsish.h
+vmspipe.com
+
 # gcov build products. see L<perlhack/"GCC gcov Profiling">
 *.gcov
 *.gcda
@@ -105,6 +122,7 @@ MYMETA.*
 /generate_uudmap
 /ugenerate_uudmap
 /uni.data
+/.done_test_prep
 /uudmap.h
 /uuudmap.h
 /bitcount.h

@@ -59,7 +59,6 @@
 #     4261
 #     4370
 #     5959
-#     8267
 #     8945
 #     8952
 #     9010
@@ -155,18 +154,6 @@ TODO: {
 }
 
 TODO: {
-    local $TODO = "[GH 8267]";
-
-    "A" =~ /(((?:A))?)+/;
-    my $first = $2;
-
-    "A" =~ /(((A))?)+/;
-    my $second = $2;
-
-    is($first, $second, "[GH 8267]");
-}
-
-TODO: {
     local $TODO = "[GH 8859]";
     fresh_perl_is(<<~'EOF',
         my $mul = 2**32; my $a = 104712103; my $b = 50;
@@ -252,17 +239,6 @@ TODO: {
     is $results, 'hello ', "truncate returned the expected output; [GH 16008]";
     unlike $results, qr/Bad file descriptor/,
            "truncate did not warn about bad file descriptors [GH 16008]";
-}
-
-TODO: {
-    local $TODO = "GH 16250";
-    fresh_perl_is(<<~'EOF',
-        "abcde5678" =~ / b (*pla:.*(*plb:(*plb:(.{4}))? (.{5})).$)/x;
-        print $1 // "undef", ":", $2 // "undef", "\n";
-        "abcde5678" =~ / b .* (*plb:(*plb:(.{4}))? (.{5}) ) .$ /x;
-        print $1 // "undef", ":", $2 // "undef", "\n";
-        EOF
-    "undef:de567\nundef:de567", { eval $switches }, "GH 16250");
 }
 
 TODO: {

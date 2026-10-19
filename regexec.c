@@ -184,7 +184,7 @@ static const char non_utf8_target_but_utf8_required[]
     OP(rn) == SUSPEND || OP(rn) == IFMATCH ||                               \
     OP(rn) == PLUS || OP(rn) == MINMOD ||                                   \
     OP(rn) == KEEPS ||                                                      \
-    (REGNODE_TYPE(OP(rn)) == CURLY && ARG1i(rn) > 0)                        \
+    (REGNODE_TYPE(OP(rn)) == CURLY && CURLY_MIN_REPEAT(rn) > 0)            \
 )
 #define IS_EXACT(rn) (REGNODE_TYPE(OP(rn)) == EXACT)
 
@@ -667,6 +667,22 @@ S_isFOO_utf8_lc(pTHX_ const U8 classnum, const U8* character, const U8* e)
     NOT_REACHED; /* NOTREACHED */
 }
 
+/* To fit the widest registers currently available: AVX-512 */
+#define PERL_FSE_SIZE 64
+
+/* Clang seems to always successfully inline memcmp, even when S_find_span_end
+ * is itself inlined into a larger function, such as S_regrepeat.
+ *
+ * If gcc does not inline S_find_span_end into a large function, then it will
+ * reliably inline memcmp. However, testing showed that if S_find_span_end is
+ * inlined into a large function, the memcmp might not be inlined, with the
+ * result that performance drops to about half that of the non-memcmp version.
+ *
+ * (gcc version 14.2.0 and clang version 19.1.7 (3+b1) behaviours)
+ */
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((noinline))
+#endif
 static U8 *
 S_find_span_end(U8 * s, const U8 * send, const U8 span_byte)
 {
@@ -676,21 +692,64 @@ S_find_span_end(U8 * s, const U8 * send, const U8 span_byte)
      * 'send-1' inclusive that isn't 'span_byte'; returns 'send' if none found.
      * */
 
-    const U8 * const per_byte_end = WORTH_PER_WORD_LOOP_BINMODE(s, send, 1);
-    if (per_byte_end) {
-        while (s < per_byte_end ) {
-            if (*s != span_byte) {
-                return s;
-            }
-            s++;
+    /* Walk leading bytes until "s" is word-aligned. */
+    const U8 * const word_end = s + BYTES_REMAINING_IN_WORD(s);
+    const U8 * const per_byte_end = (word_end < send) ? word_end : send;
+    while (s < per_byte_end ) {
+        if (*s != span_byte) {
+            return s;
         }
+        s++;
+    }
 
+    /* There are two 512-bits-at-a-time implementations for S_find_span_end.
+     * A portable bit-masking version and one that uses memcmp.
+     *
+     * Throughput of both versions improves if the compiler is told to
+     * target more specific, newer CPUs rather than target all CPUs.
+     * For example, moving from generic -> x86-64-v2 -> x86-64-v3.
+     *
+     * The memcmp version can perform 30-40% better - or 40-50% worse -
+     * than the portable version. Which you get depends upon whether memcmp
+     * is inlined (better) or not (worse).
+     *     Clang is thought to always inline memcmp.
+     *     gcc _may_ inline memcmp - it will if S_find_span_end is _not_
+     *          inlined into some other function (e.g. S_regrepeat). If
+     *          it is, then inlining of memcmp is at the mercy of gcc's
+     *          optimization weightings and budgets.
+     *     MSVC (non-clang backend) seems to never inline memcmp.
+     */
+    if (WORTH_PER_WORD_LOOP_BINMODE(s, send, PERL_FSE_SIZE / PERL_WORDSIZE)) {
+#if defined(__GNUC__) || defined(__clang__)
+        U8 ref[PERL_FSE_SIZE];
+        memset(ref, span_byte, PERL_FSE_SIZE);
+        while (s + PERL_FSE_SIZE <= send) {
+            if (memcmp(s, ref, PERL_FSE_SIZE) != 0) {
+                break;          /* a non-span byte is in this block */
+            }
+            s += PERL_FSE_SIZE;
+        }
+#else
+        while (s + PERL_FSE_SIZE <= send) {
+            U8 acc = 0;
+            unsigned k;
+            for (k = 0; k < PERL_FSE_SIZE; k++) {
+                acc |= (U8) (s[k] ^ span_byte);
+            }
+            if (acc != 0) {
+                break; /* Let the per-word code find the first hit */
+            }
+            s += PERL_FSE_SIZE;
+        }
+#endif
+    }
+
+    /* Process per-word as long as we have at least a full word left */
+    if (WORTH_PER_WORD_LOOP_BINMODE(s, send, 1)) {
         /* Create a word filled with the bytes we are spanning */
         PERL_UINTMAX_T span_word = PERL_COUNT_MULTIPLIER * span_byte;
 
-        /* Process per-word as long as we have at least a full word left */
-        do {
-
+        while (s + PERL_WORDSIZE <= send) {
             /* Keep going if the whole word is composed of 'span_byte's */
             if ((* (PERL_UINTMAX_T *) s) == span_word)  {
                 s += PERL_WORDSIZE;
@@ -710,7 +769,7 @@ S_find_span_end(U8 * s, const U8 * send, const U8 span_byte)
 
             /* That reduces the problem to what this function solves */
             return s + first_upper_bit_set_byte_number(span_word);
-        } while (s + PERL_WORDSIZE <= send);
+        }
     }
 
     /* Process the straggler bytes beyond the final word boundary */
@@ -732,54 +791,60 @@ S_find_next_masked(U8 * s, const U8 * send, const U8 byte, const U8 mask)
 
     /* Returns the position of the first byte in the sequence between 's'
      * and 'send-1' inclusive that when ANDed with 'mask' yields 'byte';
-     * returns 'send' if none found.  It uses word-level operations instead of
-     * byte to speed up the process */
+     * returns 'send' if none found. */
 
-    const U8 * const per_byte_end = WORTH_PER_WORD_LOOP(s, send, 1);
-    if (per_byte_end) {
+    /* Walk leading bytes until "s" is word-aligned, for the benefit of those
+     * platforms where unaligned access is much slower than aligned access. */
+    {
+        const U8 * const word_end = s + BYTES_REMAINING_IN_WORD(s);
+        const U8 * const per_byte_end = (word_end < send) ? word_end : send;
         while (s < per_byte_end ) {
             if (((*s) & mask) == byte) {
                 return s;
             }
             s++;
         }
+    }
+    /* Fast path: fixed-length masked reduction per PERL_FSE_SIZE block.
+     * This should vectorize given a capable compiler and compile target(s).
+     * Testing on an AMD Zen processor showed codegen improving and
+     * throughput increasing from:
+     *     bog standard build -> -march=x86-64-v2 -> -march=x86-64-v3
+     */
 
+    if (WORTH_PER_WORD_LOOP_BINMODE(s, send, PERL_FSE_SIZE / PERL_WORDSIZE)) {
+        while (s + PERL_FSE_SIZE <= send) {
+            U8 hit = 0;
+            unsigned k;
+            for (k = 0; k < PERL_FSE_SIZE; k++) {
+                U8 d = (U8) (((U8) (s[k] & mask)) ^ byte);  /* 0 iff match */
+                hit |= (U8) (d == 0 ? 0xFF : 0x00);
+            }
+            if (hit) {
+                break; /* Let the per-word code find the first hit */
+            }
+            s += PERL_FSE_SIZE;
+        }
+    }
+
+    /* Process per-word as long as we have at least a full word left */
+    if (WORTH_PER_WORD_LOOP_BINMODE(s, send, 1)) {
         PERL_UINTMAX_T word = PERL_COUNT_MULTIPLIER * byte;
         PERL_UINTMAX_T mask_word = PERL_COUNT_MULTIPLIER * mask;
 
-        do {
-            PERL_UINTMAX_T masked = (* (PERL_UINTMAX_T *) s) & mask_word;
-
-            /* If 'masked' contains bytes with the bit pattern of 'byte' within
-             * it, xoring with 'word' will leave each of the 8 bits in such
-             * bytes be 0, and no byte containing any other bit pattern will be
-             * 0. */
-            masked ^= word;
-
-            /* This causes the most significant bit to be set to 1 for any
-             * bytes in the word that aren't completely 0 */
-            masked |= masked << 1;
-            masked |= masked << 2;
-            masked |= masked << 4;
-
-            /* The msbits are the same as what marks a byte as variant, so we
-             * can use this mask.  If all msbits are 1, the word doesn't
-             * contain 'byte' */
-            if ((masked & PERL_VARIANTS_WORD_MASK) == PERL_VARIANTS_WORD_MASK) {
+        /* Process per-word as long as we have at least a full word left */
+        while (s + PERL_WORDSIZE <= send) {
+            /* "masked" has zero byte where the mask matched. */
+            PERL_UINTMAX_T masked = ((* (PERL_UINTMAX_T *) s) & mask_word) ^ word;
+            /* "hits" has the high bit set where there were any zeroes. */
+            PERL_UINTMAX_T hits = (masked - PERL_COUNT_MULTIPLIER) & ~masked
+                                                     & PERL_VARIANTS_WORD_MASK;
+            if (hits == 0) {
                 s += PERL_WORDSIZE;
                 continue;
             }
-
-            /* Here, the msbit of bytes in the word that aren't 'byte' are 1,
-             * and any that are, are 0.  Complement and re-AND to swap that */
-            masked = ~ masked;
-            masked &= PERL_VARIANTS_WORD_MASK;
-
-            /* This reduces the problem to that solved by this function */
-            s += variant_byte_number(masked);
-            return s;
-
-        } while (s + PERL_WORDSIZE <= send);
+            return s + first_upper_bit_set_byte_number(hits);
+        }
     }
 
     while (s < send) {
@@ -804,19 +869,45 @@ S_find_span_end_mask(U8 * s, const U8 * send, const U8 span_byte, const U8 mask)
      * function.  Returns 'send' if none found.  Works like find_span_end(),
      * except for the AND */
 
-    const U8 * const per_byte_end = WORTH_PER_WORD_LOOP_BINMODE(s, send, 1);
-    if (per_byte_end) {
+    /* Walk leading bytes until "s" is word-aligned, for the benefit of those
+     * platforms where unaligned access is much slower than aligned access. */
+    {
+        const U8 * const word_end = s + BYTES_REMAINING_IN_WORD(s);
+        const U8 * const per_byte_end = (word_end < send) ? word_end : send;
         while (s < per_byte_end ) {
             if (((*s) & mask) != span_byte) {
                 return s;
             }
             s++;
         }
+    }
 
+    /* Fast path: fixed-length masked reduction per PERL_FSE_SIZE block.
+     * This should vectorize given a capable compiler and compile target(s).
+     * Testing on an AMD Zen processor showed codegen improving and
+     * throughput increasing from:
+     *     bog standard build -> -march=x86-64-v2 -> -march=x86-64-v3
+     */
+    if (WORTH_PER_WORD_LOOP_BINMODE(s, send, PERL_FSE_SIZE / PERL_WORDSIZE)) {
+        while (s + PERL_FSE_SIZE <= send) {
+            U8 hit = 0;
+            unsigned k;
+            for (k = 0; k < PERL_FSE_SIZE; k++) {
+                hit |= (U8) (((U8) (s[k] & mask)) ^ span_byte);
+            }
+            if (hit != 0) {
+                break; /* Let the per-word code find the first hit */
+            }
+            s += PERL_FSE_SIZE;
+        }
+    }
+
+    /* Process per-word as long as we have at least a full word left */
+    if (WORTH_PER_WORD_LOOP_BINMODE(s, send, 1)) {
         PERL_UINTMAX_T span_word = PERL_COUNT_MULTIPLIER * span_byte;
         PERL_UINTMAX_T mask_word = PERL_COUNT_MULTIPLIER * mask;
 
-        do {
+        while (s + PERL_WORDSIZE <= send) {
             PERL_UINTMAX_T masked = (* (PERL_UINTMAX_T *) s) & mask_word;
 
             if (masked == span_word) {
@@ -829,7 +920,7 @@ S_find_span_end_mask(U8 * s, const U8 * send, const U8 span_byte, const U8 mask)
             masked |= masked << 2;
             masked |= masked << 4;
             return s + first_upper_bit_set_byte_number(masked);
-        } while (s + PERL_WORDSIZE <= send);
+        }
     }
 
     while (s < send) {
@@ -841,6 +932,8 @@ S_find_span_end_mask(U8 * s, const U8 * send, const U8 span_byte, const U8 mask)
 
     return s;
 }
+
+#undef PERL_FSE_SIZE
 
 /*
  * pregexec and friends
@@ -1601,24 +1694,23 @@ Perl_re_intuit_start(pTHX_
          * in that range. if neither, then look for the start class in the
          * whole rest of the string */
 
-        /* XXX DAPM it's not clear what the minlen test is for, and why
-         * it's not used in the floating case. Nothing in the test suite
-         * causes minlen == 0 here. See <20140313134639.GS12844@iabyn.com>.
-         * Here are some old comments, which may or may not be correct:
+        /* Keep in mind that endpos limits the scan, not the match itself.
+         * Even when minlen == 0, a zero-width start class such as \b must
+         * examine the character at rx_origin. Using rx_origin as the
+         * limit would skip that check and treat this position as the end
+         * of the string (GH#24944).
          *
-         *   minlen == 0 is possible if regstclass is \b or \B,
-         *   and the fixed substr is ''$.
-         *   Since minlen is already taken into account, rx_origin+1 is
-         *   before strend; accidentally, minlen >= 1 guaranties no false
-         *   positives at rx_origin + 1 even for \b or \B.  But (minlen? 1 :
-         *   0) below assumes that regstclass does not come from lookahead...
-         *   If regstclass takes bytelength more than 1: If charlength == 1, OK.
-         *   This leaves EXACTF-ish only, which are dealt with in
-         *   find_byclass().
+         * Allow the scan to examine cl_l characters, clamped to the real
+         * string end, so empty matches there are preserved.
+         *
+         * \b or other ZW assertions may report a false positive at this
+         * artificial endpoint but that is harmless here as a successful
+         * scan leaves rx_origin unchanged, and the full matcher checks
+         * the pattern a second time before returning success.
          */
 
         if (prog->anchored_substr || prog->anchored_utf8 || ml_anch)
-            endpos = HOP3clim(rx_origin, (prog->minlen ? cl_l : 0), strend);
+            endpos = HOP3clim(rx_origin, cl_l, strend);
         else if (prog->float_substr || prog->float_utf8) {
             rx_max_float = HOP3c(check_at, -start_shift, strbeg);
             endpos = HOP3clim(rx_max_float, cl_l, strend);
@@ -1723,8 +1815,9 @@ Perl_re_intuit_start(pTHX_
 
         if (rx_origin != s) {
             DEBUG_EXECUTE_r(re_printf(
-                        "  By STCLASS: moving %ld --> %ld\n",
-                                  (long)(rx_origin - strbeg), (long)(s - strbeg))
+                        "  STCLASS scan returned offset %ld"
+                        " (rx_origin kept at %ld)\n",
+                                  (long)(s - strbeg), (long)(rx_origin - strbeg))
                    );
         }
         else {
@@ -4117,12 +4210,15 @@ Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, char *strend,
                 ) {
                     DEBUG_EXECUTE_r( did_match = 1 );
                     if (regtry(reginfo, &s)) goto got_it;
-                    /* No match at this x, skip this run of x's */
-                    s += ch_bytes;
-                    while (ch_bytes <= (STRLEN)(strend - s)
-                           && *s == *ch
-                           && memEQ(s + 1, ch + 1, ch_bytes - 1))
+                    /* regtry might have hit a (*SKIP) */
+                    if (! LAST_REGTRY_SKIPPED_FORWARD(reginfo)) {
+                        /* No match at this x, skip this run of x's */
                         s += ch_bytes;
+                        while (ch_bytes <= (STRLEN)(strend - s)
+                               && *s == *ch
+                               && memEQ(s + 1, ch + 1, ch_bytes - 1))
+                            s += ch_bytes;
+                    }
                 }
             );
 
@@ -4138,9 +4234,12 @@ Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, char *strend,
                 if (*s == ch) {
                     DEBUG_EXECUTE_r( did_match = 1 );
                     if (regtry(reginfo, &s)) goto got_it;
-                    s++;
-                    while (s < strend && *s == ch)
+                    /* regtry might have hit a (*SKIP) */
+                    if (! LAST_REGTRY_SKIPPED_FORWARD(reginfo)) {
                         s++;
+                        while (s < strend && *s == ch)
+                            s++;
+                    }
                 }
             );
         }
@@ -6910,7 +7009,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
 
         case KEEPS: /*   \K  */
             /* update the startpoint */
-            st->u.keeper.val = RXp_OFFS_START(rex,0);
+            st->u.keeper.offset = RXp_OFFS_START(rex,0);
             RXp_OFFSp(rex)[0].start = locinput - reginfo->strbeg;
             PUSH_STATE_GOTO(KEEPS_next, next, locinput, loceol,
                             script_run_begin);
@@ -6918,7 +7017,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
 
         case KEEPS_next_fail:
             /* rollback the start point change */
-            RXp_OFFSp(rex)[0].start = st->u.keeper.val;
+            RXp_OFFSp(rex)[0].start = st->u.keeper.offset;
             sayNO_SILENT;
             NOT_REACHED; /* NOTREACHED */
 
@@ -9155,10 +9254,10 @@ NULL
 
             assert(cur_curlyx); /* keep Coverity happy */
 
-            min = ARG1i(cur_curlyx->u.curlyx.me);
-            max = ARG2i(cur_curlyx->u.curlyx.me);
-            /* first_paren = ARG3a(cur_curlyx->u.curlyx.me); */
-            /* last_paren = ARG3b(cur_curlyx->u.curlyx.me);  */
+            min = CURLY_MIN_REPEAT(cur_curlyx->u.curlyx.me);
+            max = CURLY_MAX_REPEAT(cur_curlyx->u.curlyx.me);
+            /* first_paren = CURLY_FIRST_CAPTURE(cur_curlyx->u.curlyx.me); */
+            /* last_paren = CURLY_LAST_CAPTURE(cur_curlyx->u.curlyx.me);  */
             A = REGNODE_AFTER(cur_curlyx->u.curlyx.me);
             n = ++cur_curlyx->u.curlyx.count; /* how many A's matched */
             ST.save_lastloc = cur_curlyx->u.curlyx.lastloc;
@@ -9299,6 +9398,15 @@ NULL
             /* Prefer B over A for minimal matching. */
 
             if (cur_curlyx->u.curlyx.minmod) {
+                if (!cur_curlyx->u.curlyx.count
+                    && CURLY_HAS_CAPTURES(cur_curlyx->u.curlyx.me))
+                {
+                    ST.cp = regcppush(rex, 0, maxopenparen);
+                    REGCP_SET(ST.lastcp);
+                    CAPTURE_CLEAR(CURLY_FIRST_CAPTURE(cur_curlyx->u.curlyx.me),
+                                  CURLY_LAST_CAPTURE(cur_curlyx->u.curlyx.me),
+                                  "WHILEM zero repetitions");
+                }
                 ST.save_curlyx = cur_curlyx;
                 cur_curlyx = cur_curlyx->u.curlyx.prev_curlyx;
                 ST.saved_seen_nonregular = seen_nonregular;
@@ -9333,6 +9441,12 @@ NULL
         case WHILEM_B_max_fail: /* just failed to match B in a maximal match */
             seen_nonregular |= ST.saved_seen_nonregular;
             cur_curlyx = ST.save_curlyx;
+            if (!cur_curlyx->u.curlyx.count
+                && CURLY_HAS_CAPTURES(cur_curlyx->u.curlyx.me))
+            {
+                REGCP_UNWIND(ST.lastcp);
+                regcppop(rex, &maxopenparen);
+            }
             cur_curlyx->u.curlyx.lastloc = ST.save_lastloc;
             cur_curlyx->u.curlyx.count--;
             CACHEsayNO;
@@ -9357,6 +9471,18 @@ NULL
 
           do_whilem_B_max:
             /* now try B */
+            /* Zero repetitions leave the captures in this body unset, just
+             * as CURLYN and CURLYM do. Save the incoming values so that
+             * backtracking can try the body with its original capture state. */
+            if (!cur_curlyx->u.curlyx.count
+                && CURLY_HAS_CAPTURES(cur_curlyx->u.curlyx.me))
+            {
+                ST.cp = regcppush(rex, 0, maxopenparen);
+                REGCP_SET(ST.lastcp);
+                CAPTURE_CLEAR(CURLY_FIRST_CAPTURE(cur_curlyx->u.curlyx.me),
+                              CURLY_LAST_CAPTURE(cur_curlyx->u.curlyx.me),
+                              "WHILEM zero repetitions");
+            }
             ST.save_curlyx = cur_curlyx;
             cur_curlyx = cur_curlyx->u.curlyx.prev_curlyx;
             ST.saved_seen_nonregular = seen_nonregular;
@@ -9368,8 +9494,16 @@ NULL
         case WHILEM_B_min_fail: /* just failed to match B in a minimal match */
             seen_nonregular |= ST.saved_seen_nonregular;
             cur_curlyx = ST.save_curlyx;
+            if (!cur_curlyx->u.curlyx.count
+                && CURLY_HAS_CAPTURES(cur_curlyx->u.curlyx.me))
+            {
+                REGCP_UNWIND(ST.lastcp);
+                regcppop(rex, &maxopenparen);
+            }
 
-            if (cur_curlyx->u.curlyx.count >= /*max*/ARG2i(cur_curlyx->u.curlyx.me)) {
+            if (cur_curlyx->u.curlyx.count
+                >= CURLY_MAX_REPEAT(cur_curlyx->u.curlyx.me))
+            {
                 /* Maximum greed exceeded */
                 cur_curlyx->u.curlyx.count--;
                 CACHEsayNO;
@@ -9507,7 +9641,8 @@ NULL
             ST.Binfo.count = -1;
             REGCP_SET(ST.cp);
 
-            if (!(ST.minmod ? ARG1i(ST.me) : ARG2i(ST.me))) /* min/max */
+            if (!(ST.minmod ? CURLY_MIN_REPEAT(ST.me)
+                           : CURLY_MAX_REPEAT(ST.me)))
                 goto curlym_do_B;
 
           curlym_do_A: /* execute the A in /A{m,n}B/  */
@@ -9530,7 +9665,8 @@ NULL
                     ST.alen = locinput - st->locinput;
                 }
                 if (ST.alen == 0)
-                    ST.count = ST.minmod ? ARG1i(ST.me) : ARG2i(ST.me);
+                    ST.count = ST.minmod ? CURLY_MIN_REPEAT(ST.me)
+                                        : CURLY_MAX_REPEAT(ST.me);
             }
             DEBUG_EXECUTE_r(
                 re_exec_indentf("CURLYM now matched %" IVdf " times, len = %" IVdf "...\n",
@@ -9550,7 +9686,8 @@ NULL
 
 
             if (!is_accepted) {
-                I32 max = (ST.minmod ? ARG1i(ST.me) : ARG2i(ST.me));
+                I32 max = (ST.minmod ? CURLY_MIN_REPEAT(ST.me)
+                                    : CURLY_MAX_REPEAT(ST.me));
                 if ( max == REG_INFTY || ST.count < max )
                     goto curlym_do_A; /* try to match another A */
             }
@@ -9560,7 +9697,7 @@ NULL
             REGCP_UNWIND(ST.cp);
 
 
-            if (ST.minmod || ST.count < ARG1i(ST.me) /* min*/
+            if (ST.minmod || ST.count < CURLY_MIN_REPEAT(ST.me)
                 || EVAL_CLOSE_PAREN_IS_TRUE(cur_eval,(U32)FLAGS(ST.me)))
                 sayNO;
 
@@ -9641,13 +9778,13 @@ NULL
             REGCP_UNWIND(ST.cp);
             UNWIND_PAREN(ST.lastparen, ST.lastcloseparen);
             if (ST.minmod) {
-                I32 max = ARG2i(ST.me);
+                I32 max = CURLY_MAX_REPEAT(ST.me);
                 if (max != REG_INFTY && ST.count == max)
                     sayNO;
                 goto curlym_do_A; /* try to match a further A */
             }
             /* backtrack one A */
-            if (ST.count == ARG1i(ST.me) /* min */)
+            if (ST.count == CURLY_MIN_REPEAT(ST.me))
                 sayNO;
             ST.count--;
             SET_locinput(HOPc(locinput, -ST.alen));
@@ -9689,16 +9826,18 @@ NULL
             ST.lastcloseparen = RXp_LASTCLOSEPAREN(rex);
             if (ST.paren > maxopenparen)
                 maxopenparen = ST.paren;
-            ST.min = ARG1i(scan);  /* min to match */
-            ST.max = ARG2i(scan);  /* max to match */
+            ST.min = CURLY_MIN_REPEAT(scan);
+            ST.max = CURLY_MAX_REPEAT(scan);
             scan = regnext(REGNODE_AFTER_type(scan, tregnode_CURLYN));
 
             /* handle the single-char capture called as a GOSUB etc */
             if (EVAL_CLOSE_PAREN_IS_TRUE(cur_eval,(U32)ST.paren))
             {
+                minmod = 0;
                 char *li = locinput;
-                if (!regrepeat(rex, &li, scan, loceol, reginfo, 1))
+                if (!regrepeat(rex, &li, scan, loceol, reginfo, 1)) {
                     sayNO;
+                }
                 SET_locinput(li);
                 goto fake_end;
             }
@@ -9707,8 +9846,8 @@ NULL
 
         case CURLY:		/*  /A{m,n}B/ where A is width 1 char */
             ST.paren = 0;
-            ST.min = ARG1i(scan);  /* min to match */
-            ST.max = ARG2i(scan);  /* max to match */
+            ST.min = CURLY_MIN_REPEAT(scan);
+            ST.max = CURLY_MAX_REPEAT(scan);
             scan = REGNODE_AFTER_type(scan, tregnode_CURLY);
           repeat:
             /*
@@ -9740,6 +9879,7 @@ NULL
                         if (! S_setup_EXACTISH_ST(aTHX_ text_node,
                                                         &ST.Binfo, reginfo))
                         {
+                            minmod = 0;
                             sayNO;
                         }
                     }
@@ -10123,6 +10263,14 @@ NULL
             ST.logical = logical;
             logical = 0; /* XXX: reset state of logical once it has been saved into ST */
 
+            /* A negative assertion never contributes captures to the match.
+             * Restore the incoming state after each attempt, including when
+             * failure of the body makes the assertion succeed. */
+            if (!ST.wanted && rex->nparens) {
+                (void)regcppush(rex, 0, maxopenparen);
+                REGCP_SET(ST.lastcp);
+            }
+
             /* execute body of (?...A) */
             PUSH_YES_STATE_GOTO(IFMATCH_A, REGNODE_AFTER(scan), ST.start,
                                 ST.end, script_run_begin);
@@ -10132,7 +10280,18 @@ NULL
             bool matched;
 
         case IFMATCH_A_fail: /* body of (?...A) failed */
-            if (! ST.logical && ST.count > 1) {
+            matched = false;
+            goto ifmatch_done;
+
+        case IFMATCH_A: /* body of (?...A) succeeded */
+            matched = true;
+          ifmatch_done:
+            if (!ST.wanted && rex->nparens) {
+                REGCP_UNWIND(ST.lastcp);
+                regcppop(rex, &maxopenparen);
+            }
+
+            if (!matched && ! ST.logical && ST.count > 1) {
 
                 /* It isn't a real failure until we've tried all starting
                  * positions.  Move to the next starting position and retry */
@@ -10143,13 +10302,6 @@ NULL
                 goto do_ifmatch;
             }
 
-            /* Here, all starting positions have been tried. */
-            matched = false;
-            goto ifmatch_done;
-
-        case IFMATCH_A: /* body of (?...A) succeeded */
-            matched = true;
-          ifmatch_done:
             sw = matched == ST.wanted;
             match_end = ST.prev_match_end;
             if (! ST.logical && !sw) {

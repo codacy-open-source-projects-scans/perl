@@ -28,7 +28,7 @@ skip_all_without_unicode_tables();
 my $has_locales = locales_enabled('LC_CTYPE');
 my $utf8_locale = find_utf8_ctype_locale();
 
-plan tests => 1314;  # Update this when adding/deleting tests.
+plan tests => 1315;  # Update this when adding/deleting tests.
 
 run_tests() unless caller;
 
@@ -1309,15 +1309,14 @@ sub run_tests {
     }
 
     {
-        local $::TODO = "[perl #38133]";
-
         "A" =~ /(((?:A))?)+/;
         my $first = $2;
 
         "A" =~ /(((A))?)+/;
         my $second = $2;
 
-        is($first, $second);
+        is($first, $second,
+           "GH #8267: zero repetitions clear nested captures consistently");
     }
 
     {
@@ -2456,33 +2455,24 @@ SKIP:
         ok( "aaa" =~ /(?:((?{})a)?\1)+/,
             "GH Issue #18865 'aaa' - deoptimized pattern matches");
         $y = "($-[0],$+[0])";
-        {
-            local $::TODO = "Not Yet Implemented";
-            is( $y, $x,
-                "GH Issue #18865 'aaa' - test optimization");
-        }
+        is( $y, $x,
+            "GH Issue #18865 'aaa' - test optimization");
         ok( "ababab" =~ /(?:(?:(ab))?\1)+/,
             "GH Issue #18865 'ababab' - pattern matches");
         $x = "($-[0],$+[0])";
         ok( "ababab" =~ /(?:(?:((?{})ab))?\1)+/,
             "GH Issue #18865 'ababab' - deoptimized pattern matches");
         $y = "($-[0],$+[0])";
-        {
-            local $::TODO = "Not Yet Implemented";
-            is( $y, $x,
-                "GH Issue #18865 'ababab' - test optimization");
-        }
+        is( $y, $x,
+            "GH Issue #18865 'ababab' - test optimization");
         ok( "XaaXbbXb" =~ /(?:X([ab])?\1)+/,
             "GH Issue #18865 'XaaXbbXb' - pattern matches");
         $x = "($-[0],$+[0])";
         ok( "XaaXbbXb" =~ /(?:X((?{})[ab])?\1)+/,
             "GH Issue #18865 'XaaXbbXb' - deoptimized pattern matches");
         $y = "($-[0],$+[0])";
-        {
-            local $::TODO = "Not Yet Implemented";
-            is( $y, $x,
-                "GH Issue #18865 'XaaXbbXb' - test optimization");
-        }
+        is( $y, $x,
+            "GH Issue #18865 'XaaXbbXb' - test optimization");
     }
     {
         # Test that ${^LAST_SUCCESSFUL_PATTERN} works as expected.
@@ -2754,6 +2744,15 @@ PROG
         use strict;
         my ($prevDecade, $decade, $year) = (0, 1, 2);
         qr/\A(?:1[0-9][0-9]{2}|20[0-$prevDecade][0-9]|20$decade[0-$year])\Z/o;
+        PROG
+    }
+
+    {   # GH 16250
+        fresh_perl_is(<<~'PROG', "undef:de567\nundef:de567", {}, "content in capture buffer");
+        "abcde5678" =~ / b (*pla:.*(*plb:(*plb:(.{4}))? (.{5})).$)/x;
+        print $1 // "undef", ":", $2 // "undef", "\n";
+        "abcde5678" =~ / b .* (*plb:(*plb:(.{4}))? (.{5}) ) .$ /x;
+        print $1 // "undef", ":", $2 // "undef", "\n";
         PROG
     }
 

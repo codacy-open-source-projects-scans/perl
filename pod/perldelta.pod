@@ -105,6 +105,11 @@ variable-length sub-patterns, such as C<(a|bc)*> and C<(ab+){2,}>. This
 change may reduce the amount of backtracking that takes place, and may
 reduce the amount of temporary memory used for the cache.
 
+=item *
+
+C<substr()> now updates the UTF-8 position cache correctly, avoiding
+repeated scans when accessing the same part of a string. [GH #24531]
+
 =back
 
 =head1 Modules and Pragmata
@@ -344,9 +349,10 @@ L</Modules and Pragmata> section.
 
 =over 4
 
-=item XXX-some-platform
+=item VMS
 
-XXX
+The C<Perl_seed> function will now use the native entropy source
+C<sys$get_entropy> when available (OpenVMS 9.2 and later).
 
 =back
 
@@ -421,6 +427,41 @@ manager will later use a regex to expand these into links.
 
 =item *
 
+The regular expression optimizer no longer rejects valid matches when a
+positive lookahead can match an empty string. For example,
+C</\A(?=a*)[0-9]a\z/> now matches C<"0a">.
+
+[GH #24943]
+
+=item *
+
+General regular expression repeats clear captures in their bodies when
+matching zero repetitions, as optimized repeats do. Adding a no-op
+C<(?{})> code block no longer changes whether a backreference to a skipped
+optional group matches.
+
+[GH #8267] [GH #18865]
+
+=item *
+
+Negative lookahead and lookbehind assertions restore capture buffers after
+evaluating their bodies. Captures from failed assertion attempts no longer
+appear in a successful match or affect later backreferences and conditions.
+
+[GH #14387] [GH #24946]
+
+=item *
+
+The regular expression optimizer no longer uses the fixed-width repeat
+optimization for a body containing captures inside nested quantifiers.
+This prevents failed or backtracked iterations from leaving incorrect
+capture values. For example, C<"aa" =~ /(?:(aa){2})*/> now leaves C<$1>
+undefined.
+
+[GH #24945]
+
+=item *
+
 Line number information is stored rather than discarded when an anonymous
 subroutine is encountered during compilation. This should improve the
 accuracy of line numbers emitted by diagnostic messages and `caller()`
@@ -440,6 +481,39 @@ qualifier (e.g. C<+>) occured earlier in the pattern. This could lead to
 viable match candidates at the start of the target string being missed.
 
 [GH #24915]
+
+=item *
+
+Following an unsuccessful earlier non-greedy match, a regular expression
+intended to perform a separate I<greedy> match could have instead
+performed a I<non-greedy> match because of skipped flag clearance.
+
+[GH #24926]
+
+=item *
+
+An anchored regular expressions starting with a repeating character could
+have incorrectly skipped later instances of that character if the match
+contained a C<(*SKIP)> and was initially unsuccessful.
+
+=item *
+
+A anchored regular expression needing zero (or more) characters for a
+successful match could have failed because the search space was
+incorrectly truncated.
+
+[GH #24944]
+
+=item *
+
+A regular expression performing a case insensitive match with Unicode
+rules could fail to match correctly when the ability of folding
+characters to both decrease I<minlen> and increase I<maxlen> at the
+same time was not taken into account.
+
+=item *
+
+The offset of a \K is no longer narrowed on rollback at an offset >2GiB.
 
 =item *
 
